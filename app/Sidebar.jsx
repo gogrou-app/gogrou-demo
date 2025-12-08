@@ -42,7 +42,7 @@ export default function Sidebar() {
             style={{
               padding: "10px 12px",
               borderRadius: "8px",
-              background: active ? "#0ff" : "transparent",
+              background: active ? "#4EF7C3" : "transparent",
               color: active ? "#000" : "#fff",
               fontWeight: active ? "700" : "400",
               textDecoration: "none",
