@@ -3,34 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const menu = [
-  { name: "Dashboard", path: "/", icon: "🏠" },
-  { name: "GPC – Product Center", path: "/gpc", icon: "📦" },
-  { name: "GSS – Skladový systém", path: "/gss", icon: "📊" },
-  { name: "AI Assistant (GINA DEMO)", path: "/ai", icon: "🤖" },
-  { name: "Settings", path: "/settings", icon: "⚙️" },
-];
-
 export default function Sidebar() {
   const pathname = usePathname();
+
+  const menu = [
+    { name: "Dashboard", path: "/" },
+    { name: "GPC", path: "/gpc" },
+    { name: "GSS", path: "/gss" },
+    { name: "SmartSplit", path: "/ss" },
+    { name: "AI Asistent", path: "/ai" },
+  ];
 
   return (
     <div
       style={{
-        width: "260px",
-        background: "#000",
+        width: "220px",
         height: "100vh",
-        padding: "24px",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        gap: "16px",
+        background: "#111",
+        padding: "20px",
+        boxSizing: "border-box",
         borderRight: "1px solid #222",
+        position: "fixed",
+        top: 0,
+        left: 0,
       }}
     >
-      <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "20px" }}>
-        GOGROU DEMO
-      </h2>
+      <h2 style={{ color: "white", marginBottom: "30px" }}>GOGROU DEMO</h2>
 
       {menu.map((item) => {
         const active = pathname === item.path;
@@ -40,18 +38,18 @@ export default function Sidebar() {
             key={item.path}
             href={item.path}
             style={{
+              display: "block",
               padding: "10px 12px",
-              borderRadius: "8px",
-              background: active ? "#4EF7C3" : "transparent",
-              color: active ? "#000" : "#fff",
-              fontWeight: active ? "700" : "400",
+              marginBottom: "5px",
               textDecoration: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
+              borderRadius: "6px",
+              background: active ? "#333" : "transparent",
+              color: active ? "#fff" : "#aaa",
+              fontWeight: active ? "600" : "400",
+              transition: "0.2s",
             }}
           >
-            <span>{item.icon}</span> {item.name}
+            {item.name}
           </Link>
         );
       })}
