@@ -2,28 +2,18 @@ import "./globals.css";
 import Sidebar from "./Sidebar";
 
 export const metadata = {
-  title: "GOGROU DEMO",
-  description: "Preview GPC + GSS + AI Assistant",
+  title: "Gogrou Demo",
+  description: "Preview of GPC + GSS + AI assistant",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="cs">
-      <body style={{ margin: 0, padding: 0 }}>
-        <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
-          <Sidebar />
+      <body style={{ margin: 0, background: "#000", color: "#fff" }}>
+        <Sidebar />
 
-          <main
-            style={{
-              padding: "40px",
-              width: "100%",
-              background: "#111",
-              color: "#fff",
-              overflowY: "auto",
-            }}
-          >
-            {children}
-          </main>
+        <div style={{ marginLeft: "220px", padding: "30px" }}>
+          {children}
         </div>
       </body>
     </html>
