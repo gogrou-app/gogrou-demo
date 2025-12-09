@@ -1,19 +1,7 @@
 "use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
-  const pathname = usePathname();
-
-  const menu = [
-    { name: "Dashboard", path: "/" },
-    { name: "GPC", path: "/gpc" },
-    { name: "GSS", path: "/gss" },
-    { name: "SmartSplit", path: "/ss" },
-    { name: "AI Asistent", path: "/ai" },
-  ];
-
   return (
     <div
       style={{
@@ -28,35 +16,51 @@ export default function Sidebar() {
         left: 0,
       }}
     >
-      <h2 style={{ color: "white", marginBottom: "30px" }}>GOGROU DEMO</h2>
+      <h2 style={{ color: "white", marginBottom: "20px" }}>GOGROU<br />DEMO</h2>
 
-      {menu.map((item) => {
-        // 🔥 OPRAVENÉ ZVÝRAZNĚNÍ
-        const active =
-          item.path === "/"
-            ? pathname === "/"
-            : pathname.startsWith(item.path);
+      <nav
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          marginTop: "10px",
+        }}
+      >
+        <Link href="/dashboard" style={linkStyle}>Dashboard</Link>
+        <Link href="/gpc" style={linkStyle}>GPC</Link>
+        <Link href="/gss" style={linkStyle}>GSS</Link>
+        <Link href="/ss" style={linkStyle}>SmartSplit</Link>
+        <Link href="/ai" style={linkStyle}>AI Asistent</Link>
+      </nav>
 
-        return (
-          <Link
-            key={item.path}
-            href={item.path}
-            style={{
-              display: "block",
-              padding: "10px 12px",
-              marginBottom: "5px",
-              textDecoration: "none",
-              borderRadius: "6px",
-              background: active ? "#333" : "transparent",
-              color: active ? "#fff" : "#aaa",
-              fontWeight: active ? "600" : "400",
-              transition: "0.2s",
-            }}
-          >
-            {item.name}
-          </Link>
-        );
-      })}
+      {/* ----- ZPĚT NA SEZNAM ----- */}
+      <div style={{ marginTop: "40px" }}>
+        <a
+          href="/gpc"
+          style={{
+            display: "block",
+            padding: "12px 14px",
+            background: "#333",
+            color: "white",
+            borderRadius: "8px",
+            textDecoration: "none",
+            textAlign: "center",
+            fontSize: "15px",
+            border: "1px solid #444",
+          }}
+        >
+          ← Zpět na seznam
+        </a>
+      </div>
     </div>
   );
 }
+
+const linkStyle = {
+  padding: "10px 14px",
+  background: "#222",
+  borderRadius: "6px",
+  color: "white",
+  textDecoration: "none",
+  fontSize: "15px",
+};
