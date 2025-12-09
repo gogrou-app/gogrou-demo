@@ -1,99 +1,130 @@
-import { tools } from "../data";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import tools from "../../data";
 
-export default function Page({ params }) {
-  const tool = tools.find(t => String(t.id) === params.id);
+export default function ToolDetail({ params }) {
+  const { id } = params;
+  const tool = tools.find((t) => t.id === id);
 
-  if (!tool) {
-    return (
-      <div style={{ padding: "40px" }}>
-        <h2>Nástroj nenalezen</h2>
-        <p>ID: {params.id} neexistuje.</p>
-        <a href="/gpc" style={{ color: "#4af" }}>← Zpět na seznam</a>
-      </div>
-    );
-  }
+  if (!tool) return notFound();
 
   return (
-    <div style={{ padding: "40px 0 80px 260px", color: "white" }}>
-      <h1>{tool.name}</h1>
+    <div style={{ padding: "40px", color: "white" }}>
+      
+      {/* Horní tlačítko zpět */}
+      <Link
+        href="/gpc"
+        style={{
+          display: "inline-block",
+          marginBottom: "25px",
+          padding: "10px 20px",
+          border: "1px solid #fff",
+          borderRadius: "8px",
+          background: "#222",
+        }}
+      >
+        ← Zpět na seznam
+      </Link>
 
-      {/* KARTA INFORMACÍ */}
+      {/* Název nástroje */}
+      <h1 style={{ fontSize: "32px", marginBottom: "20px" }}>{tool.name}</h1>
+
+      {/* Základní info box */}
       <div
         style={{
           background: "#111",
           padding: "20px",
-          borderRadius: "12px",
+          borderRadius: "10px",
           border: "1px solid #333",
-          width: "550px",
-          marginBottom: "40px",
+          marginBottom: "30px",
+          maxWidth: "500px",
         }}
       >
-        <p><strong>GPC ID:</strong> {tool.gpc_id}</p>
-        <p><strong>GTIN / Order ID:</strong> {tool.id}</p>
+        <p><strong>GPC ID:</strong> {tool.id}</p>
+        <p><strong>GTIN / Order ID:</strong> {tool.gtin}</p>
         <p><strong>Výrobce:</strong> {tool.manufacturer}</p>
         <p><strong>Typ:</strong> {tool.type}</p>
         <p><strong>Průměr:</strong> {tool.diameter}</p>
-        <p><strong>Celková délka:</strong> {tool.overall_length}</p>
+        <p><strong>Celková délka:</strong> {tool.length}</p>
       </div>
 
-      {/* HLAVNÍ OBRÁZEK */}
-      <h2>Hlavní obrázek</h2>
-      {tool.image ? (
-        <img
-          src={tool.image}
-          alt={tool.name}
-          style={{
-            width: "260px",
-            padding: "12px",
-            background: "#000",
-            borderRadius: "10px",
-            border: "1px solid #333",
-            marginBottom: "40px",
-          }}
-        />
-      ) : (
-        <p style={{ opacity: 0.6 }}>Obrázek není dostupný</p>
-      )}
+      {/* Hlavní obrázek */}
+      <h2 style={{ marginTop: "20px" }}>Hlavní obrázek</h2>
+      <img
+        src={tool.image}
+        alt="Hlavní obrázek"
+        style={{
+          width: "400px",
+          borderRadius: "8px",
+          border: "1px solid #333",
+          background: "#fff",
+        }}
+      />
 
-      {/* TECHNICKÝ VÝKRES */}
-      <h2>Technický výkres</h2>
-      {tool.drawing ? (
+      {/* Technický výkres */}
+      <h2 style={{ marginTop: "40px" }}>Technický výkres</h2>
+      <div
+        style={{
+          width: "450px",
+          height: "250px",
+          borderRadius: "10px",
+          border: "1px solid #333",
+          background: "#000",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: "40px",
+        }}
+      >
         <img
-          src={tool.drawing}
+          src={tool.techImage}
           alt="Technický výkres"
           style={{
-            width: "360px",
-            padding: "15px",
-            background: "#000",
-            borderRadius: "10px",
-            border: "1px solid #333",
-            marginBottom: "40px",
+            maxHeight: "90%",
+            maxWidth: "90%",
+            objectFit: "contain",
           }}
         />
-      ) : (
-        <p style={{ opacity: 0.6 }}>Výkres není dostupný</p>
-      )}
+      </div>
 
-      {/* PARAMETRY */}
-      <h2>Technické parametry</h2>
+      {/* Technické parametry */}
+      <h2 style={{ marginBottom: "20px" }}>Technické parametry</h2>
 
-      {Object.entries(tool.parameters).map(([key, p]) => (
-        <div
-          key={key}
+      <div style={{ maxWidth: "600px" }}>
+        {Object.entries(tool.params).map(([key, value]) => (
+          <div
+            key={key}
+            style={{
+              background: "#111",
+              padding: "12px 18px",
+              marginBottom: "12px",
+              borderRadius: "8px",
+              border: "1px solid #333",
+            }}
+          >
+            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
+              {key}:
+            </div>
+            <div>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Dolní tlačítko zpět */}
+      <div style={{ marginTop: "40px" }}>
+        <Link
+          href="/gpc"
           style={{
-            background: "#111",
-            marginBottom: "10px",
-            padding: "12px",
+            display: "inline-block",
+            padding: "10px 20px",
+            border: "1px solid #fff",
             borderRadius: "8px",
-            border: "1px solid #333",
-            width: "500px",
+            background: "#222",
           }}
         >
-          <strong>{p.cz}:</strong>
-          <br />
-          <span style={{ color: "#4af" }}>{p.value}</span>
-        </div>
-      ))}
+          ← Zpět na seznam
+        </Link>
+      </div>
     </div>
   );
 }
