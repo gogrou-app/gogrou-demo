@@ -1,4 +1,4 @@
-/* Global styles for Gogrou Demo */
+/* Reset */
 * {
   margin: 0;
   padding: 0;
@@ -9,4 +9,66 @@ body {
   background-color: #000;
   color: #fff;
   font-family: Arial, sans-serif;
+}
+
+/* Tool images */
+.tool-image {
+  width: 350px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+.tool-thumb {
+  width: 250px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+/* Buttons */
+.back-button,
+.detail-button {
+  background: #222;
+  color: white;
+  border: 1px solid #555;
+  padding: 10px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 10px;
+  display: inline-block;
+  transition: 0.2s ease;
+}
+
+.back-button:hover,
+.detail-button:hover {
+  background: #444;
+  border-color: #777;
+}
+
+/* Cards */
+.tool-card {
+  background: #111;
+  padding: 20px;
+  margin: 20px 0;
+  border-radius: 10px;
+  border: 1px solid #333;
+}
+
+/* Parameters */
+.param-box {
+  margin-top: 15px;
+  padding: 15px;
+  background: #111;
+  border-radius: 10px;
+}
+
+.param-row {
+  padding: 6px 0;
+  border-bottom: 1px solid #333;
+}
+
+.param-row:last-child {
+  border-bottom: none;
 }
