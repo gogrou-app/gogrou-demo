@@ -1,9 +1,12 @@
 import { tools } from "./data";
+import Link from "next/link";
 
 export default function Page() {
   return (
     <div style={{ padding: "40px" }}>
-      <h1 style={{ fontSize: "32px", marginBottom: "20px" }}>GPC – Product Center</h1>
+      <h1 style={{ fontSize: "32px", marginBottom: "20px" }}>
+        GPC – Product Center
+      </h1>
 
       <p style={{ fontSize: "18px", opacity: 0.8 }}>
         Ukázkový přehled nástrojů uložených v GPC:
@@ -34,19 +37,21 @@ export default function Page() {
               {tool.description}
             </p>
 
-            <button
+            {/* 👇 TLAČÍTKO NA DETAIL */}
+            <Link
+              href={`/gpc/${tool.id}`}
               style={{
                 marginTop: "15px",
+                display: "inline-block",
                 padding: "10px 15px",
                 background: "#444",
                 color: "white",
-                border: "none",
                 borderRadius: "6px",
-                cursor: "pointer",
+                textDecoration: "none",
               }}
             >
               Detail →
-            </button>
+            </Link>
           </div>
         ))}
       </div>
