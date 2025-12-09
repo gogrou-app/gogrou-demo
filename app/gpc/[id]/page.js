@@ -8,130 +8,128 @@ export default function ToolDetail({ params }) {
   const router = useRouter();
   const id = params.id;
 
-  // najdeme nástroj
-  const tool = tools.find(t => String(t.gpc_id) === String(id));
+  console.log("🔍 DEBUG: hledám gpc_id =", id);
+
+  const tool = tools.find((t) => String(t.gpc_id) === String(id));
 
   if (!tool) {
-    console.error("❗ Detail: Nástroj nebyl nalezen pro ID:", id);
+    console.error("❌ Nástroj nebyl nalezen! gpc_id =", id);
+    console.log("Seznam všech gpc_id:", tools.map((t) => t.gpc_id));
     return (
-      <div style={{ padding: "50px", color: "white" }}>
+      <div style={{ padding: "40px", color: "white" }}>
         <h2>Nástroj nebyl nalezen.</h2>
-        <button 
+        <button
+          onClick={() => router.push("/gpc")}
           style={{
             marginTop: "20px",
+            padding: "10px 15px",
             background: "#333",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #444",
+            borderRadius: "6px",
           }}
-          onClick={() => router.push("/gpc")}
-        >← Zpět na seznam</button>
+        >
+          ← Zpět na seznam
+        </button>
       </div>
     );
   }
 
-  // Bezpečný název souboru
-  const safeName = tool.safe_name || tool.name.replace(/[^a-zA-Z0-9.-]/g, "_").toLowerCase();
-
-  const mainImg = `/images/tools/${safeName}_main.png`;
-  const drawingImg = `/images/tools/${safeName}_drawing.png`;
-
-  const parameters = tool.parameters || {};
-  const entries = Object.entries(parameters);
-
   return (
     <div style={{ padding: "40px", color: "white" }}>
-      
-      <h1 style={{ fontSize: "32px", marginBottom: "20px" }}>{tool.name}</h1>
+      <h1>{tool.name}</h1>
 
-      {/* INFO BLOK */}
-      <div
-        style={{
-          background: "#111",
-          padding: "20px",
-          width: "420px",
-          borderRadius: "12px",
-          marginBottom: "30px",
-        }}
-      >
+      <div style={{ marginBottom: "20px" }}>
         <p><b>GPC ID:</b> {tool.gpc_id}</p>
         <p><b>GTIN:</b> {tool.id}</p>
         <p><b>Výrobce:</b> {tool.manufacturer}</p>
-        <p><b>Typ:</b> {tool.type}</p>
-        <p><b>Průměr:</b> {tool.diameter}</p>
-        <p><b>Celková délka:</b> {tool.overall_length}</p>
       </div>
 
-      {/* HLAVNÍ OBRÁZEK */}
+      {/* Obrázek */}
       <h2>Hlavní obrázek</h2>
-      <div style={{ border: "1px solid #333", padding: "12px", width: "420px", marginBottom: "30px" }}>
-        <Image
-          src={mainImg}
-          alt={tool.name}
-          width={400}
-          height={150}
-          style={{ objectFit: "contain" }}
-          onError={() => console.warn("❗ Chybí hlavní obrázek:", mainImg)}
-        />
+      <div
+        style={{
+          border: "2px solid #333",
+          width: "420px",
+          padding: "10px",
+          marginBottom: "30px",
+        }}
+      >
+        {tool.image_local ? (
+          <Image
+            src={tool.image_local}
+            width={400}
+            height={200}
+            alt="Nástroj"
+            style={{ objectFit: "contain" }}
+          />
+        ) : (
+          <p>Obrázek není dostupný</p>
+        )}
       </div>
 
-      {/* TECHNICKÝ VÝKRES */}
+      {/* Výkres */}
       <h2>Technický výkres</h2>
-      <div style={{ border: "1px solid #333", padding: "12px", width: "420px", marginBottom: "30px" }}>
-        <Image
-          src={drawingImg}
-          alt="Technický výkres"
-          width={400}
-          height={160}
-          style={{ objectFit: "contain" }}
-          onError={() => console.warn("❗ Chybí technický výkres:", drawingImg)}
-        />
+      <div
+        style={{
+          border: "2px solid #333",
+          width: "420px",
+          padding: "10px",
+        }}
+      >
+        {tool.drawing_local ? (
+          <Image
+            src={tool.drawing_local}
+            width={400}
+            height={200}
+            alt="Výkres"
+            style={{ objectFit: "contain" }}
+          />
+        ) : (
+          <p>Výkres není dostupný</p>
+        )}
       </div>
 
-      {/* PARAMETRY */}
-      <h2>Technické parametry</h2>
+      {/* Parametry */}
+      <h2 style={{ marginTop: "40px" }}>Technické parametry</h2>
 
-      {entries.length === 0 && (
-        <p style={{ opacity: 0.6 }}>❗ Žádné parametry nebyly vyplněny.</p>
+      {!tool.parameters && (
+        <p>❗ Žádné parametry nejsou vyplněny.</p>
       )}
 
-      <div style={{ maxWidth: "450px", marginBottom: "50px" }}>
-        {entries.map(([k, p]) => (
-          <div
-            key={k}
-            style={{
-              background: "#111",
-              padding: "14px",
-              borderRadius: "8px",
-              border: "1px solid #333",
-              marginBottom: "10px",
-            }}
-          >
-            <div style={{ opacity: 0.7 }}>{p.cz || p.label}</div>
-            <div style={{ color: "#4ba3ff" }}>{p.value}</div>
-          </div>
-        ))}
-      </div>
+      {tool.parameters && (
+        <div style={{ marginTop: "10px" }}>
+          {Object.entries(tool.parameters).map(([key, p]) => (
+            <div
+              key={key}
+              style={{
+                background: "#111",
+                padding: "10px",
+                marginBottom: "8px",
+                borderRadius: "6px",
+                border: "1px solid #333",
+                width: "420px",
+              }}
+            >
+              <div style={{ opacity: 0.7 }}>{p.cz || p.label}</div>
+              <div style={{ color: "#4ba3ff" }}>{p.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* FIXNÍ ZPĚT */}
+      {/* Zpět */}
       <button
+        onClick={() => router.push("/gpc")}
         style={{
           position: "fixed",
-          bottom: "25px",
-          left: "25px",
-          padding: "12px 20px",
-          fontSize: "16px",
+          bottom: "20px",
+          left: "20px",
+          padding: "12px 18px",
           background: "#333",
-          color: "white",
-          borderRadius: "8px",
-          border: "1px solid #444",
+          borderRadius: "6px",
         }}
-        onClick={() => router.push("/gpc")}
       >
         ← Zpět na seznam
       </button>
-
     </div>
   );
 }
