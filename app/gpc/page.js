@@ -1,5 +1,5 @@
-import { tools } from "./data";
 import Link from "next/link";
+import { tools } from "./data";
 
 export default function Page() {
   return (
@@ -25,29 +25,29 @@ export default function Page() {
               width: "500px",
             }}
           >
-            {/* NÁZEV */}
+            {/* Název */}
             <h2 style={{ marginBottom: "10px" }}>
-              {tool.name_display || tool.name}
+              {tool.name}
             </h2>
 
-            {/* HLAVNÍ ÚDAJE */}
+            {/* Základní parametry */}
+            <p><strong>GTIN:</strong> {tool.id}</p>
             <p><strong>Výrobce:</strong> {tool.manufacturer}</p>
-            <p><strong>Objednací číslo:</strong> {tool.order_id}</p>
-            <p><strong>Typ:</strong> {tool.type}</p>
             <p><strong>Průměr:</strong> {tool.diameter}</p>
+            <p><strong>Délka:</strong> {tool.overall_length}</p>
 
-            {/* POPIS */}
+            {/* Popis, pokud existuje */}
             {tool.description && (
               <p style={{ marginTop: "10px", opacity: 0.8 }}>
                 {tool.description}
               </p>
             )}
 
-            {/* OBRÁZEK */}
+            {/* Obrázek nástroje */}
             {tool.image && (
               <img
                 src={tool.image}
-                alt={tool.name_display}
+                alt={tool.name}
                 style={{
                   width: "140px",
                   marginTop: "15px",
@@ -58,7 +58,7 @@ export default function Page() {
               />
             )}
 
-            {/* TLAČÍTKO DETAILU */}
+            {/* Tlačítko detailu */}
             <Link
               href={`/gpc/${tool.id}`}
               style={{
