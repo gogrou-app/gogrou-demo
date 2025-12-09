@@ -1,66 +1,77 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
   return (
     <div
       style={{
-        width: "220px",
-        height: "100vh",
+        width: "200px",
         background: "#111",
+        color: "white",
         padding: "20px",
+        height: "100vh",
         boxSizing: "border-box",
-        borderRight: "1px solid #222",
-        position: "fixed",
-        top: 0,
-        left: 0,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between"
       }}
     >
-      <h2 style={{ color: "white", marginBottom: "20px" }}>GOGROU<br />DEMO</h2>
+      {/* Horní sekce */}
+      <div>
+        <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>GOGROU<br/>DEMO</h2>
 
-      <nav
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          marginTop: "10px",
-        }}
-      >
-        <Link href="/dashboard" style={linkStyle}>Dashboard</Link>
-        <Link href="/gpc" style={linkStyle}>GPC</Link>
-        <Link href="/gss" style={linkStyle}>GSS</Link>
-        <Link href="/ss" style={linkStyle}>SmartSplit</Link>
-        <Link href="/ai" style={linkStyle}>AI Asistent</Link>
-      </nav>
+        <NavLink href="/dashboard" pathname={pathname}>Dashboard</NavLink>
+        <NavLink href="/gpc" pathname={pathname}>GPC</NavLink>
+        <NavLink href="/gss" pathname={pathname}>GSS</NavLink>
+        <NavLink href="/ss" pathname={pathname}>SmartSplit</NavLink>
+        <NavLink href="/ai" pathname={pathname}>AI Asistent</NavLink>
+      </div>
 
-      {/* ----- ZPĚT NA SEZNAM ----- */}
-      <div style={{ marginTop: "40px" }}>
-        <a
+      {/* Spodní sekce – fixní tlačítko */}
+      <div style={{ marginTop: "20px" }}>
+        <Link
           href="/gpc"
           style={{
             display: "block",
-            padding: "12px 14px",
+            padding: "12px",
+            textAlign: "center",
             background: "#333",
             color: "white",
-            borderRadius: "8px",
+            borderRadius: "6px",
             textDecoration: "none",
-            textAlign: "center",
             fontSize: "15px",
-            border: "1px solid #444",
+            border: "1px solid #555"
           }}
         >
           ← Zpět na seznam
-        </a>
+        </Link>
       </div>
     </div>
   );
 }
 
-const linkStyle = {
-  padding: "10px 14px",
-  background: "#222",
-  borderRadius: "6px",
-  color: "white",
-  textDecoration: "none",
-  fontSize: "15px",
-};
+function NavLink({ href, pathname, children }) {
+  const active = pathname === href;
+
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "block",
+        padding: "12px",
+        marginBottom: "10px",
+        background: active ? "#444" : "#222",
+        borderRadius: "6px",
+        textDecoration: "none",
+        color: "white",
+        border: active ? "1px solid #777" : "1px solid #333",
+        fontSize: "15px"
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
