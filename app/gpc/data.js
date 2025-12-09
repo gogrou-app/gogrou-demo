@@ -296,3 +296,55 @@ export const tools = [
     },
   },
 ];
+
+{
+  id: 3046226,
+  gpc_id: "73-555-321-50393",
+  name: "SECO SD205A-1050-056-12R1-P",
+  type: "TK vrták monolitní",
+  manufacturer: "SECO Tools",
+
+  image: "https://common-secoresources.azureedge.net/pictures/core/Content/ProductImages/As_Delivered_Image/2017-04-10-140905_20175009.jpg?v=2017-04-10%2014:09:05Z",
+  drawing: "https://common-secoresources.azureedge.net/pictures/core/Content/ProductImages/Callout_Illustration/2025-10-08-045456_20030630.jpg?v=2025-10-08%2004:54:56Z",
+
+  diameter: "10.5 mm",
+  overall_length: "118 mm",
+
+  parameters: {
+    J21: { label: "Identifying order number", cz: "Identifikační číslo", value: "03046226" },
+    J22: { label: "Product name", cz: "Název produktu", value: "SD205A-1050-056-12R1-P" },
+    J3:  { label: "Company code", cz: "Kód výrobce", value: "SO - SECO Tools" },
+    NSM: { label: "Standard layout", cz: "Standard vlastností", value: "DIN4000-81" },
+    BLD: { label: "Tool style code", cz: "Kód stylu nástroje", value: "1" },
+
+    // Geometrie
+    A11: { label: "Cutting diameter minimum", cz: "Řezný průměr min.", value: "10.5 mm" },
+    B4:  { label: "Usable length", cz: "Použitelná délka", value: "56 mm" },
+    B5:  { label: "Overall length", cz: "Celková délka", value: "118 mm" },
+    B6:  { label: "Length chip flute", cz: "Délka drážky", value: "71 mm" },
+    B7:  { label: "Point length", cz: "Délka špičky", value: "1.91 mm" },
+    B71: { label: "Functional length", cz: "Funkční délka", value: "116.09 mm" },
+
+    // Dřík
+    C4:  { label: "Shank length", cz: "Délka dříku", value: "45 mm" },
+
+    // Břity a geometrie
+    D1: { label: "Flute count", cz: "Počet břitů", value: "2" },
+    D2: { label: "Flute helix hand", cz: "Směr šroubovice", value: "R - Right" },
+    D3: { label: "Flute helix angle", cz: "Úhel šroubovice", value: "30°" },
+    D7: { label: "Weight of item", cz: "Hmotnost", value: "0.117 kg" },
+
+    // Úhel
+    E1: { label: "Point angle 1st step", cz: "Vrcholový úhel", value: "140°" },
+
+    // Směr řezu
+    F1: { label: "Cutting direction", cz: "Směr řezu", value: "R - Right" },
+
+    // Chlazení
+    H21: { label: "Coolant entry style", cz: "Vstup chlazení", value: "4 - axial on hole circle" },
+    H22: { label: "Coolant exit style", cz: "Výstup chlazení", value: "4 - axial on hole circle" },
+
+    // Data chip
+    J7: { label: "Data chip provision", cz: "Datový čip", value: "0 - Without data chip" }
+  }
+}
