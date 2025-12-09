@@ -37,7 +37,7 @@ export default function Page() {
               {tool.description}
             </p>
 
-            {/* 👇 TLAČÍTKO NA DETAIL */}
+            {/* Tlačítko → Detail */}
             <Link
               href={`/gpc/${tool.id}`}
               style={{
@@ -48,6 +48,7 @@ export default function Page() {
                 color: "white",
                 borderRadius: "6px",
                 textDecoration: "none",
+                cursor: "pointer",
               }}
             >
               Detail →
