@@ -1,77 +1,94 @@
-"use client";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-
 export default function Sidebar() {
-  const pathname = usePathname();
-
   return (
     <div
       style={{
-        width: "200px",
-        background: "#111",
-        color: "white",
-        padding: "20px",
+        width: "220px",
         height: "100vh",
+        background: "#111",
+        padding: "20px",
         boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between"
+        borderRight: "1px solid #222",
+        position: "fixed",
+        top: 0,
+        left: 0,
       }}
     >
-      {/* Horní sekce */}
-      <div>
-        <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>GOGROU<br/>DEMO</h2>
+      <h2
+        style={{
+          color: "white",
+          marginBottom: "20px",
+          fontSize: "20px",
+          fontWeight: "bold",
+        }}
+      >
+        GOGROU <br />
+        DEMO
+      </h2>
 
-        <NavLink href="/dashboard" pathname={pathname}>Dashboard</NavLink>
-        <NavLink href="/gpc" pathname={pathname}>GPC</NavLink>
-        <NavLink href="/gss" pathname={pathname}>GSS</NavLink>
-        <NavLink href="/ss" pathname={pathname}>SmartSplit</NavLink>
-        <NavLink href="/ai" pathname={pathname}>AI Asistent</NavLink>
-      </div>
+      <nav style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <a
+          href="/dashboard"
+          style={linkStyle}
+        >
+          Dashboard
+        </a>
 
-      {/* Spodní sekce – fixní tlačítko */}
-      <div style={{ marginTop: "20px" }}>
-        <Link
+        <a
+          href="/gpc"
+          style={linkStyle}
+        >
+          GPC
+        </a>
+
+        <a
+          href="/gss"
+          style={linkStyle}
+        >
+          GSS
+        </a>
+
+        <a
+          href="/ss"
+          style={linkStyle}
+        >
+          SmartSplit
+        </a>
+
+        <a
+          href="/ai"
+          style={linkStyle}
+        >
+          AI Asistent
+        </a>
+      </nav>
+
+      {/* ---- TLAČÍTKO ZPĚT NA SEZNAM ---- */}
+      <div style={{ position: "absolute", bottom: "25px", left: "20px" }}>
+        <a
           href="/gpc"
           style={{
-            display: "block",
-            padding: "12px",
-            textAlign: "center",
+            display: "inline-block",
+            padding: "10px 15px",
             background: "#333",
             color: "white",
             borderRadius: "6px",
             textDecoration: "none",
             fontSize: "15px",
-            border: "1px solid #555"
           }}
         >
           ← Zpět na seznam
-        </Link>
+        </a>
       </div>
     </div>
   );
 }
 
-function NavLink({ href, pathname, children }) {
-  const active = pathname === href;
-
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "block",
-        padding: "12px",
-        marginBottom: "10px",
-        background: active ? "#444" : "#222",
-        borderRadius: "6px",
-        textDecoration: "none",
-        color: "white",
-        border: active ? "1px solid #777" : "1px solid #333",
-        fontSize: "15px"
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
+const linkStyle = {
+  padding: "10px 14px",
+  background: "#222",
+  border: "1px solid #333",
+  color: "white",
+  borderRadius: "6px",
+  textDecoration: "none",
+  fontSize: "15px",
+};
