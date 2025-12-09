@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Page() {
   const cards = [
     {
@@ -15,7 +17,7 @@ export default function Page() {
     {
       title: "SmartSplit – Akce",
       desc: "Dynamické hromadné nákupy a výrobní promo akce.",
-      icon: "⚡️",
+      icon: "⚡",
       link: "/ss",
     },
     {
@@ -27,55 +29,52 @@ export default function Page() {
   ];
 
   return (
-    <div style={{ padding: "40px", color: "white" }}>
-      <h1 style={{ fontSize: "36px", fontWeight: "bold", marginBottom: "20px" }}>
+    <div style={{ padding: "40px" }}>
+      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "10px" }}>
         Dashboard
       </h1>
 
-      <p style={{ fontSize: "20px", opacity: 0.8, marginBottom: "30px" }}>
-        Vítej v <strong>Gogrou DEMO</strong> 🚀 Vyber si modul, který chceš zobrazit:
+      <p style={{ fontSize: "18px", opacity: 0.85, marginBottom: "30px" }}>
+        Vítej v Gogrou DEMO 🚀 Toto je hlavní přehled, odkud se dostaneš do všech
+        modulů:
       </p>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
           gap: "20px",
+          maxWidth: "900px",
         }}
       >
         {cards.map((card) => (
-          <a
-            key={card.title}
+          <Link
+            key={card.link}
             href={card.link}
             style={{
-              padding: "20px",
-              background: "#151515",
-              border: "1px solid #222",
-              borderRadius: "10px",
-              textDecoration: "none",
-              color: "white",
-              transition: "0.25s",
               display: "block",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-4px)";
-              e.currentTarget.style.background = "#1f1f1f";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0px)";
-              e.currentTarget.style.background = "#151515";
+              padding: "20px",
+              borderRadius: "10px",
+              border: "1px solid #333",
+              textDecoration: "none",
+              background: "#111",
             }}
           >
-            <div style={{ fontSize: "32px", marginBottom: "10px" }}>
+            <div style={{ fontSize: "26px", marginBottom: "10px" }}>
               {card.icon}
             </div>
-
-            <h2 style={{ fontSize: "22px", marginBottom: "10px" }}>
+            <div
+              style={{
+                fontSize: "18px",
+                fontWeight: "600",
+                marginBottom: "6px",
+                color: "#fff",
+              }}
+            >
               {card.title}
-            </h2>
-
-            <p style={{ opacity: 0.7, lineHeight: "1.4" }}>{card.desc}</p>
-          </a>
+            </div>
+            <div style={{ fontSize: "15px", color: "#bbb" }}>{card.desc}</div>
+          </Link>
         ))}
       </div>
     </div>
