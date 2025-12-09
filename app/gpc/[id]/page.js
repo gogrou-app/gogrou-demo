@@ -1,31 +1,33 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { tools } from "../data";         // ✔️ SPRÁVNÁ CESTA + SPRÁVNÝ IMPORT
+import data from "../../data";
 import Image from "next/image";
 
 export default function ToolDetail({ params }) {
   const router = useRouter();
   const id = params.id;
 
-  // ✔️ Najdeme nástroj podle gpc_id
-  const tool = tools.find((x) => String(x.gpc_id) === String(id));
+  // Hledáme podle GPC ID (správně!)
+  const tool = data.find((x) => String(x.gpc_id) === String(id));
 
   if (!tool) {
     return (
-      <div style={{ color: "white", padding: "40px" }}>
+      <div style={{ color: "white", padding: "50px" }}>
         <h2>Nástroj nebyl nalezen.</h2>
+
         <button
-          onClick={() => router.push("/gpc")}
           style={{
             marginTop: "20px",
-            padding: "10px 18px",
+            padding: "12px 20px",
+            fontSize: "16px",
             background: "#333",
-            border: "1px solid #444",
             color: "white",
-            borderRadius: "6px",
+            borderRadius: "8px",
+            border: "1px solid #444",
             cursor: "pointer",
           }}
+          onClick={() => router.push("/gpc")}
         >
           ← Zpět na seznam
         </button>
@@ -33,22 +35,14 @@ export default function ToolDetail({ params }) {
     );
   }
 
-  // ✔️ Parametry – automatická detekce
-  const parameters =
-    tool.parameters ||
-    tool.params ||
-    tool.specs ||
-    tool.data ||
-    null;
-
-  const parameterEntries = parameters ? Object.entries(parameters) : [];
+  const parameters = tool.parameters || {};
+  const entries = Object.entries(parameters);
 
   return (
     <div style={{ padding: "40px", color: "white" }}>
-      {/* TITULEK */}
       <h1 style={{ fontSize: "32px", marginBottom: "20px" }}>{tool.name}</h1>
 
-      {/* HLAVNÍ INFO */}
+      {/* INFO BLOK */}
       <div
         style={{
           background: "#111",
@@ -56,7 +50,6 @@ export default function ToolDetail({ params }) {
           borderRadius: "12px",
           marginBottom: "35px",
           width: "380px",
-          border: "1px solid #333",
         }}
       >
         <p><b>GPC ID:</b> {tool.gpc_id}</p>
@@ -67,7 +60,7 @@ export default function ToolDetail({ params }) {
         <p><b>Celková délka:</b> {tool.overall_length}</p>
       </div>
 
-      {/* HLAVNÍ OBRÁZEK */}
+      {/* HLAVNÍ OBRAZEK */}
       <h2>Hlavní obrázek</h2>
       <div
         style={{
@@ -75,14 +68,13 @@ export default function ToolDetail({ params }) {
           width: "420px",
           padding: "10px",
           marginBottom: "40px",
-          borderRadius: "10px",
         }}
       >
         {tool.image ? (
           <Image
             src={tool.image}
             alt={tool.name}
-            width={400}
+            width={420}
             height={150}
             style={{ objectFit: "contain" }}
           />
@@ -99,15 +91,14 @@ export default function ToolDetail({ params }) {
           width: "420px",
           padding: "10px",
           marginBottom: "40px",
-          borderRadius: "10px",
         }}
       >
         {tool.drawing ? (
           <Image
             src={tool.drawing}
             alt="Technický výkres"
-            width={400}
-            height={200}
+            width={420}
+            height={180}
             style={{ objectFit: "contain" }}
           />
         ) : (
@@ -115,20 +106,19 @@ export default function ToolDetail({ params }) {
         )}
       </div>
 
-      {/* TECHNICKÉ PARAMETRY */}
+      {/* PARAMETRY */}
       <h2>Technické parametry</h2>
-
-      {parameterEntries.length === 0 && (
-        <p style={{ opacity: 0.7 }}>❗ Parametry nejsou vyplněny.</p>
+      {entries.length === 0 && (
+        <p>❗ Parametry nejsou vyplněny.</p>
       )}
 
-      <div style={{ maxWidth: "460px" }}>
-        {parameterEntries.map(([key, obj]) => (
+      <div style={{ maxWidth: "480px" }}>
+        {entries.map(([key, obj]) => (
           <div
             key={key}
             style={{
               background: "#111",
-              marginBottom: "12px",
+              marginBottom: "10px",
               padding: "14px",
               borderRadius: "8px",
               border: "1px solid #333",
@@ -144,7 +134,7 @@ export default function ToolDetail({ params }) {
         ))}
       </div>
 
-      {/* ZPĚT TLAČÍTKO */}
+      {/* FIXNÍ ZPĚT */}
       <button
         style={{
           position: "fixed",
@@ -157,7 +147,6 @@ export default function ToolDetail({ params }) {
           borderRadius: "8px",
           border: "1px solid #444",
           cursor: "pointer",
-          zIndex: 5000,
         }}
         onClick={() => router.push("/gpc")}
       >
