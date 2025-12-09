@@ -9,6 +9,21 @@ export default function Page({ params }) {
       <div style={{ padding: "40px" }}>
         <h1>Nástroj nenalezen</h1>
         <p>ID: {toolId}</p>
+
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            marginTop: "20px",
+            padding: "10px 15px",
+            background: "#444",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+          }}
+        >
+          ← Zpět
+        </button>
       </div>
     );
   }
@@ -32,10 +47,10 @@ export default function Page({ params }) {
       >
         <p><strong>GTIN:</strong> {tool.gtin}</p>
         <p><strong>Výrobce:</strong> {tool.manufacturer}</p>
+        <p><strong>Typ:</strong> {tool.type}</p>
         <p><strong>Průměr:</strong> {tool.diameter}</p>
         <p><strong>Délka:</strong> {tool.length}</p>
         <p><strong>Povlak:</strong> {tool.coating}</p>
-        <p><strong>Typ:</strong> {tool.type}</p>
 
         <p style={{ marginTop: "15px", opacity: 0.8 }}>
           {tool.description}
