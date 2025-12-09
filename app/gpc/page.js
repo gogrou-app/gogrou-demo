@@ -5,20 +5,25 @@
 <p><strong>Typ:</strong> {tool.type}</p>
 <p><strong>Průměr:</strong> {tool.diameter}</p>
 
-<p style={{ marginTop: "10px", opacity: 0.8 }}>
-  {tool.description}
-</p>
+{tool.description && (
+  <p style={{ marginTop: "10px", opacity: 0.8 }}>
+    {tool.description}
+  </p>
+)}
 
-<img 
-  src={tool.image} 
-  alt={tool.name_display} 
-  style={{
-    width: "140px",
-    marginTop: "15px",
-    borderRadius: "6px",
-    border: "1px solid #333"
-  }}
-/>
+{tool.image && (
+  <img
+    src={tool.image}
+    alt={tool.name_display}
+    style={{
+      width: "140px",
+      marginTop: "15px",
+      borderRadius: "6px",
+      border: "1px solid #333",
+      display: "block"
+    }}
+  />
+)}
 
 <Link
   href={`/gpc/${tool.id}`}
