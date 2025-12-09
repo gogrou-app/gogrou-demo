@@ -31,7 +31,11 @@ export default function Sidebar() {
       <h2 style={{ color: "white", marginBottom: "30px" }}>GOGROU DEMO</h2>
 
       {menu.map((item) => {
-        const active = pathname === item.path;
+        // 🔥 OPRAVENÉ ZVÝRAZNĚNÍ
+        const active =
+          item.path === "/"
+            ? pathname === "/"
+            : pathname.startsWith(item.path);
 
         return (
           <Link
