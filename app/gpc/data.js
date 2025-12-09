@@ -5,15 +5,15 @@ const tools = [
   // 1) SANDVIK 860.1-1050-056A1-MM M2BM
   // ============================================================
   {
-    id: "08419421",              // GTIN musí mít nuly!
+    id: "08419421", // GTIN s nulami
     gpc_id: "73-555-321-50391",
     name: "Sandvik Coromant 860.1-1050-056A1-MM M2BM",
     type: "TK vrták monolitní",
     manufacturer: "Sandvik Coromant",
 
-    // Správné názvy pro Next.js
-   image_main: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_main.png",
-image_drawing: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_drawing.png",
+    // SPRÁVNÉ názvy souborů – ověřeno s GitHubem
+    image_main: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_main.png",
+    image_drawing: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_drawing.png",
 
     diameter: "10.5 mm",
     overall_length: "118 mm",
@@ -63,7 +63,7 @@ image_drawing: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_drawing.png",
     manufacturer: "Walter",
 
     image_main: "/images/tools/walter_dc170-05-10.500a1-wj30ej_main.png",
-image_drawing: "/images/tools/walter_dc170-05-10.500a1-wj30ej_drawing.png",
+    image_drawing: "/images/tools/walter_dc170-05-10.500a1-wj30ej_drawing.png",
 
     diameter: "10.5 mm",
     overall_length: "118 mm",
@@ -122,7 +122,7 @@ image_drawing: "/images/tools/walter_dc170-05-10.500a1-wj30ej_drawing.png",
     manufacturer: "Seco Tools",
 
     image_main: "/images/tools/seco_sd205a-1050-056-12r1-p_main.png",
-image_drawing: "/images/tools/seco_sd205a-1050-056-12r1-p_drawing.png",
+    image_drawing: "/images/tools/seco_sd205a-1050-056-12r1-p_drawing.png",
 
     diameter: "10.5 mm",
     overall_length: "118 mm",
