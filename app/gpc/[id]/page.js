@@ -1,44 +1,70 @@
-import { tools } from "../data";
+<h2 style={{ fontSize: "26px", marginBottom: "15px" }}>
+  {tool.name}
+</h2>
 
-export default function ToolDetail({ params }) {
-  const tool = tools.find((t) => t.id.toString() === params.id);
+{/* ZÁKLADNÍ PARAMETRY */}
+<div style={{ marginBottom: "20px", lineHeight: "1.6" }}>
+  <p><strong>GPC ID:</strong> {tool.gpc_id}</p>
+  <p><strong>GTIN / Order ID:</strong> {tool.id}</p>
+  <p><strong>Výrobce:</strong> {tool.manufacturer}</p>
+  <p><strong>Typ:</strong> {tool.type}</p>
+  <p><strong>Průměr:</strong> {tool.diameter}</p>
+  <p><strong>Celková délka:</strong> {tool.overall_length}</p>
+</div>
 
-  if (!tool) {
-    return (
-      <div style={{ padding: "40px" }}>
-        <h1>Nástroj nenalezen</h1>
-        <p>ID: {params.id} neexistuje v databázi.</p>
-      </div>
-    );
-  }
+{/* POPIS */}
+{tool.description && (
+  <p style={{ marginTop: "10px", opacity: 0.85, fontSize: "15px" }}>
+    {tool.description}
+  </p>
+)}
 
-  return (
-    <div style={{ padding: "40px" }}>
-      <h1 style={{ fontSize: "28px", marginBottom: "20px" }}>
-        Detail produktu
-      </h1>
+{/* OBRÁZEK NÁSTROJE */}
+{tool.image && (
+  <div style={{ marginTop: "20px" }}>
+    <img
+      src={tool.image}
+      alt={tool.name}
+      style={{
+        width: "180px",
+        borderRadius: "6px",
+        border: "1px solid #333",
+        display: "block"
+      }}
+    />
+  </div>
+)}
 
-      <div
-        style={{
-          background: "#1a1a1a",
-          padding: "30px",
-          borderRadius: "10px",
-          width: "600px",
-          border: "1px solid #333",
-        }}
-      >
-        <h2 style={{ marginBottom: "15px" }}>{tool.name}</h2>
+{/* TECHNICKÝ VÝKRES */}
+{tool.drawing && (
+  <div style={{ marginTop: "25px" }}>
+    <h3 style={{ marginBottom: "8px" }}>Technický výkres</h3>
+    <img
+      src={tool.drawing}
+      alt="technical drawing"
+      style={{
+        width: "260px",
+        borderRadius: "6px",
+        border: "1px solid #333",
+        background: "#fff",
+        padding: "5px"
+      }}
+    />
+  </div>
+)}
 
-        <p><strong>GTIN:</strong> {tool.gtin}</p>
-        <p><strong>Výrobce:</strong> {tool.manufacturer}</p>
-        <p><strong>Průměr:</strong> {tool.diameter}</p>
-        <p><strong>Délka:</strong> {tool.length}</p>
-        <p><strong>Povlak:</strong> {tool.coating}</p>
-
-        <p style={{ marginTop: "20px", opacity: 0.8 }}>
-          {tool.description}
-        </p>
-      </div>
-    </div>
-  );
-}
+{/* TLAČÍTKO ZPĚT */}
+<a
+  href="/gpc"
+  style={{
+    display: "inline-block",
+    marginTop: "30px",
+    padding: "10px 15px",
+    background: "#444",
+    color: "#fff",
+    borderRadius: "6px",
+    textDecoration: "none",
+  }}
+>
+  ← Zpět na seznam
+</a>
