@@ -99,77 +99,130 @@ const tools = [
     }
   },
 
-  // ============================================================
-  // 4) SECO 980100-MEGA (FRÉZA)
-  // ============================================================
+  // ===============================
+// GPC – MILLING TOOLS (FRÉZY)
+// ===============================
+
+export const millingTools = [
+
+  // ---------------------------------
+  // WALTER – MC230
+  // ---------------------------------
   {
-    id: "00662885122996",
-    gpc_id: "73-777-100-00001",
-    name: "Seco 980100-MEGA",
-    type: "TK fréza monolitní",
-    manufacturer: "Seco Tools",
-
-    image_main: "/images/tools/milling/seco_980100-mega_main.png",
-    image_drawing: "/images/tools/milling/seco_980100-mega_drawing.png",
-
-    diameter: "5 mm",
-    overall_length: "80 mm",
-
-    parameters: {
-      A11: { cz: "Řezný průměr", value: "5 mm" },
-      B5:  { cz: "Celková délka", value: "80 mm" },
-      D1:  { cz: "Počet břitů", value: "2" },
-      H5:  { cz: "Povlak", value: "MEGA" }
-    }
-  },
-
-  // ============================================================
-  // 5) WALTER MC230-20.0A4L100C-WK40TF (FRÉZA)
-  // ============================================================
-  {
-    id: null,
     gpc_id: "73-777-100-00002",
-    name: "Walter MC230-20.0A4L100C-WK40TF",
-    type: "TK fréza monolitní",
+    type: "milling",
+    subtype: "end_mill",
+
     manufacturer: "Walter",
+    product_name: "MC230-20.0A4L100C-WK40TF",
+    gtin: null,
 
-    image_main: "/images/tools/milling/walter_mc230-20.0a4l100c-wk40tf_main.png",
-    image_drawing: "/images/tools/milling/walter_mc230-20.0a4l100c-wk40tf_drawing.png",
+    geometry: {
+      cutting_diameter_mm: 20,
+      flute_length_mm: 40,
+      overall_length_mm: 100,
+      shank_diameter_mm: 20,
+      flutes: 4,
+      helix_angle_deg: null
+    },
 
-    diameter: "20 mm",
-    overall_length: "100 mm",
+    material: "Solid carbide",
+    coating: "WK40TF",
 
-    parameters: {
-      A11: { cz: "Řezný průměr", value: "20 mm" },
-      D1:  { cz: "Počet břitů", value: "4" },
-      H5:  { cz: "Povlak", value: "WK40TF" }
+    images: {
+      main: "/images/tools/walter_mc230_20_0a4l100c_wk40tf_main.png",
+      drawing: "/images/tools/walter_mc230_20_0a4l100c_wk40tf_drawing.png"
     }
   },
 
-  // ============================================================
-  // 6) MTTM MT37.6F.12x56x12x100-L (FRÉZA)
-  // ============================================================
+  // ---------------------------------
+  // ISCAR – EB-A2 IC903
+  // ---------------------------------
   {
-    id: null,
     gpc_id: "73-777-100-00003",
-    name: "MTTM MT37.6F.12x56x12x100-L",
-    type: "TK fréza monolitní",
-    manufacturer: "M-technologies (MTTM)",
+    type: "milling",
+    subtype: "end_mill",
 
-    image_main: "/images/tools/milling/mttm_mt37.6f.12x56x12x100-l_main.png",
-    image_drawing: null,
+    manufacturer: "ISCAR",
+    product_name: "EB-A2 03-03-06C06H60 IC903",
+    gtin: null,
 
-    diameter: "12 mm",
-    overall_length: "100 mm",
+    geometry: {
+      cutting_diameter_mm: 6,
+      flute_length_mm: 18,
+      overall_length_mm: 60,
+      shank_diameter_mm: 6,
+      flutes: 2,
+      helix_angle_deg: null
+    },
 
-    parameters: {
-      A11: { cz: "Řezný průměr", value: "12 mm" },
-      B4:  { cz: "Délka břitu", value: "56 mm" },
-      D1:  { cz: "Počet zubů", value: "6" },
-      H5:  { cz: "Povlak", value: "AlCrN" }
+    material: "Solid carbide",
+    coating: "IC903",
+
+    images: {
+      main: "/images/tools/iscar_eb_a2_03_03_06c06h60_ic903_main.jpg",
+      drawing: "/images/tools/iscar_eb_a2_03_03_06c06h60_ic903_drawing.png"
+    }
+  },
+
+  // ---------------------------------
+  // SECO – 980100 MEGA
+  // ---------------------------------
+  {
+    gpc_id: "73-777-100-00004",
+    type: "milling",
+    subtype: "end_mill",
+
+    manufacturer: "Seco Tools",
+    product_name: "980100-MEGA",
+    gtin: null,
+
+    geometry: {
+      cutting_diameter_mm: 5,
+      flute_length_mm: 15,
+      overall_length_mm: 80,
+      shank_diameter_mm: 6,
+      flutes: 2,
+      helix_angle_deg: null
+    },
+
+    material: "Solid carbide",
+    coating: "MEGA",
+
+    images: {
+      main: "/images/tools/seco_980100_mega_main.png",
+      drawing: "/images/tools/seco_980100_mega_drawing.jpg"
+    }
+  },
+
+  // ---------------------------------
+  // MTTM – vlastní fréza
+  // ---------------------------------
+  {
+    gpc_id: "73-777-100-00005",
+    type: "milling",
+    subtype: "end_mill",
+
+    manufacturer: "MTTM",
+    product_name: "MT37.6F-12x56x12x100-L",
+    gtin: null,
+
+    geometry: {
+      cutting_diameter_mm: 12,
+      flute_length_mm: 56,
+      overall_length_mm: 100,
+      shank_diameter_mm: 12,
+      flutes: 6,
+      helix_angle_deg: null
+    },
+
+    material: "Solid carbide",
+    coating: null,
+
+    images: {
+      main: "/images/tools/mttm_mt37_6f_12x56x12x100_main.jpg",
+      drawing: null
     }
   }
 
 ];
-
-export default tools;
