@@ -1,10 +1,8 @@
 // /app/gpc/data.js
 // GPC DEMO – VRTÁKY + FRÉZY
-// JEDEN EXPORT – JEDNA STRUKTURA
-// Připraveno pro GSS / GINA / DM tracking
+// !!! JEDEN EXPORT, JEDNA STRUKTURA !!!
 
 const tools = [
-
   // ============================================================
   // SANDVIK – VRTÁK
   // ============================================================
@@ -12,54 +10,52 @@ const tools = [
     gpc_id: "73-555-321-50391",
     gtin: "08419421",
     name: "Sandvik Coromant 860.1-1050-056A1-MM M2BM",
-    type: "Drill",
+    type: "Vrták – monolitní TK",
     manufacturer: "Sandvik Coromant",
+
+    image_main: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_main.png",
+    image_drawing: "/images/tools/sandvik_860-1-1050-056a1-mm_m2bm_drawing.png",
 
     geometry: {
       diameter_mm: 10.5,
       flute_length_mm: 56,
       overall_length_mm: 118,
-      shank_diameter_mm: 12,
+      shank_diameter_mm: null,
       flutes: 2,
       helix_angle_deg: 30,
-      point_angle_deg: 140
+      point_angle_deg: 140,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "drill",
-      cutting_direction: "right",
-      coolant_through: true,
-      roughing: true,
-      finishing: false
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: false,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "M2BM",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "TiAlN",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel", "stainless"],
-      hardness_range_hrc: { min: 30, max: 50 },
-      application: ["drilling"]
+      operations: ["Vrtání"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 3,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: false,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -69,54 +65,52 @@ const tools = [
     gpc_id: "73-555-321-50392",
     gtin: "06745276",
     name: "Walter DC170-05-10.500A1-WJ30EJ",
-    type: "Drill",
+    type: "Vrták – monolitní TK",
     manufacturer: "Walter",
+
+    image_main: "/images/tools/walter_dc170-05-10.500a1-wj30ej_main.png",
+    image_drawing: "/images/tools/walter_dc170-05-10.500a1-wj30ej_drawing.png",
 
     geometry: {
       diameter_mm: 10.5,
-      flute_length_mm: 56,
+      flute_length_mm: null,
       overall_length_mm: 118,
-      shank_diameter_mm: 12,
+      shank_diameter_mm: null,
       flutes: 2,
       helix_angle_deg: 30,
-      point_angle_deg: 140
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "drill",
-      cutting_direction: "right",
-      coolant_through: true,
-      roughing: true,
-      finishing: false
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: true,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "WJ30EJ",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "AlCrN",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel", "cast_iron"],
-      hardness_range_hrc: { min: 28, max: 45 },
-      application: ["drilling"]
+      operations: ["Vrtání"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 3,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: false,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -126,54 +120,52 @@ const tools = [
     gpc_id: "73-555-321-50393",
     gtin: "03046226",
     name: "Seco SD205A-1050-056-12R1-P",
-    type: "Drill",
+    type: "Vrták – monolitní TK",
     manufacturer: "Seco Tools",
+
+    image_main: "/images/tools/seco_sd205a-1050-056-12r1-p_main.png",
+    image_drawing: "/images/tools/seco_sd205a-1050-056-12r1-p_drawing.png",
 
     geometry: {
       diameter_mm: 10.5,
       flute_length_mm: 56,
       overall_length_mm: 118,
-      shank_diameter_mm: 12,
+      shank_diameter_mm: null,
       flutes: 2,
       helix_angle_deg: 30,
-      point_angle_deg: 140
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "drill",
-      cutting_direction: "right",
-      coolant_through: true,
-      roughing: true,
-      finishing: false
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: false,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "P",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "TiAlN",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel"],
-      hardness_range_hrc: { min: 25, max: 45 },
-      application: ["drilling"]
+      operations: ["Vrtání"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 3,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: false,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -183,8 +175,11 @@ const tools = [
     gpc_id: "73-777-100-00001",
     gtin: null,
     name: "Walter MC230-20.0A4L100C-WK40TF",
-    type: "Endmill",
+    type: "Fréza – monolitní TK",
     manufacturer: "Walter",
+
+    image_main: "/images/tools/walter_mc230-20.0a4l100c-wk40tf_main.png",
+    image_drawing: "/images/tools/walter_mc230-20.0a4l100c-wk40tf_drawing.png",
 
     geometry: {
       diameter_mm: 20,
@@ -192,45 +187,40 @@ const tools = [
       overall_length_mm: 100,
       shank_diameter_mm: 20,
       flutes: 4,
-      helix_angle_deg: 35,
-      corner_radius_mm: 0
+      helix_angle_deg: null,
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "endmill",
-      cutting_direction: "right",
-      coolant_through: false,
-      roughing: true,
-      finishing: true
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: true,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "WK40TF",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "WK40TF",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel", "stainless"],
-      hardness_range_hrc: { min: 30, max: 55 },
-      application: ["side_milling", "slotting"]
+      operations: ["Frézování"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 2,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: true,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -240,8 +230,11 @@ const tools = [
     gpc_id: "73-777-100-00002",
     gtin: null,
     name: "ISCAR EB-A2 03-03-06C06H60 IC903",
-    type: "Endmill",
+    type: "Fréza – monolitní TK",
     manufacturer: "ISCAR",
+
+    image_main: "/images/tools/iscar_eb-a2-03-03-06c06h60-ic903_main.jpg",
+    image_drawing: "/images/tools/iscar_eb-a2-03-03-06c06h60-ic903_drawing.png",
 
     geometry: {
       diameter_mm: 6,
@@ -249,45 +242,40 @@ const tools = [
       overall_length_mm: 60,
       shank_diameter_mm: 6,
       flutes: 2,
-      helix_angle_deg: 30,
-      corner_radius_mm: 0
+      helix_angle_deg: null,
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "endmill",
-      cutting_direction: "right",
-      coolant_through: false,
-      roughing: false,
-      finishing: true
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: false,
-      reinforced_core: false
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "IC903",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "IC903",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel", "aluminium"],
-      hardness_range_hrc: { min: 20, max: 45 },
-      application: ["finishing", "contouring"]
+      operations: ["Frézování"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 2,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: true,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -297,8 +285,11 @@ const tools = [
     gpc_id: "73-777-100-00003",
     gtin: null,
     name: "Seco 980100-MEGA",
-    type: "Endmill",
+    type: "Fréza – monolitní TK",
     manufacturer: "Seco Tools",
+
+    image_main: "/images/tools/seco_980100_mega_main.png",
+    image_drawing: "/images/tools/seco_980100_mega_drawing.png",
 
     geometry: {
       diameter_mm: 5,
@@ -306,45 +297,40 @@ const tools = [
       overall_length_mm: 80,
       shank_diameter_mm: 6,
       flutes: 2,
-      helix_angle_deg: 30,
-      corner_radius_mm: 0
+      helix_angle_deg: null,
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "endmill",
-      cutting_direction: "right",
-      coolant_through: false,
-      roughing: false,
-      finishing: true
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: false,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: "MEGA",
-      type: "PVD"
+      material: "Solid carbide",
+      coating: "MEGA",
+      tolerance: null,
+      hand: null,
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel", "stainless"],
-      hardness_range_hrc: { min: 30, max: 55 },
-      application: ["slotting", "side_milling"]
+      operations: ["Frézování"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 3,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
+      resharpenable: true,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
   },
 
   // ============================================================
@@ -354,8 +340,11 @@ const tools = [
     gpc_id: "73-777-100-00004",
     gtin: null,
     name: "MTTM MT37.6F-12x56x12x100-L",
-    type: "Endmill",
+    type: "Fréza – monolitní TK",
     manufacturer: "MTTM",
+
+    image_main: "/images/tools/mttm_mt37.6f-12x56x12x100-l_main.jpg",
+    image_drawing: null,
 
     geometry: {
       diameter_mm: 12,
@@ -363,46 +352,41 @@ const tools = [
       overall_length_mm: 100,
       shank_diameter_mm: 12,
       flutes: 6,
-      helix_angle_deg: 35,
-      corner_radius_mm: 0
+      helix_angle_deg: null,
+      point_angle_deg: null,
+      corner_radius_mm: null,
+      neck_length_mm: null,
     },
 
     cutting: {
-      tool_family: "endmill",
-      cutting_direction: "right",
-      coolant_through: false,
-      roughing: true,
-      finishing: true
+      recommended_vc_m_min: null,
+      recommended_fz_mm: null,
+      coolant_required: null,
+      internal_coolant: null,
+      chipbreaker: null,
     },
 
     tool_features: {
-      necked: false,
-      variable_helix: true,
-      reinforced_core: true
-    },
-
-    material: {
-      base: "Solid carbide"
-    },
-
-    coating: {
-      name: null,
-      type: null
+      material: "Solid carbide",
+      coating: null,
+      tolerance: null,
+      hand: "L",
+      finish_quality: null,
     },
 
     usage: {
-      workpiece_materials: ["steel"],
-      hardness_range_hrc: { min: 28, max: 50 },
-      application: ["roughing", "side_milling"]
+      operations: ["Frézování"],
+      workpiece_materials: [],
+      notes: null,
     },
 
     lifecycle: {
-      regrindable: true,
-      max_regrinds: 4,
-      current_regrinds: 0,
-      dm_trackable: true
-    }
-  }
+      resharpenable: true,
+      max_resharpens: null,
+      service_notes: null,
+      expected_tool_life_min: null,
+    },
+  },
 ];
 
 export default tools;
