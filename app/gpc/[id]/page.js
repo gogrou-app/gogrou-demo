@@ -1,122 +1,208 @@
+// /app/gpc/[id]/page.js
 "use client";
 
-import { useRouter } from "next/navigation";
-import tools from "../data";
+import Link from "next/link";
 import Image from "next/image";
+import tools from "../data";
+
+const LABELS = {
+  // geometry
+  diameter_mm: "Průměr (mm)",
+  flute_length_mm: "Délka břitu (mm)",
+  overall_length_mm: "Celková délka (mm)",
+  shank_diameter_mm: "Průměr stopky (mm)",
+  flutes: "Počet zubů (Z)",
+  helix_angle_deg: "Šroubovice (°)",
+  point_angle_deg: "Úhel hrotu (°)",
+  corner_radius_mm: "Rohový rádius (mm)",
+  neck_length_mm: "Délka krčku (mm)",
+
+  // cutting
+  recommended_vc_m_min: "Dop. řezná rychlost Vc (m/min)",
+  recommended_fz_mm: "Dop. posuv na zub fz (mm)",
+  coolant_required: "Chlazení nutné",
+  internal_coolant: "Vnitřní chlazení",
+  chipbreaker: "Lamač třísky",
+
+  // tool_features
+  material: "Materiál nástroje",
+  coating: "Povlak",
+  tolerance: "Tolerance",
+  hand: "Směr (L/R)",
+  finish_quality: "Kvalita povrchu",
+
+  // usage
+  operations: "Operace",
+  workpiece_materials: "Materiály obrobku",
+  notes: "Poznámka",
+
+  // lifecycle
+  resharpenable: "Brousitelný",
+  max_resharpens: "Max. přebroušení",
+  service_notes: "Servisní poznámky",
+  expected_tool_life_min: "Oček. životnost (min)",
+};
+
+function formatValue(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Ano" : "Ne";
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
+  return String(v);
+}
 
 export default function ToolDetail({ params }) {
-  const router = useRouter();
-  const tool = tools.find(t => String(t.gpc_id) === String(params.id));
+  const id = params?.id;
+
+  const tool = tools.find((x) => String(x.gpc_id) === String(id));
 
   if (!tool) {
     return (
       <div style={{ color: "white", padding: "40px" }}>
-        Nástroj nebyl nalezen
+        ❌ Nástroj nebyl nalezen: {String(id)}
+        <div style={{ marginTop: 20 }}>
+          <Link href="/gpc" style={{ color: "#4ba3ff" }}>
+            ← Zpět na seznam
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const geometry = tool.geometry || {};
+  const sections = [
+    { key: "geometry", title: "Geometrie (měřitelná data)", data: tool.geometry },
+    { key: "cutting", title: "Řezné vlastnosti", data: tool.cutting },
+    { key: "tool_features", title: "Konstrukční vlastnosti", data: tool.tool_features },
+    { key: "usage", title: "Použití", data: tool.usage },
+    { key: "lifecycle", title: "Životnost / servis", data: tool.lifecycle },
+  ];
+
+  const mainImg = tool.image_main || "/images/placeholder.png";
+  const drawImg = tool.image_drawing || null;
 
   return (
     <div style={{ padding: "30px", color: "white" }}>
-      <h1>{tool.name}</h1>
-
-      {/* INFO */}
-      <div style={{
-        background: "#111",
-        padding: "20px",
-        borderRadius: "10px",
-        marginBottom: "30px",
-        width: "380px"
-      }}>
-        <p><b>GPC ID:</b> {tool.gpc_id}</p>
-        <p><b>GTIN:</b> {tool.gtin || "—"}</p>
-        <p><b>Výrobce:</b> {tool.manufacturer}</p>
-        <p><b>Typ:</b> {tool.type}</p>
+      <h1 style={{ fontSize: "28px", marginBottom: "10px" }}>{tool.name}</h1>
+      <div style={{ opacity: 0.75, marginBottom: "18px" }}>
+        {tool.manufacturer} • {tool.type}
       </div>
 
-      {/* HLAVNÍ OBRÁZEK */}
-      {tool.image_main && (
-        <>
-          <h2>Hlavní obrázek</h2>
-          <div style={{ border: "2px solid #333", width: "420px", padding: "10px", marginBottom: "40px" }}>
-            <Image
-              src={tool.image_main}
-              alt={tool.name}
-              width={400}
-              height={160}
-              style={{ objectFit: "contain" }}
-            />
-          </div>
-        </>
-      )}
+      {/* INFO BOX */}
+      <div
+        style={{
+          background: "#111",
+          padding: "18px",
+          borderRadius: "10px",
+          marginBottom: "26px",
+          maxWidth: "520px",
+          border: "1px solid #333",
+        }}
+      >
+        <div><b>GPC ID:</b> {tool.gpc_id}</div>
+        <div><b>GTIN:</b> {tool.gtin || "—"}</div>
+        <div><b>Průměr:</b> {formatValue(tool.geometry?.diameter_mm)}</div>
+        <div><b>Celková délka:</b> {formatValue(tool.geometry?.overall_length_mm)}</div>
+        <div><b>Zuby:</b> {formatValue(tool.geometry?.flutes)}</div>
+      </div>
 
-      {/* TECHNICKÝ VÝKRES */}
-      {tool.image_drawing && (
-        <>
-          <h2>Technický výkres</h2>
-          <div style={{ border: "2px solid #333", width: "420px", padding: "10px", marginBottom: "40px" }}>
-            <Image
-              src={tool.image_drawing}
-              alt="Technický výkres"
-              width={400}
-              height={200}
-              style={{ objectFit: "contain" }}
-            />
-          </div>
-        </>
+      {/* MAIN IMAGE */}
+      <h2 style={{ marginTop: 0 }}>Hlavní obrázek</h2>
+      <div
+        style={{
+          border: "1px solid #333",
+          borderRadius: "10px",
+          padding: "12px",
+          maxWidth: "540px",
+          background: "#0b0b0b",
+          marginBottom: "28px",
+        }}
+      >
+        <Image
+          src={mainImg}
+          alt={tool.name}
+          width={520}
+          height={180}
+          style={{ objectFit: "contain", width: "100%", height: "auto" }}
+        />
+      </div>
+
+      {/* DRAWING */}
+      <h2>Technický výkres</h2>
+      {drawImg ? (
+        <div
+          style={{
+            border: "1px solid #333",
+            borderRadius: "10px",
+            padding: "12px",
+            maxWidth: "540px",
+            background: "#0b0b0b",
+            marginBottom: "28px",
+          }}
+        >
+          <Image
+            src={drawImg}
+            alt="Výkres"
+            width={520}
+            height={220}
+            style={{ objectFit: "contain", width: "100%", height: "auto" }}
+          />
+        </div>
+      ) : (
+        <div style={{ opacity: 0.7, marginBottom: "28px" }}>— výkres není k dispozici</div>
       )}
 
       {/* PARAMETRY */}
       <h2>Technické parametry</h2>
 
-      <div style={{ maxWidth: "450px" }}>
-        {Object.entries(geometry).map(([key, value]) => (
-          <div key={key} style={{
-            background: "#111",
-            marginBottom: "10px",
-            padding: "14px",
-            borderRadius: "8px",
-            border: "1px solid #333"
-          }}>
-            <div style={{ opacity: 0.7 }}>{key}</div>
-            <div style={{ color: "#4ba3ff" }}>{value}</div>
-          </div>
-        ))}
+      {sections.map((sec) => {
+        if (!sec.data) return null;
 
-        {tool.material && (
-          <div style={{ background: "#111", padding: "14px", borderRadius: "8px", marginBottom: "10px" }}>
-            <div style={{ opacity: 0.7 }}>Materiál</div>
-            <div style={{ color: "#4ba3ff" }}>{tool.material}</div>
-          </div>
-        )}
+        const entries = Object.entries(sec.data);
 
-        {tool.coating && (
-          <div style={{ background: "#111", padding: "14px", borderRadius: "8px" }}>
-            <div style={{ opacity: 0.7 }}>Povlak</div>
-            <div style={{ color: "#4ba3ff" }}>{tool.coating}</div>
+        // když je sekce prázdná (všechno null/—), pořád ji zobrazíme, ale klidně můžeš později chtít skrýt
+        return (
+          <div key={sec.key} style={{ marginBottom: "26px", maxWidth: "650px" }}>
+            <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "10px" }}>
+              {sec.title}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {entries.map(([k, v]) => (
+                <div
+                  key={k}
+                  style={{
+                    background: "#111",
+                    padding: "14px",
+                    borderRadius: "10px",
+                    border: "1px solid #333",
+                  }}
+                >
+                  <div style={{ opacity: 0.7 }}>{LABELS[k] || k}</div>
+                  <div style={{ fontSize: "16px", color: "#4ba3ff" }}>
+                    {formatValue(v)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+        );
+      })}
 
       {/* ZPĚT */}
-      <button
-        onClick={() => router.push("/gpc")}
+      <Link
+        href="/gpc"
         style={{
-          position: "fixed",
-          bottom: "25px",
-          left: "25px",
-          padding: "12px 20px",
+          display: "inline-block",
+          marginTop: "20px",
+          padding: "12px 18px",
           background: "#222",
           color: "white",
-          borderRadius: "8px",
+          borderRadius: "10px",
           border: "1px solid #444",
-          cursor: "pointer"
+          textDecoration: "none",
         }}
       >
         ← Zpět na seznam
-      </button>
+      </Link>
     </div>
   );
 }
