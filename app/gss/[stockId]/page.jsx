@@ -1,196 +1,174 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 
-import gssStock from "../data/gssStock";
-import locations from "../data/locations";
-
-import {
-  ACTIONS,
-  applyActionToDmItem,
-  getAllowedActions,
-} from "../data/stateEngine";
+import gssStockData from "../data/gssStock";
+import gpcTools from "../../gpc/data";
+import auditLog from "../data/auditLog";
+import { getAllowedActions, applyAction } from "../data/stateEngine";
 
 export default function GssItemDetailPage() {
   const { stockId } = useParams();
-  const router = useRouter();
 
-  const stock = gssStock.find(
-    (item) => String(item.gss_item_id) === String(stockId)
+  const stock = gssStockData.find(
+    (s) => String(s.gss_stock_id) === String(stockId)
   );
 
-  const [dmItems, setDmItems] = useState(stock?.items || {});
-  const [selectedLocations, setSelectedLocations] = useState({});
-
   if (!stock) {
-    return <div style={{ padding: 20 }}>Položka nenalezena</div>;
-  }
-
-  // ===== STATISTIKY =====
-  const countNew = dmItems.filter(
-    (i) => i.status === "in_stock" && i.resharpen_count === 0
-  ).length;
-
-  const countSharpened = dmItems.filter(
-    (i) => i.status === "in_stock" && i.resharpen_count > 0
-  ).length;
-
-  const countInProduction = dmItems.filter(
-    (i) => i.status === "in_production"
-  ).length;
-
-  // ===== AKCE =====
-  function handleAction(dmCode, action) {
-    const locationId = selectedLocations[dmCode] || null;
-
-    const needsLocation =
-      action === ACTIONS.SEND_TO_PRODUCTION ||
-      action === ACTIONS.SEND_TO_SERVICE;
-
-    if (needsLocation && !locationId) {
-      alert("Vyber lokaci");
-      return;
-    }
-
-    setDmItems((prev) =>
-      prev.map((item) => {
-        if (item.dm_code !== dmCode) return item;
-
-        const result = applyActionToDmItem(item, action, {
-          locationId,
-        });
-
-        if (!result.ok) {
-          alert(result.error);
-          return item;
-        }
-
-        return result.item;
-      })
+    return (
+      <div style={{ padding: 40, color: "white" }}>
+        <h2>Položka nenalezena</h2>
+        <Link href="/gss">← Zpět</Link>
+      </div>
     );
   }
 
+  const tool = gpcTools.find(
+    (t) => String(t.gpc_id) === String(stock.gpc_id)
+  );
+
+  // ⚠️ DEMO – lokální stav DM kusů
+  const [items, setItems] = useState(stock.items || []);
+
+  // ===== HANDLER AKCE =====
+  function handleAction(dmItem, action, targetLocation) {
+    const updatedItem = applyAction(dmItem, action, targetLocation);
+
+    setItems((prev) =>
+      prev.map((i) =>
+        i.gss_item_id === updatedItem.gss_item_id ? updatedItem : i
+      )
+    );
+
+    auditLog.push({
+      id: `AUD-${Date.now()}`,
+      dm_code: dmItem.dm_code,
+      timestamp: new Date().toISOString(),
+      action,
+      from_status: dmItem.status,
+      to_status: updatedItem.status,
+      location: targetLocation || updatedItem.location,
+      user: "demo-user",
+      note: ""
+    });
+  }
+
   return (
-    <div style={{ padding: 24 }}>
-      <button onClick={() => router.push("/gss")}>
+    <div style={{ padding: 30, color: "white", maxWidth: 1200 }}>
+      {/* NAV */}
+      <Link href="/gss" style={{ color: "#4da6ff" }}>
         ← Zpět na GSS
-      </button>
+      </Link>
 
       {/* HLAVIČKA */}
-      <div
-        style={{
-          background: "#111",
-          padding: 20,
-          borderRadius: 12,
-          margin: "16px 0 24px",
-        }}
-      >
-        <h1>{stock.name}</h1>
+      <div style={{ marginTop: 20, marginBottom: 30 }}>
+        <h1>{tool?.name}</h1>
         <div style={{ opacity: 0.7 }}>
-          Typ: {stock.type || "—"} | Režim: {stock.mode}
+          Typ: {tool?.type} | Režim: {stock.tracking_mode.toUpperCase()}
         </div>
       </div>
 
-      {/* STAVY */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 16,
-          marginBottom: 30,
-        }}
-      >
-        <StatCard title="Skladem – nové" value={countNew} />
-        <StatCard title="Skladem – ostřené" value={countSharpened} />
-        <StatCard title="V oběhu" value={countInProduction} />
-      </div>
-
-      {/* DM TABULKA */}
+      {/* DM KUSY */}
       <h2>DM kusy</h2>
 
-      <table width="100%" cellPadding={8}>
-        <thead>
-          <tr style={{ opacity: 0.7 }}>
-            <th>DM kód</th>
-            <th>Stav</th>
-            <th>Přebroušení</th>
-            <th>Lokace</th>
-            <th>Akce</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dmItems.map((item) => {
-            const allowed = getAllowedActions(item.status);
+      {items.map((item) => {
+        const allowedActions = getAllowedActions(item.status);
 
-            return (
-              <tr key={item.dm_code}>
-                <td>{item.dm_code}</td>
-                <td>{item.status}</td>
-                <td>
-                  {item.resharpen_count} / {item.max_resharpen_count}
-                </td>
+        return (
+          <div
+            key={item.gss_item_id}
+            style={{
+              background: "#111",
+              padding: 16,
+              borderRadius: 10,
+              marginBottom: 12,
+              border: "1px solid #333"
+            }}
+          >
+            <div style={{ fontWeight: "bold" }}>
+              {item.dm_code}
+            </div>
 
-                {/* DROPDOWN LOKACE */}
-                <td>
-                  <select
-                    value={selectedLocations[item.dm_code] || ""}
-                    onChange={(e) =>
-                      setSelectedLocations((prev) => ({
-                        ...prev,
-                        [item.dm_code]: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">— vyber —</option>
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+            <div style={{ opacity: 0.7, marginBottom: 8 }}>
+              Stav: <strong>{humanStatus(item.status)}</strong> | Lokace:{" "}
+              {item.location}
+            </div>
 
-                {/* AKCE */}
-                <td>
-                  {allowed.map((action) => (
-                    <button
-                      key={action}
-                      onClick={() =>
-                        handleAction(item.dm_code, action)
-                      }
-                      style={{
-                        marginRight: 6,
-                        padding: "4px 8px",
-                        fontSize: 12,
-                      }}
-                    >
-                      {action}
-                    </button>
-                  ))}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {allowedActions.map((action) => (
+                <ActionButton
+                  key={action}
+                  label={actionLabels[action]}
+                  onClick={() =>
+                    handleAction(
+                      item,
+                      action,
+                      defaultLocationForAction(action)
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ===== KOMPONENTY =====
+/* ===== HELPERS ===== */
 
-function StatCard({ title, value }) {
+function ActionButton({ label, onClick }) {
   return (
-    <div
+    <button
+      onClick={onClick}
       style={{
-        background: "#111",
-        padding: 16,
-        borderRadius: 12,
+        padding: "8px 12px",
+        background: "#333",
+        color: "white",
+        border: "1px solid #444",
+        borderRadius: 6,
+        cursor: "pointer"
       }}
     >
-      <div style={{ opacity: 0.7 }}>{title}</div>
-      <div style={{ fontSize: 28 }}>{value}</div>
-    </div>
+      {label}
+    </button>
   );
+}
+
+function humanStatus(status) {
+  switch (status) {
+    case "in_stock":
+      return "Skladem";
+    case "in_production":
+      return "Ve výrobě";
+    case "service":
+      return "Servis / brusírna";
+    case "retired":
+      return "Vyřazený";
+    default:
+      return status;
+  }
+}
+
+const actionLabels = {
+  SEND_TO_PRODUCTION: "Vydat do výroby",
+  RETURN_FROM_PRODUCTION: "Vrátit z výroby",
+  SEND_TO_SERVICE: "Poslat na servis",
+  RETIRE: "Vyřadit nástroj"
+};
+
+function defaultLocationForAction(action) {
+  switch (action) {
+    case "SEND_TO_PRODUCTION":
+      return "machine:CNC_MAZAK_01";
+    case "RETURN_FROM_PRODUCTION":
+      return "warehouse:MAIN";
+    case "SEND_TO_SERVICE":
+      return "service:BRUSIRNA";
+    default:
+      return null;
+  }
 }
