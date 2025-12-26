@@ -3,115 +3,130 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import gssStock from "../data/gssStock";
-import auditLog from "../data/auditLog";
-import locations from "../data/locations";
+import gssStock, { findDmByCode } from "../data/gssStock";
 
-export default function GSSItemDetail({ params }) {
+export default function GssItemDetail({ params }) {
   const { stockId } = params;
 
-  // demo – vezmeme první položku
-  const stockItem = gssStock[0];
+  const stockItem = gssStock.find((s) => s.id === stockId);
 
-  // --- C1: DM scan (INFO ONLY) ---
   const [dmInput, setDmInput] = useState("");
-  const [dmInfo, setDmInfo] = useState(null);
+  const [dmResult, setDmResult] = useState(null);
+  const [notFound, setNotFound] = useState(false);
 
-  const handleDmScan = () => {
-    const dm = stockItem.dm_items.find(
-      (item) => item.dm_code === dmInput.trim()
-    );
+  function handleScan(e) {
+    e.preventDefault();
 
-    if (!dm) {
-      setDmInfo({
-        error: true,
-        message: "DM kód nenalezen"
-      });
-      return;
+    const result = findDmByCode(dmInput.trim());
+
+    if (result) {
+      setDmResult(result);
+      setNotFound(false);
+    } else {
+      setDmResult(null);
+      setNotFound(true);
     }
 
-    setDmInfo({
-      error: false,
-      dm_code: dm.dm_code,
-      status: dm.status,
-      location: dm.location,
-      sharpenings: `${dm.sharpened}/${dm.max_sharpenings}`
-    });
-  };
+    setDmInput("");
+  }
+
+  if (!stockItem) {
+    return <div>Položka nenalezena</div>;
+  }
 
   return (
-    <div>
-      {/* NAVIGACE */}
-      <Link
-        href="/gss"
-        style={{ color: "#7aa2ff", display: "inline-block", marginBottom: 16 }}
-      >
+    <div style={{ maxWidth: 800 }}>
+      <Link href="/gss" style={{ color: "#6aa9ff" }}>
         ← Zpět na GSS
       </Link>
 
-      {/* HLAVIČKA */}
-      <h1 style={{ marginBottom: 4 }}>{stockItem.name}</h1>
-      <div style={{ opacity: 0.7, marginBottom: 24 }}>
-        StockId: {stockId}
-      </div>
+      <h1 style={{ marginTop: 16 }}>{stockItem.name}</h1>
+      <div style={{ opacity: 0.7 }}>StockId: {stockItem.id}</div>
 
-      {/* C1 – DM SCAN PANEL */}
-      <div
+      {/* DM SCAN INFO */}
+      <form
+        onSubmit={handleScan}
         style={{
-          border: "1px solid #333",
-          borderRadius: 10,
+          marginTop: 24,
           padding: 16,
-          marginBottom: 24,
-          maxWidth: 480
+          border: "1px solid #333",
+          borderRadius: 8
         }}
       >
-        <h3 style={{ marginBottom: 12 }}>DM scan (info)</h3>
+        <strong>DM scan (info)</strong>
 
-        <input
-          type="text"
-          placeholder="Zadej / naskenuj DM kód"
-          value={dmInput}
-          onChange={(e) => setDmInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleDmScan()}
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 6,
-            border: "1px solid #555",
-            background: "#000",
-            color: "#fff",
-            marginBottom: 12
-          }}
-        />
-
-        {dmInfo && (
-          <div
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <input
+            type="text"
+            value={dmInput}
+            onChange={(e) => setDmInput(e.target.value)}
+            placeholder="Zadej / naskenuj DM kód"
+            autoFocus
             style={{
-              marginTop: 12,
-              padding: 12,
+              flex: 1,
+              padding: 10,
+              background: "#000",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: 6
+            }}
+          />
+
+          <button
+            type="submit"
+            style={{
+              padding: "10px 16px",
+              background: "#1e293b",
+              color: "#fff",
+              border: "1px solid #334155",
               borderRadius: 6,
-              background: dmInfo.error ? "#330000" : "#111",
-              border: "1px solid #333"
+              cursor: "pointer"
             }}
           >
-            {dmInfo.error ? (
-              <strong>{dmInfo.message}</strong>
-            ) : (
-              <>
-                <div><strong>DM:</strong> {dmInfo.dm_code}</div>
-                <div><strong>Stav:</strong> {dmInfo.status}</div>
-                <div><strong>Lokace:</strong> {dmInfo.location}</div>
-                <div><strong>Přebroušení:</strong> {dmInfo.sharpenings}</div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            OK
+          </button>
+        </div>
+      </form>
 
-      {/* DALŠÍ ČÁSTI (zatím beze změn) */}
-      <p style={{ opacity: 0.5 }}>
-        (Další akce, stavový engine a pohyby přijdou v C2 / C3)
-      </p>
+      {/* VÝSLEDEK */}
+      {dmResult && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: 16,
+            border: "1px solid #2e7d32",
+            borderRadius: 8,
+            background: "#061b0f"
+          }}
+        >
+          <strong>DM nalezen</strong>
+
+          <div style={{ marginTop: 8 }}>
+            <div>DM kód: <b>{dmResult.dm_code}</b></div>
+            <div>Stav: {dmResult.status}</div>
+            <div>Lokace: {dmResult.location}</div>
+            <div>Položka: {dmResult.stockName}</div>
+          </div>
+        </div>
+      )}
+
+      {notFound && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: 16,
+            border: "1px solid #7f1d1d",
+            borderRadius: 8,
+            background: "#1a0505"
+          }}
+        >
+          ❌ DM kód nenalezen
+        </div>
+      )}
+
+      <div style={{ marginTop: 24, opacity: 0.5 }}>
+        (Další akce, stavový engine a pohyby přijdou v C3)
+      </div>
     </div>
   );
 }
