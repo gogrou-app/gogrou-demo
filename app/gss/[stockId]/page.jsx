@@ -3,182 +3,127 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import { applyActionToDmItem } from "@/lib/gssStateEngine";
-import dmItems from "@/data/dmItems";
-import locations from "@/data/locations";
+// ✅ SPRÁVNÉ RELATIVNÍ IMPORTY
+import { applyActionToDmItem } from "../data/stateEngine";
+import gssStock from "../data/gssStock";
+import locations from "../data/locations";
 
 export default function GssStockDetailPage({ params }) {
   const { stockId } = params;
 
+  const stock = gssStock.find(
+    (s) => String(s.gss_stock_id) === String(stockId)
+  );
+
   const [dmCode, setDmCode] = useState("");
-  const [dmItem, setDmItem] = useState(null);
-
   const [selectedLocation, setSelectedLocation] = useState("");
-  const [actionResult, setActionResult] = useState(null);
+  const [result, setResult] = useState(null);
 
-  // ==============================
-  // DM SCAN (INFO ONLY)
-  // ==============================
-  function handleDmScan(value) {
-    setDmCode(value);
-
-    const found = dmItems.find((d) => d.dm_code === value);
-    setDmItem(found || null);
-    setActionResult(null);
+  if (!stock) {
+    return (
+      <div style={{ padding: 30, color: "white" }}>
+        <Link href="/gss" style={{ color: "#4da6ff" }}>
+          ← Zpět na GSS
+        </Link>
+        <h1>Neznámá položka</h1>
+        <div>StockId: {stockId}</div>
+      </div>
+    );
   }
 
-  // ==============================
-  // APPLY ACTION
-  // ==============================
-  function handleSendToProduction() {
+  const dmItem = stock.items.find((i) => i.dm_code === dmCode);
+
+  function handleAction() {
     if (!dmItem || !selectedLocation) return;
 
-    const result = applyActionToDmItem({
+    const res = applyActionToDmItem({
       item: dmItem,
       action: "SEND_TO_PRODUCTION",
       locationId: selectedLocation
     });
 
-    setActionResult(result);
-
-    if (result.ok) {
-      setDmItem(result.item);
-    }
+    setResult(res);
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <Link href="/gss" style={{ color: "#6aa9ff" }}>
+    <div style={{ padding: 30, color: "white" }}>
+      <Link href="/gss" style={{ color: "#4da6ff" }}>
         ← Zpět na GSS
       </Link>
 
-      <h1 style={{ marginTop: 16 }}>
-        {dmItem ? dmItem.name : "Neznámá položka"}
-      </h1>
-
-      <div style={{ opacity: 0.6, marginBottom: 24 }}>
-        StockId: {stockId}
+      <h1>Detail GSS položky</h1>
+      <div style={{ opacity: 0.7, marginBottom: 20 }}>
+        GSS ID: {stock.gss_stock_id}
       </div>
 
-      {/* ==============================
-          DM SCAN (INFO)
-      ============================== */}
-      <section
+      {/* DM SCAN – INFO */}
+      <div
         style={{
-          border: "1px solid #333",
-          borderRadius: 8,
+          background: "#111",
           padding: 16,
-          marginBottom: 24
+          borderRadius: 8,
+          marginBottom: 20
         }}
       >
         <h3>DM scan (info)</h3>
-
         <input
           value={dmCode}
-          onChange={(e) => handleDmScan(e.target.value)}
+          onChange={(e) => setDmCode(e.target.value)}
           placeholder="Zadej / naskenuj DM kód"
-          style={{
-            width: "100%",
-            padding: 10,
-            background: "#111",
-            color: "#fff",
-            border: "1px solid #333",
-            borderRadius: 6
-          }}
+          style={{ width: "100%", padding: 8 }}
         />
 
         {dmItem && (
-          <div
-            style={{
-              marginTop: 16,
-              background: "#111",
-              padding: 12,
-              borderRadius: 6
-            }}
-          >
-            <div><strong>DM:</strong> {dmItem.dm_code}</div>
-            <div><strong>Stav:</strong> {dmItem.status}</div>
-            <div><strong>Lokace:</strong> {dmItem.location}</div>
-            <div>
-              <strong>Přebroušení:</strong>{" "}
-              {dmItem.sharpened}/{dmItem.max_sharpening}
-            </div>
+          <div style={{ marginTop: 10, fontSize: 14 }}>
+            Stav: <strong>{dmItem.status}</strong><br />
+            Lokace: <strong>{dmItem.location}</strong>
           </div>
         )}
-      </section>
+      </div>
 
-      {/* ==============================
-          ACTIONS
-      ============================== */}
-      <section
+      {/* AKCE */}
+      <div
         style={{
-          border: "1px solid #333",
-          borderRadius: 8,
-          padding: 16
+          background: "#111",
+          padding: 16,
+          borderRadius: 8
         }}
       >
         <h3>Akce s DM kusem</h3>
 
-        <label style={{ display: "block", marginBottom: 8 }}>
-          Lokace (povinné)
-        </label>
-
         <select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 10,
-            background: "#111",
-            color: "#fff",
-            border: "1px solid #333",
-            borderRadius: 6,
-            marginBottom: 12
-          }}
+          style={{ width: "100%", padding: 8, marginBottom: 10 }}
         >
           <option value="">— vyber lokaci —</option>
-          {locations.map((loc) => (
-            <option key={loc.id} value={loc.id}>
-              {loc.name}
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
             </option>
           ))}
         </select>
 
         <button
+          onClick={handleAction}
           disabled={!dmItem || !selectedLocation}
-          onClick={handleSendToProduction}
           style={{
-            width: "100%",
-            padding: 12,
-            background:
-              !dmItem || !selectedLocation ? "#333" : "#2f4fd8",
-            color: "#fff",
-            border: "none",
+            padding: "10px 20px",
+            background: "#2d4fff",
+            color: "white",
             borderRadius: 6,
-            cursor:
-              !dmItem || !selectedLocation ? "not-allowed" : "pointer"
+            border: "none",
+            cursor: "pointer"
           }}
         >
           Odeslat do výroby
         </button>
 
-        {actionResult && (
-          <div style={{ marginTop: 16 }}>
-            {actionResult.ok ? (
-              <div style={{ color: "#6aff8f" }}>
-                ✔ Akce provedena
-              </div>
-            ) : (
-              <div style={{ color: "#ff6a6a" }}>
-                ✖ {actionResult.error}
-              </div>
-            )}
-          </div>
+        {result && (
+          <pre style={{ marginTop: 10, fontSize: 12 }}>
+            {JSON.stringify(result, null, 2)}
+          </pre>
         )}
-      </section>
-
-      <div style={{ marginTop: 16, opacity: 0.5 }}>
-        Další akce, role, autorizace a workflow přijdou v D6 / D7.
       </div>
     </div>
   );
