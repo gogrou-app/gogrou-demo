@@ -1,15 +1,18 @@
-// DEMO – jedna firma, jeden sklad
+// /app/gss/data/company.js
+// DEMO – firma + hlavní sklad
 
-export const company = {
-  company_id: "COMPANY-001",
-  name: "DEMO Manufacturing s.r.o.",
+const company = {
+  company_id: "DEMO-001",
+  name: "Gogrou Demo s.r.o.",
+
+  warehouses: [
+    {
+      warehouse_id: "WH-MAIN",
+      name: "Hlavní sklad",
+      type: "MAIN",
+      is_default: true,
+    },
+  ],
 };
 
-export const warehouses = [
-  {
-    warehouse_id: "WH-MAIN",
-    company_id: "COMPANY-001",
-    name: "Hlavní sklad",
-    type: "MAIN",
-  },
-];
+export default company;
