@@ -1,5 +1,6 @@
 // GSS – Audit log DM pohybů
-// Neměnit zpětně – append only
+// APPEND ONLY – nikdy se zpětně neupravuje
+// DEMO: in-memory (v reálu DB / event store)
 
 const auditLog = [
   {
