@@ -3,62 +3,35 @@
 import { useState } from "react";
 import Link from "next/link";
 
-// DATA (POZOR – OPRAVENÉ CESTY)
-import gssStock from "../../data/gssStock";
-import dmItems from "../../data/dmItems";
-import auditLog from "../../data/auditLog";
+import { applyActionToDmItem } from "@/lib/gssStateEngine";
+import dmItems from "@/data/dmItems";
+import locations from "@/data/locations";
 
-// STATE ENGINE
-import {
-  applyActionToDmItem
-} from "../../data/stateEngine";
-
-// ==================================================
-// MOCK LOKACE
-// ==================================================
-const LOCATIONS = [
-  { id: "warehouse:MAIN", label: "Hlavní sklad" },
-  { id: "machine:CNC_MAZAK_01", label: "CNC Mazak 01" },
-  { id: "machine:CNC_MAZAK_02", label: "CNC Mazak 02" },
-  { id: "service:SHARPENING", label: "Brusírna" }
-];
-
-// ==================================================
-// PAGE
-// ==================================================
-export default function GssItemDetail({ params }) {
+export default function GssStockDetailPage({ params }) {
   const { stockId } = params;
-
-  const stockItem = gssStock.find((s) => s.id === stockId);
 
   const [dmCode, setDmCode] = useState("");
   const [dmItem, setDmItem] = useState(null);
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [message, setMessage] = useState("");
 
-  // ------------------------------------------------
-  // DM LOOKUP
-  // ------------------------------------------------
-  function handleDmLookup(value) {
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [actionResult, setActionResult] = useState(null);
+
+  // ==============================
+  // DM SCAN (INFO ONLY)
+  // ==============================
+  function handleDmScan(value) {
     setDmCode(value);
+
     const found = dmItems.find((d) => d.dm_code === value);
     setDmItem(found || null);
-    setMessage("");
+    setActionResult(null);
   }
 
-  // ------------------------------------------------
-  // SEND TO PRODUCTION
-  // ------------------------------------------------
+  // ==============================
+  // APPLY ACTION
+  // ==============================
   function handleSendToProduction() {
-    if (!dmItem) {
-      setMessage("❌ Nejdříve načti DM kus");
-      return;
-    }
-
-    if (!selectedLocation) {
-      setMessage("❌ Lokace je povinná");
-      return;
-    }
+    if (!dmItem || !selectedLocation) return;
 
     const result = applyActionToDmItem({
       item: dmItem,
@@ -66,92 +39,146 @@ export default function GssItemDetail({ params }) {
       locationId: selectedLocation
     });
 
-    if (!result.ok) {
-      setMessage(`❌ ${result.error}`);
-      return;
+    setActionResult(result);
+
+    if (result.ok) {
+      setDmItem(result.item);
     }
-
-    dmItem.status = result.item.status;
-    dmItem.location = result.item.location;
-
-    setMessage("✅ Nástroj odeslán do výroby");
   }
 
-  // ------------------------------------------------
-  // RENDER
-  // ------------------------------------------------
   return (
-    <div>
-      <Link href="/gss" style={{ color: "#6ea8ff" }}>
+    <div style={{ maxWidth: 720 }}>
+      <Link href="/gss" style={{ color: "#6aa9ff" }}>
         ← Zpět na GSS
       </Link>
 
-      <h1 style={{ marginTop: 20 }}>
-        {stockItem ? stockItem.name : "Neznámá položka"}
+      <h1 style={{ marginTop: 16 }}>
+        {dmItem ? dmItem.name : "Neznámá položka"}
       </h1>
-      <div style={{ opacity: 0.6 }}>StockId: {stockId}</div>
 
-      {/* DM SCAN */}
-      <div className="card" style={{ marginTop: 30 }}>
+      <div style={{ opacity: 0.6, marginBottom: 24 }}>
+        StockId: {stockId}
+      </div>
+
+      {/* ==============================
+          DM SCAN (INFO)
+      ============================== */}
+      <section
+        style={{
+          border: "1px solid #333",
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 24
+        }}
+      >
         <h3>DM scan (info)</h3>
+
         <input
-          type="text"
-          placeholder="Zadej / naskenuj DM kód"
           value={dmCode}
-          onChange={(e) => handleDmLookup(e.target.value)}
-          style={{ width: "100%" }}
+          onChange={(e) => handleDmScan(e.target.value)}
+          placeholder="Zadej / naskenuj DM kód"
+          style={{
+            width: "100%",
+            padding: 10,
+            background: "#111",
+            color: "#fff",
+            border: "1px solid #333",
+            borderRadius: 6
+          }}
         />
 
         {dmItem && (
-          <div style={{ marginTop: 15 }}>
-            <div>DM: {dmItem.dm_code}</div>
-            <div>Stav: {dmItem.status}</div>
-            <div>Lokace: {dmItem.location}</div>
+          <div
+            style={{
+              marginTop: 16,
+              background: "#111",
+              padding: 12,
+              borderRadius: 6
+            }}
+          >
+            <div><strong>DM:</strong> {dmItem.dm_code}</div>
+            <div><strong>Stav:</strong> {dmItem.status}</div>
+            <div><strong>Lokace:</strong> {dmItem.location}</div>
             <div>
-              Přebroušení: {dmItem.sharpening_current}/{dmItem.sharpening_max}
+              <strong>Přebroušení:</strong>{" "}
+              {dmItem.sharpened}/{dmItem.max_sharpening}
             </div>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* ACTION */}
-      <div className="card" style={{ marginTop: 30 }}>
+      {/* ==============================
+          ACTIONS
+      ============================== */}
+      <section
+        style={{
+          border: "1px solid #333",
+          borderRadius: 8,
+          padding: 16
+        }}
+      >
         <h3>Akce s DM kusem</h3>
+
+        <label style={{ display: "block", marginBottom: 8 }}>
+          Lokace (povinné)
+        </label>
 
         <select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
-          style={{ width: "100%" }}
+          style={{
+            width: "100%",
+            padding: 10,
+            background: "#111",
+            color: "#fff",
+            border: "1px solid #333",
+            borderRadius: 6,
+            marginBottom: 12
+          }}
         >
           <option value="">— vyber lokaci —</option>
-          {LOCATIONS.map((loc) => (
+          {locations.map((loc) => (
             <option key={loc.id} value={loc.id}>
-              {loc.label}
+              {loc.name}
             </option>
           ))}
         </select>
 
         <button
+          disabled={!dmItem || !selectedLocation}
           onClick={handleSendToProduction}
-          style={{ marginTop: 15, width: "100%" }}
+          style={{
+            width: "100%",
+            padding: 12,
+            background:
+              !dmItem || !selectedLocation ? "#333" : "#2f4fd8",
+            color: "#fff",
+            border: "none",
+            borderRadius: 6,
+            cursor:
+              !dmItem || !selectedLocation ? "not-allowed" : "pointer"
+          }}
         >
           Odeslat do výroby
         </button>
 
-        {message && <div style={{ marginTop: 10 }}>{message}</div>}
-      </div>
+        {actionResult && (
+          <div style={{ marginTop: 16 }}>
+            {actionResult.ok ? (
+              <div style={{ color: "#6aff8f" }}>
+                ✔ Akce provedena
+              </div>
+            ) : (
+              <div style={{ color: "#ff6a6a" }}>
+                ✖ {actionResult.error}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
-      {/* AUDIT */}
-      <div className="card" style={{ marginTop: 30 }}>
-        <h3>Audit log</h3>
-        {auditLog
-          .filter((a) => a.dm_code === dmCode)
-          .reverse()
-          .map((a) => (
-            <div key={a.id}>
-              {a.timestamp} – {a.action} → {a.to_status}
-            </div>
-          ))}
+      <div style={{ marginTop: 16, opacity: 0.5 }}>
+        Další akce, role, autorizace a workflow přijdou v D6 / D7.
       </div>
     </div>
   );
