@@ -1,6 +1,5 @@
 // GSS – STAV SKLADU (DEMO)
-// Jedna položka = jedna karta v GSS
-// ZATÍM BEZ KUSŮ – pouze existence položky ve skladu
+// KROK 2: NASKLADNĚNÍ DM KUSŮ NA HLAVNÍ SKLAD
 
 const gssStock = [
   {
@@ -9,18 +8,40 @@ const gssStock = [
     // vazba na GPC
     gpc_id: "73-555-321-50391",
 
-    // dm = sledování po kusech (DM kód)
-    // quantity = jen počet
     tracking_mode: "dm",
-
-    // zda se nástroj brousí
     sharpenable: true,
 
-    // výchozí fyzické umístění
     default_location: "warehouse:MAIN",
 
-    // ZATÍM ŽÁDNÉ KUSY
-    items: []
+    // ============================
+    // DM KUSY – NYNÍ UŽ EXISTUJÍ
+    // ============================
+    items: [
+      {
+        gss_item_id: "ITEM-0001",
+        dm_code: "DM-TEST-0001",
+        status: "in_stock",
+        location: "warehouse:MAIN",
+        resharpen_count: 0,
+        max_resharpen_count: 3
+      },
+      {
+        gss_item_id: "ITEM-0002",
+        dm_code: "DM-TEST-0002",
+        status: "in_stock",
+        location: "warehouse:MAIN",
+        resharpen_count: 0,
+        max_resharpen_count: 3
+      },
+      {
+        gss_item_id: "ITEM-0003",
+        dm_code: "DM-TEST-0003",
+        status: "in_stock",
+        location: "warehouse:MAIN",
+        resharpen_count: 1,
+        max_resharpen_count: 3
+      }
+    ]
   }
 ];
 
