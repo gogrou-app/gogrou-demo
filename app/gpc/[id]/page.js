@@ -4,9 +4,8 @@ import { useParams, useRouter } from "next/navigation";
 import tools from "../data";
 
 export default function GpcDetailPage() {
-  const params = useParams();
+  const { id } = useParams();
   const router = useRouter();
-  const { id } = params;
 
   const tool = tools.find(
     (t) => String(t.gpc_id) === String(id)
@@ -14,17 +13,16 @@ export default function GpcDetailPage() {
 
   if (!tool) {
     return (
-      <div style={{ padding: 40, color: "#fff" }}>
-        <h2>Nástroj nenalezen</h2>
+      <div style={{ padding: 40, color: "white" }}>
+        <h2>Položka nenalezena</h2>
+
         <button
           onClick={() => router.push("/gpc")}
           style={{
             marginTop: 20,
-            padding: "8px 14px",
-            background: "#333",
-            color: "#fff",
+            background: "transparent",
+            color: "#1e90ff",
             border: "none",
-            borderRadius: 6,
             cursor: "pointer",
           }}
         >
@@ -35,35 +33,35 @@ export default function GpcDetailPage() {
   }
 
   return (
-    <div style={{ padding: 40, color: "#fff", maxWidth: 900 }}>
-      <h1>{tool.name}</h1>
+    <div style={{ padding: 40, color: "white", maxWidth: 800 }}>
+      <h1 style={{ fontSize: 28 }}>{tool.name}</h1>
 
-      <p style={{ opacity: 0.6 }}>
+      <p style={{ opacity: 0.7, marginBottom: 20 }}>
         {tool.manufacturer} · {tool.type}
       </p>
 
-      <hr style={{ margin: "20px 0", opacity: 0.2 }} />
+      <hr style={{ opacity: 0.2, marginBottom: 20 }} />
 
       <h3>Základní parametry</h3>
-      <ul style={{ lineHeight: "1.8" }}>
+
+      <ul style={{ lineHeight: "1.8", marginTop: 10 }}>
         <li>Průměr: {tool.geometry?.diameter_mm ?? "—"} mm</li>
         <li>Délka břitu: {tool.geometry?.flute_length_mm ?? "—"} mm</li>
         <li>Počet zubů: {tool.geometry?.flutes ?? "—"}</li>
       </ul>
 
-      <hr style={{ margin: "20px 0", opacity: 0.2 }} />
+      <hr style={{ opacity: 0.2, margin: "30px 0" }} />
 
       <button
         onClick={() => router.push("/gpc")}
         style={{
-          padding: "8px 14px",
           background: "transparent",
           color: "#aaa",
           border: "none",
           cursor: "pointer",
         }}
       >
-        ← Zpět
+        ← Zpět na GPC
       </button>
     </div>
   );
