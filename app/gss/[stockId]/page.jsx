@@ -20,14 +20,14 @@ export default function GssItemDetailPage() {
     (item) => String(item.gss_item_id) === String(stockId)
   );
 
-  // 🔹 lokální stav DM kusů (DEMO – zatím bez persistence)
-  const [dmItems, setDmItems] = useState(stock?.items || []);
+  const [dmItems, setDmItems] = useState(stock?.items || {});
+  const [selectedLocations, setSelectedLocations] = useState({});
 
   if (!stock) {
     return <div style={{ padding: 20 }}>Položka nenalezena</div>;
   }
 
-  // ======= STATISTIKY =======
+  // ===== STATISTIKY =====
   const countNew = dmItems.filter(
     (i) => i.status === "in_stock" && i.resharpen_count === 0
   ).length;
@@ -40,14 +40,25 @@ export default function GssItemDetailPage() {
     (i) => i.status === "in_production"
   ).length;
 
-  // ======= AKCE =======
+  // ===== AKCE =====
   function handleAction(dmCode, action) {
+    const locationId = selectedLocations[dmCode] || null;
+
+    const needsLocation =
+      action === ACTIONS.SEND_TO_PRODUCTION ||
+      action === ACTIONS.SEND_TO_SERVICE;
+
+    if (needsLocation && !locationId) {
+      alert("Vyber lokaci");
+      return;
+    }
+
     setDmItems((prev) =>
       prev.map((item) => {
         if (item.dm_code !== dmCode) return item;
 
         const result = applyActionToDmItem(item, action, {
-          locationId: "CNC_01", // DEMO – později výběr z locations
+          locationId,
         });
 
         if (!result.ok) {
@@ -62,12 +73,9 @@ export default function GssItemDetailPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* ZPĚT */}
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={() => router.push("/gss")}>
-          ← Zpět na GSS
-        </button>
-      </div>
+      <button onClick={() => router.push("/gss")}>
+        ← Zpět na GSS
+      </button>
 
       {/* HLAVIČKA */}
       <div
@@ -75,19 +83,16 @@ export default function GssItemDetailPage() {
           background: "#111",
           padding: 20,
           borderRadius: 12,
-          marginBottom: 20,
+          margin: "16px 0 24px",
         }}
       >
-        <h1 style={{ marginBottom: 6 }}>{stock.name}</h1>
+        <h1>{stock.name}</h1>
         <div style={{ opacity: 0.7 }}>
           Typ: {stock.type || "—"} | Režim: {stock.mode}
         </div>
-        <div style={{ opacity: 0.7 }}>
-          Hlavní sklad: {stock.main_location}
-        </div>
       </div>
 
-      {/* STAVOVÉ KARTY */}
+      {/* STAVY */}
       <div
         style={{
           display: "grid",
@@ -102,16 +107,16 @@ export default function GssItemDetailPage() {
       </div>
 
       {/* DM TABULKA */}
-      <h2 style={{ marginBottom: 10 }}>DM kusy</h2>
+      <h2>DM kusy</h2>
 
       <table width="100%" cellPadding={8}>
         <thead>
-          <tr style={{ textAlign: "left", opacity: 0.7 }}>
+          <tr style={{ opacity: 0.7 }}>
             <th>DM kód</th>
             <th>Stav</th>
             <th>Přebroušení</th>
             <th>Lokace</th>
-            <th>Akce (demo)</th>
+            <th>Akce</th>
           </tr>
         </thead>
         <tbody>
@@ -125,12 +130,35 @@ export default function GssItemDetailPage() {
                 <td>
                   {item.resharpen_count} / {item.max_resharpen_count}
                 </td>
-                <td>{item.current_location_id || "—"}</td>
+
+                {/* DROPDOWN LOKACE */}
+                <td>
+                  <select
+                    value={selectedLocations[item.dm_code] || ""}
+                    onChange={(e) =>
+                      setSelectedLocations((prev) => ({
+                        ...prev,
+                        [item.dm_code]: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">— vyber —</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+
+                {/* AKCE */}
                 <td>
                   {allowed.map((action) => (
                     <button
                       key={action}
-                      onClick={() => handleAction(item.dm_code, action)}
+                      onClick={() =>
+                        handleAction(item.dm_code, action)
+                      }
                       style={{
                         marginRight: 6,
                         padding: "4px 8px",
@@ -150,7 +178,7 @@ export default function GssItemDetailPage() {
   );
 }
 
-// ======= KOMPONENTY =======
+// ===== KOMPONENTY =====
 
 function StatCard({ title, value }) {
   return (
@@ -161,7 +189,7 @@ function StatCard({ title, value }) {
         borderRadius: 12,
       }}
     >
-      <div style={{ opacity: 0.7, marginBottom: 4 }}>{title}</div>
+      <div style={{ opacity: 0.7 }}>{title}</div>
       <div style={{ fontSize: 28 }}>{value}</div>
     </div>
   );
