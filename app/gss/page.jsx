@@ -69,9 +69,10 @@ export default function GssPage() {
               alignItems: "center"
             }}
           >
+            {/* NÁZEV + NATVRDO TESTOVACÍ ID */}
             <div>
               <Link
-                href={`/gss/${stock.gss_stock_id}`}
+                href="/gss/STOCK-001"
                 style={{
                   color: "#4da6ff",
                   textDecoration: "none",
