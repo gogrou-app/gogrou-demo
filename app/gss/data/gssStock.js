@@ -1,48 +1,34 @@
-// GSS – STAV SKLADU (DEMO)
-// KROK 2: NASKLADNĚNÍ DM KUSŮ NA HLAVNÍ SKLAD
+// /app/gss/data/gssStock.js
+// GSS STOCK – POLOŽKY NA SKLADĚ (BEZ KUSŮ)
+// Stav: položka existuje, ale není naskladněna
 
 const gssStock = [
   {
     gss_stock_id: "STOCK-TEST-001",
 
     // vazba na GPC
-    gpc_id: "73-555-321-50391",
+    gpc_id: "73-777-100-00003", // SECO 980100-MEGA
 
-    tracking_mode: "dm",
+    // režim sledování
+    tracking_mode: "dm", // dm | quantity
     sharpenable: true,
 
-    default_location: "warehouse:MAIN",
+    // kde položka patří
+    warehouse_id: "WH-MAIN-001",
 
-    // ============================
-    // DM KUSY – NYNÍ UŽ EXISTUJÍ
-    // ============================
-    items: [
-      {
-        gss_item_id: "ITEM-0001",
-        dm_code: "DM-TEST-0001",
-        status: "in_stock",
-        location: "warehouse:MAIN",
-        resharpen_count: 0,
-        max_resharpen_count: 3
-      },
-      {
-        gss_item_id: "ITEM-0002",
-        dm_code: "DM-TEST-0002",
-        status: "in_stock",
-        location: "warehouse:MAIN",
-        resharpen_count: 0,
-        max_resharpen_count: 3
-      },
-      {
-        gss_item_id: "ITEM-0003",
-        dm_code: "DM-TEST-0003",
-        status: "in_stock",
-        location: "warehouse:MAIN",
-        resharpen_count: 1,
-        max_resharpen_count: 3
-      }
-    ]
-  }
+    // NASTAVENÍ (zatím prázdné)
+    settings: {
+      min_new: null,
+      max_new: null,
+      max_resharpened: null,
+    },
+
+    // ⛔ ŽÁDNÉ KUSY
+    items: [],
+
+    // historie naskladnění
+    created_at: "2025-12-26T00:00:00Z",
+  },
 ];
 
 export default gssStock;
