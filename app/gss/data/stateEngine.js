@@ -21,22 +21,26 @@ export const DM_STATUSES = {
 export const DM_ACTIONS = {
   SEND_TO_PRODUCTION: {
     from: [DM_STATUSES.IN_STOCK],
-    to: DM_STATUSES.IN_PRODUCTION
+    to: DM_STATUSES.IN_PRODUCTION,
+    requiresLocation: true
   },
   RETURN_FROM_PRODUCTION: {
     from: [DM_STATUSES.IN_PRODUCTION],
-    to: DM_STATUSES.IN_STOCK
+    to: DM_STATUSES.IN_STOCK,
+    requiresLocation: true
   },
   SEND_TO_SERVICE: {
     from: [
       DM_STATUSES.IN_STOCK,
       DM_STATUSES.IN_PRODUCTION
     ],
-    to: DM_STATUSES.SERVICE
+    to: DM_STATUSES.SERVICE,
+    requiresLocation: true
   },
   RETURN_FROM_SERVICE: {
     from: [DM_STATUSES.SERVICE],
-    to: DM_STATUSES.IN_STOCK
+    to: DM_STATUSES.IN_STOCK,
+    requiresLocation: true
   },
   DISCARD: {
     from: [
@@ -44,7 +48,8 @@ export const DM_ACTIONS = {
       DM_STATUSES.IN_PRODUCTION,
       DM_STATUSES.SERVICE
     ],
-    to: DM_STATUSES.DISCARDED
+    to: DM_STATUSES.DISCARDED,
+    requiresLocation: false
   }
 };
 
@@ -86,10 +91,7 @@ export function applyActionToDmItem({
   const rule = DM_ACTIONS[action];
 
   if (!rule) {
-    return {
-      ok: false,
-      error: "Neznámá akce"
-    };
+    return { ok: false, error: "Neznámá akce" };
   }
 
   if (!rule.from.includes(item.status)) {
@@ -99,8 +101,17 @@ export function applyActionToDmItem({
     };
   }
 
+  if (rule.requiresLocation && !locationId) {
+    return {
+      ok: false,
+      error: `Akce '${action}' vyžaduje zadání lokace`
+    };
+  }
+
   const newStatus = rule.to;
-  const newLocation = locationId || item.location;
+  const newLocation = rule.requiresLocation
+    ? locationId
+    : item.location;
 
   // ===== AUDIT LOG =====
   logAudit({
