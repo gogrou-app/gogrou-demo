@@ -1,198 +1,204 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useParams } from "next/navigation";
 
 import gssStock from "../data/gssStock";
 import locations from "../data/locations";
+import auditLog from "../data/auditLog";
 
-// ==================================================
-// DETAIL GSS ITEM
-// ==================================================
+import {
+  DM_ACTIONS,
+  applyActionToDmItem
+} from "../data/stateEngine";
 
-export default function GssItemDetail() {
-  const { stockId } = useParams();
-  const router = useRouter();
+export default function GssItemDetailPage() {
+  const params = useParams();
+  const stockId = params?.stockId;
 
-  const stockItem = gssStock.find((s) => s.id === stockId);
+  const stockItem = gssStock.find(s => s.id === stockId);
 
+  // ==============================
+  // DM SCAN (INFO ONLY)
+  // ==============================
   const [dmInput, setDmInput] = useState("");
   const [dmInfo, setDmInfo] = useState(null);
 
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [infoMessage, setInfoMessage] = useState("");
-
-  // ==================================================
-  // DM INFO ONLY (C1)
-// ==================================================
-  function handleDmInfoScan(value) {
+  function handleDmScan(value) {
     setDmInput(value);
 
-    const dm = stockItem?.dm_items?.find(
-      (d) => d.dm_code === value
-    );
+    const lastAudit = [...auditLog]
+      .reverse()
+      .find(a => a.dm_code === value);
 
-    if (!dm) {
+    if (!lastAudit) {
       setDmInfo(null);
-      setInfoMessage("DM kód nebyl nalezen");
       return;
     }
 
-    setDmInfo(dm);
-    setInfoMessage("");
+    setDmInfo({
+      dm_code: value,
+      status: lastAudit.to_status,
+      location: lastAudit.location
+    });
   }
 
-  // ==================================================
-  // CONFIRM (zatím jen UI logika)
-// ==================================================
-  function handleConfirm() {
+  // ==============================
+  // D2 – AKCE + POVINNÁ LOKACE
+  // ==============================
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [actionResult, setActionResult] = useState(null);
+
+  function handleAction(actionKey) {
     if (!dmInfo) {
-      setInfoMessage("Nejprve naskenuj DM kód");
+      alert("Nejdřív naskenuj DM kód.");
       return;
     }
 
     if (!selectedLocation) {
-      setInfoMessage("Vyber cílovou lokaci");
+      alert("Vyber lokaci (povinné).");
       return;
     }
 
-    setInfoMessage(
-      `Připraveno: DM ${dmInfo.dm_code} → ${selectedLocation}`
-    );
+    const result = applyActionToDmItem({
+      item: {
+        dm_code: dmInfo.dm_code,
+        status: dmInfo.status,
+        location: dmInfo.location
+      },
+      action: actionKey,
+      locationId: selectedLocation
+    });
+
+    setActionResult(result);
+
+    if (result.ok) {
+      setDmInfo(result.item);
+    }
   }
 
-  // ==================================================
-  // RENDER
-// ==================================================
-  if (!stockItem) {
-    return (
-      <div>
-        <h1>Neznámá položka</h1>
-        <p>StockId: {stockId}</p>
-      </div>
-    );
-  }
-
+  // ==============================
+  // UI
+  // ==============================
   return (
-    <div style={{ maxWidth: 700 }}>
-      <button
-        onClick={() => router.push("/gss")}
-        style={{
-          background: "none",
-          border: "none",
-          color: "#7aa2ff",
-          cursor: "pointer",
-          marginBottom: 10
-        }}
-      >
+    <div>
+      <a href="/gss" style={{ color: "#6ea8ff" }}>
         ← Zpět na GSS
-      </button>
+      </a>
 
-      <h1>{stockItem.name}</h1>
-      <p>StockId: {stockItem.id}</p>
+      <h1>{stockItem?.name || "Neznámá položka"}</h1>
+      <div style={{ opacity: 0.6 }}>
+        StockId: {stockId}
+      </div>
 
       {/* ================= DM SCAN INFO ================= */}
       <div
         style={{
-          marginTop: 20,
+          marginTop: 30,
           padding: 20,
           border: "1px solid #333",
-          borderRadius: 8
+          borderRadius: 8,
+          maxWidth: 420
         }}
       >
         <h3>DM scan (info)</h3>
 
         <input
-          value={dmInput}
-          onChange={(e) => handleDmInfoScan(e.target.value)}
+          type="text"
           placeholder="Zadej / naskenuj DM kód"
+          value={dmInput}
+          onChange={e => handleDmScan(e.target.value)}
           style={{
             width: "100%",
-            padding: 10,
-            marginBottom: 10,
+            padding: 8,
             background: "#111",
             color: "#fff",
-            border: "1px solid #333"
+            border: "1px solid #333",
+            borderRadius: 4
           }}
         />
 
         {dmInfo && (
           <div
             style={{
-              marginTop: 10,
-              padding: 12,
-              background: "#0f0f0f",
+              marginTop: 12,
+              padding: 10,
+              background: "#111",
+              border: "1px solid #333",
               borderRadius: 6
             }}
           >
-            <strong>DM:</strong> {dmInfo.dm_code}
-            <br />
-            <strong>Stav:</strong> {dmInfo.status}
-            <br />
-            <strong>Lokace:</strong> {dmInfo.location}
-            <br />
-            <strong>Přebroušení:</strong>{" "}
-            {dmInfo.sharpening_count}/{dmInfo.max_sharpening}
+            <div><b>DM:</b> {dmInfo.dm_code}</div>
+            <div><b>Stav:</b> {dmInfo.status}</div>
+            <div><b>Lokace:</b> {dmInfo.location}</div>
           </div>
         )}
       </div>
 
-      {/* ================= LOKACE ================= */}
+      {/* ================= D2 – AKCE + LOKACE ================= */}
       <div
         style={{
-          marginTop: 20,
+          marginTop: 30,
           padding: 20,
           border: "1px solid #333",
-          borderRadius: 8
+          borderRadius: 8,
+          maxWidth: 420
         }}
       >
-        <h3>Cílová lokace</h3>
+        <h3>Akce s DM kusem</h3>
+
+        {/* VÝBĚR LOKACE */}
+        <label style={{ display: "block", marginBottom: 6 }}>
+          Lokace (povinné)
+        </label>
 
         <select
           value={selectedLocation}
-          onChange={(e) => setSelectedLocation(e.target.value)}
+          onChange={e => setSelectedLocation(e.target.value)}
           style={{
             width: "100%",
-            padding: 10,
+            padding: 8,
             background: "#111",
             color: "#fff",
-            border: "1px solid #333"
+            border: "1px solid #333",
+            borderRadius: 4,
+            marginBottom: 12
           }}
         >
-          <option value="">-- vyber lokaci --</option>
-          {locations.map((loc) => (
+          <option value="">— vyber lokaci —</option>
+          {locations.map(loc => (
             <option key={loc.id} value={loc.id}>
               {loc.name}
             </option>
           ))}
         </select>
-      </div>
 
-      {/* ================= CONFIRM ================= */}
-      <div style={{ marginTop: 20 }}>
+        {/* DEMO AKCE */}
         <button
-          onClick={handleConfirm}
+          onClick={() => handleAction("SEND_TO_PRODUCTION")}
           style={{
-            padding: "10px 16px",
-            background: "#7aa2ff",
-            color: "#000",
+            width: "100%",
+            padding: 10,
+            background: "#1e40af",
+            color: "#fff",
             border: "none",
             borderRadius: 6,
             cursor: "pointer"
           }}
         >
-          Potvrdit
+          Odeslat do výroby
         </button>
 
-        {infoMessage && (
-          <div style={{ marginTop: 10, color: "#aaa" }}>
-            {infoMessage}
+        {actionResult && !actionResult.ok && (
+          <div style={{ color: "#ff6b6b", marginTop: 10 }}>
+            {actionResult.error}
           </div>
         )}
       </div>
 
-      <div style={{ marginTop: 30, color: "#555" }}>
-        (Další akce, stavový engine a pohyby přijdou v D3 / C2)
+      {/* POZNÁMKA */}
+      <div style={{ marginTop: 20, opacity: 0.5 }}>
+        Další akce, role, autorizace a workflow přijdou v D3 / E.
       </div>
     </div>
   );
