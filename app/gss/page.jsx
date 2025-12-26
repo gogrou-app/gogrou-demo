@@ -1,72 +1,100 @@
 "use client";
 
-import Link from "next/link";
-import gssStock from "./data";
+import gssStock from "./data/gssStock";
 import gpcTools from "../gpc/data";
+import Link from "next/link";
 
 export default function GssPage() {
   return (
     <div style={{ padding: 30, color: "white" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 25 }}>
-        GSS – Skladové položky
+      <h1 style={{ fontSize: 32, marginBottom: 20 }}>
+        GSS – Hlavní sklad
       </h1>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {gssStock.map((stock) => {
-          const tool = gpcTools.find(
-            (t) => String(t.gpc_id) === String(stock.gpc_id)
-          );
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "3fr 1fr 2fr 2fr",
+          gap: 12,
+          padding: "12px 16px",
+          background: "#222",
+          borderRadius: 8,
+          fontWeight: "bold",
+          fontSize: 14,
+          marginBottom: 10
+        }}
+      >
+        <div>Název položky</div>
+        <div>Typ</div>
+        <div>Skladem (nové / ostřené)</div>
+        <div>Stav</div>
+      </div>
 
-          return (
-            <div
-              key={stock.gss_stock_id}
-              style={{
-                background: "#111",
-                padding: 16,
-                borderRadius: 10,
-                border: "1px solid #333",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center"
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: "bold", fontSize: 18 }}>
-                  {tool?.name || "Neznámá položka"}
-                </div>
-                <div style={{ opacity: 0.7 }}>
-                  Režim: {stock.tracking_mode.toUpperCase()}
-                </div>
-                <div style={{ opacity: 0.7 }}>
-                  Lokace: {stock.default_location}
-                </div>
-              </div>
+      {gssStock.map((stock) => {
+        const tool = gpcTools.find(
+          (t) => String(t.gpc_id) === String(stock.gpc_id)
+        );
 
-              <div>
-                {stock.tracking_mode === "dm" ? (
-                  <div>Ks: {stock.items.length}</div>
-                ) : (
-                  <div>Množství: {stock.quantity}</div>
-                )}
-              </div>
+        const newCount =
+          stock.tracking_mode === "dm"
+            ? stock.items.filter(
+                (i) =>
+                  i.status === "in_stock" &&
+                  i.resharpen_count === 0
+              ).length
+            : stock.quantity;
 
+        const sharpenedCount =
+          stock.tracking_mode === "dm"
+            ? stock.items.filter(
+                (i) =>
+                  i.status === "in_stock" &&
+                  i.resharpen_count > 0
+              ).length
+            : 0;
+
+        return (
+          <div
+            key={stock.gss_stock_id}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "3fr 1fr 2fr 2fr",
+              gap: 12,
+              padding: "14px 16px",
+              background: "#111",
+              borderRadius: 8,
+              marginBottom: 6,
+              alignItems: "center"
+            }}
+          >
+            <div>
               <Link
                 href={`/gss/${stock.gss_stock_id}`}
                 style={{
-                  padding: "10px 14px",
-                  background: "#444",
-                  borderRadius: 6,
+                  color: "#4da6ff",
                   textDecoration: "none",
-                  color: "white",
                   fontWeight: "bold"
                 }}
               >
-                Detail →
+                {tool?.name || "Neznámá položka"}
               </Link>
             </div>
-          );
-        })}
-      </div>
+
+            <div style={{ opacity: 0.8 }}>
+              {tool?.type || "—"}
+            </div>
+
+            <div>
+              <strong>{newCount}</strong> /{" "}
+              <strong>{sharpenedCount}</strong>
+            </div>
+
+            <div style={{ opacity: 0.6 }}>
+              —
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
