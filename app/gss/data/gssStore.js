@@ -1,55 +1,85 @@
 // /app/gss/data/gssStore.js
-// GSS STORE – LocalStorage (MVP DEMO)
+"use client";
+
+import company from "./company";
 
 const STORAGE_KEY = "gogrou_gss_stock";
 
-/* =========================
-   HELPERS
-========================= */
-function loadStock() {
-  if (typeof window === "undefined") return [];
+/**
+ * Vrátí celý GSS stav (firma + sklady + položky)
+ */
+export function getGssState() {
+  if (typeof window === "undefined") return null;
+
   const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
+  if (!raw) {
+    const initial = {
+      company_id: company.company_id,
+      warehouses: company.warehouses.map((w) => ({
+        ...w,
+        stock: [], // ← tady budou GSS STOCK položky
+      })),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    return initial;
+  }
+
+  return JSON.parse(raw);
 }
 
-function saveStock(stock) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(stock));
+/**
+ * Uloží celý GSS stav
+ */
+function saveGssState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-/* =========================
-   PUBLIC API
-========================= */
-
-// vrátí celý sklad
-export function getGssStock() {
-  return loadStock();
-}
-
-// přidání položky z GPC (0 ks)
+/**
+ * Přidání položky z GPC do GSS
+ * → vznikne GSS STOCK (0 ks) v HLAVNÍM skladu
+ */
 export function addStockItemFromGPC(tool) {
-  const stock = loadStock();
+  const state = getGssState();
+  if (!state) return;
 
-  const exists = stock.find(
-    (item) => item.gpc_id === tool.gpc_id
+  const mainWarehouse = state.warehouses.find((w) => w.is_default);
+  if (!mainWarehouse) {
+    alert("Chybí hlavní sklad firmy!");
+    return;
+  }
+
+  const exists = mainWarehouse.stock.find(
+    (s) => String(s.gpc_id) === String(tool.gpc_id)
   );
 
-  if (exists) return; // už existuje → nic nedělej
+  if (exists) {
+    alert("Tato položka už je ve skladu založena.");
+    return;
+  }
 
-  stock.push({
-    stock_id: `STOCK-${tool.gpc_id}`,
+  mainWarehouse.stock.push({
+    gss_stock_id: crypto.randomUUID(),
     gpc_id: tool.gpc_id,
     name: tool.name,
-    type: tool.type,
-    manufacturer: tool.manufacturer,
+    tracking_mode: "quantity", // DM později
+    quantity: 0,
 
-    qty_new: 0,
-    qty_sharpened: 0,
-
-    min_qty: null,
-    max_qty: null,
+    min: null,
+    max: null,
 
     created_at: new Date().toISOString(),
   });
 
-  saveStock(stock);
+  saveGssState(state);
+}
+
+/**
+ * Vrátí stock hlavního skladu
+ */
+export function getMainWarehouseStock() {
+  const state = getGssState();
+  if (!state) return [];
+
+  const main = state.warehouses.find((w) => w.is_default);
+  return main ? main.stock : [];
 }
