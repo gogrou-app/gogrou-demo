@@ -203,3 +203,113 @@ export default function GssItemDetailPage() {
     </div>
   );
 }
+
+{/* ============================= */}
+{/* D4 – DM SCAN (INFO + AKCE) */}
+{/* ============================= */}
+
+<div style={{ marginTop: 40 }}>
+
+  {/* ===== DM INFO ===== */}
+  <div
+    style={{
+      border: "1px solid #333",
+      borderRadius: 8,
+      padding: 16,
+      maxWidth: 520,
+      marginBottom: 20
+    }}
+  >
+    <h3 style={{ marginBottom: 8 }}>DM scan (info)</h3>
+
+    <input
+      type="text"
+      placeholder="Zadej / naskenuj DM kód"
+      value={dmInput}
+      onChange={(e) => setDmInput(e.target.value)}
+      style={{
+        width: "100%",
+        padding: 10,
+        background: "#000",
+        border: "1px solid #444",
+        color: "#fff",
+        borderRadius: 6
+      }}
+    />
+
+    {dmInfo && (
+      <div
+        style={{
+          marginTop: 12,
+          padding: 12,
+          background: "#111",
+          borderRadius: 6,
+          fontSize: 14
+        }}
+      >
+        <div><b>DM:</b> {dmInfo.dm_code}</div>
+        <div><b>Stav:</b> {dmInfo.status}</div>
+        <div><b>Lokace:</b> {dmInfo.location}</div>
+        <div>
+          <b>Přebroušení:</b>{" "}
+          {dmInfo.sharpening_done ?? 0}/{dmInfo.sharpening_max ?? "?"}
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* ===== DM AKCE – jen když máme kontext ===== */}
+  {stockId && dmInfo && (
+    <div
+      style={{
+        border: "1px solid #444",
+        borderRadius: 8,
+        padding: 16,
+        maxWidth: 520
+      }}
+    >
+      <h3 style={{ marginBottom: 8 }}>Akce s DM kusem</h3>
+
+      <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 12 }}>
+        Povolené akce se řídí stavovým enginem a vyžadují lokaci
+      </div>
+
+      {/* Lokace */}
+      <select
+        value={selectedLocation}
+        onChange={(e) => setSelectedLocation(e.target.value)}
+        style={{
+          width: "100%",
+          padding: 10,
+          marginBottom: 12,
+          background: "#000",
+          border: "1px solid #444",
+          color: "#fff",
+          borderRadius: 6
+        }}
+      >
+        <option value="">— vyber lokaci —</option>
+        {locations.map((loc) => (
+          <option key={loc.id} value={loc.id}>
+            {loc.label}
+          </option>
+        ))}
+      </select>
+
+      {/* Akční tlačítka – zatím demo */}
+      <button
+        disabled={!selectedLocation}
+        style={{
+          padding: "10px 16px",
+          background: selectedLocation ? "#2563eb" : "#333",
+          color: "#fff",
+          border: "none",
+          borderRadius: 6,
+          cursor: selectedLocation ? "pointer" : "not-allowed"
+        }}
+      >
+        Provést akci (C2)
+      </button>
+    </div>
+  )}
+</div>
