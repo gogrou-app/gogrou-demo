@@ -1,152 +1,117 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 import gssStock from "../data/gssStock";
 import auditLog from "../data/auditLog";
 import locations from "../data/locations";
-import { getAllowedActions } from "../data/stateEngine";
 
-export default function GSSItemDetail() {
-  const params = useParams();
-  const stockId = params.stockId;
+export default function GSSItemDetail({ params }) {
+  const { stockId } = params;
 
-  const stockItem = gssStock.find((i) => i.id === stockId);
+  // demo – vezmeme první položku
+  const stockItem = gssStock[0];
 
-  if (!stockItem) {
-    return (
-      <div style={{ padding: 30 }}>
-        <Link href="/gss">← Zpět na GSS</Link>
-        <h1>Položka nenalezena</h1>
-        <p>StockId: {stockId}</p>
-      </div>
+  // --- C1: DM scan (INFO ONLY) ---
+  const [dmInput, setDmInput] = useState("");
+  const [dmInfo, setDmInfo] = useState(null);
+
+  const handleDmScan = () => {
+    const dm = stockItem.dm_items.find(
+      (item) => item.dm_code === dmInput.trim()
     );
-  }
 
-  const dmItems = stockItem.dm_items || [];
+    if (!dm) {
+      setDmInfo({
+        error: true,
+        message: "DM kód nenalezen"
+      });
+      return;
+    }
 
-  const countNew = dmItems.filter((d) => d.condition === "new").length;
-  const countSharpened = dmItems.filter((d) => d.condition === "sharpened").length;
-  const countInUse = dmItems.filter((d) => d.status === "in_production").length;
+    setDmInfo({
+      error: false,
+      dm_code: dm.dm_code,
+      status: dm.status,
+      location: dm.location,
+      sharpenings: `${dm.sharpened}/${dm.max_sharpenings}`
+    });
+  };
 
   return (
-    <div style={{ padding: 30, maxWidth: 1100 }}>
-      <Link href="/gss" style={{ color: "#7aa2ff" }}>
+    <div>
+      {/* NAVIGACE */}
+      <Link
+        href="/gss"
+        style={{ color: "#7aa2ff", display: "inline-block", marginBottom: 16 }}
+      >
         ← Zpět na GSS
       </Link>
 
       {/* HLAVIČKA */}
-      <div style={{ marginTop: 20, marginBottom: 30 }}>
-        <h1>{stockItem.name || "Neznámá položka"}</h1>
-        <div style={{ opacity: 0.7 }}>
-          StockId: {stockItem.id} <br />
-          Typ: {stockItem.type || "—"} | Režim: {stockItem.mode}
-        </div>
+      <h1 style={{ marginBottom: 4 }}>{stockItem.name}</h1>
+      <div style={{ opacity: 0.7, marginBottom: 24 }}>
+        StockId: {stockId}
       </div>
 
-      {/* STAVOVÁ LIŠTA */}
-      <div style={{ display: "flex", gap: 20, marginBottom: 30 }}>
-        <StatusCard title="Skladem – nové" value={countNew} color="#4da3ff" />
-        <StatusCard title="Skladem – ostřené" value={countSharpened} color="#6bd26b" />
-        <StatusCard title="V oběhu" value={countInUse} color="#f0b94d" />
+      {/* C1 – DM SCAN PANEL */}
+      <div
+        style={{
+          border: "1px solid #333",
+          borderRadius: 10,
+          padding: 16,
+          marginBottom: 24,
+          maxWidth: 480
+        }}
+      >
+        <h3 style={{ marginBottom: 12 }}>DM scan (info)</h3>
+
+        <input
+          type="text"
+          placeholder="Zadej / naskenuj DM kód"
+          value={dmInput}
+          onChange={(e) => setDmInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleDmScan()}
+          style={{
+            width: "100%",
+            padding: 10,
+            borderRadius: 6,
+            border: "1px solid #555",
+            background: "#000",
+            color: "#fff",
+            marginBottom: 12
+          }}
+        />
+
+        {dmInfo && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 6,
+              background: dmInfo.error ? "#330000" : "#111",
+              border: "1px solid #333"
+            }}
+          >
+            {dmInfo.error ? (
+              <strong>{dmInfo.message}</strong>
+            ) : (
+              <>
+                <div><strong>DM:</strong> {dmInfo.dm_code}</div>
+                <div><strong>Stav:</strong> {dmInfo.status}</div>
+                <div><strong>Lokace:</strong> {dmInfo.location}</div>
+                <div><strong>Přebroušení:</strong> {dmInfo.sharpenings}</div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* DM KUSY */}
-      <h2>DM kusy</h2>
-
-      {dmItems.length === 0 ? (
-        <p style={{ opacity: 0.6 }}>Zatím nejsou evidovány žádné DM kusy.</p>
-      ) : (
-        <table style={{ width: "100%", marginBottom: 30 }}>
-          <thead>
-            <tr>
-              <th align="left">DM kód</th>
-              <th align="left">Stav</th>
-              <th align="left">Lokace</th>
-              <th align="left">Přebroušení</th>
-              <th align="left">Akce</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dmItems.map((dm) => {
-              const allowed = getAllowedActions(dm.status);
-
-              return (
-                <tr key={dm.dm_code}>
-                  <td>{dm.dm_code}</td>
-                  <td>{dm.status}</td>
-                  <td>{dm.location || "—"}</td>
-                  <td>
-                    {dm.sharpen_count}/{dm.max_sharpen}
-                  </td>
-                  <td>
-                    {allowed.length === 0 ? (
-                      <span style={{ opacity: 0.4 }}>—</span>
-                    ) : (
-                      allowed.map((a) => (
-                        <button
-                          key={a}
-                          disabled
-                          style={{ marginRight: 8, opacity: 0.5 }}
-                        >
-                          {a}
-                        </button>
-                      ))
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-
-      {/* AUDIT LOG */}
-      <h2>Historie pohybů</h2>
-
-      <table style={{ width: "100%", opacity: 0.9 }}>
-        <thead>
-          <tr>
-            <th align="left">Čas</th>
-            <th align="left">DM</th>
-            <th align="left">Akce</th>
-            <th align="left">Lokace</th>
-            <th align="left">Uživatel</th>
-          </tr>
-        </thead>
-        <tbody>
-          {auditLog
-            .filter((a) => a.dm_code?.includes(stockItem.id))
-            .map((log) => (
-              <tr key={log.id}>
-                <td>{new Date(log.timestamp).toLocaleString()}</td>
-                <td>{log.dm_code}</td>
-                <td>{log.action}</td>
-                <td>{log.location}</td>
-                <td>{log.user}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/* ===== POMOCNÉ KOMPONENTY ===== */
-
-function StatusCard({ title, value, color }) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${color}`,
-        borderRadius: 10,
-        padding: 20,
-        minWidth: 180,
-      }}
-    >
-      <div style={{ opacity: 0.7 }}>{title}</div>
-      <div style={{ fontSize: 32, color }}>{value}</div>
+      {/* DALŠÍ ČÁSTI (zatím beze změn) */}
+      <p style={{ opacity: 0.5 }}>
+        (Další akce, stavový engine a pohyby přijdou v C2 / C3)
+      </p>
     </div>
   );
 }
