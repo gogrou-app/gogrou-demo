@@ -1,23 +1,24 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+
 import gssStock from "../data/gssStock";
 import auditLog from "../data/auditLog";
 import locations from "../data/locations";
-import { scanDmCode } from "../data/dmScanner";
+import { getAllowedActions } from "../data/stateEngine";
 
-export default function GssItemDetail() {
+export default function GSSItemDetail() {
   const params = useParams();
   const stockId = params.stockId;
 
-  const stockItem = gssStock.find(s => s.stockId === stockId);
+  const stockItem = gssStock.find((i) => i.id === stockId);
 
   if (!stockItem) {
     return (
-      <div>
+      <div style={{ padding: 30 }}>
         <Link href="/gss">← Zpět na GSS</Link>
-        <h1>Neznámá položka</h1>
+        <h1>Položka nenalezena</h1>
         <p>StockId: {stockId}</p>
       </div>
     );
@@ -25,125 +26,127 @@ export default function GssItemDetail() {
 
   const dmItems = stockItem.dm_items || [];
 
-  const countNew = dmItems.filter(d => d.status === "in_stock" && d.sharpening_count === 0).length;
-  const countSharpened = dmItems.filter(d => d.status === "in_stock" && d.sharpening_count > 0).length;
-  const countInProduction = dmItems.filter(d => d.status === "in_production").length;
-
-  // 🔵 TEST SCAN – simulace DM čtečky
-  const testScan = () => {
-    try {
-      const result = scanDmCode({
-        dmCode: "DM-SANDVIK-0001",
-        action: "SEND_TO_PRODUCTION",
-        targetLocation: "machine:CNC_MAZAK_01",
-        user: "operator:demo"
-      });
-
-      alert(
-        `DM ${result.dm.dm_code}\nNový stav: ${result.status}\nLokace: machine:CNC_MAZAK_01`
-      );
-    } catch (e) {
-      alert(e.message);
-    }
-  };
+  const countNew = dmItems.filter((d) => d.condition === "new").length;
+  const countSharpened = dmItems.filter((d) => d.condition === "sharpened").length;
+  const countInUse = dmItems.filter((d) => d.status === "in_production").length;
 
   return (
-    <div>
-      <Link href="/gss">← Zpět na GSS</Link>
+    <div style={{ padding: 30, maxWidth: 1100 }}>
+      <Link href="/gss" style={{ color: "#7aa2ff" }}>
+        ← Zpět na GSS
+      </Link>
 
       {/* HLAVIČKA */}
-      <div style={{ marginTop: "20px", padding: "20px", border: "1px solid #333", borderRadius: "10px" }}>
-        <h1>{stockItem.name}</h1>
-        <p>Typ: {stockItem.type || "—"} | Režim: DM</p>
-        <p>Hlavní sklad: {stockItem.main_location}</p>
+      <div style={{ marginTop: 20, marginBottom: 30 }}>
+        <h1>{stockItem.name || "Neznámá položka"}</h1>
+        <div style={{ opacity: 0.7 }}>
+          StockId: {stockItem.id} <br />
+          Typ: {stockItem.type || "—"} | Režim: {stockItem.mode}
+        </div>
       </div>
 
-      {/* STAVOVÉ KARTY */}
-      <div style={{ display: "flex", gap: "16px", marginTop: "20px" }}>
-        <div style={{ flex: 1, border: "1px solid #2563eb", padding: "16px", borderRadius: "10px" }}>
-          <div>Skladem – nové</div>
-          <strong style={{ fontSize: "24px" }}>{countNew}</strong>
-        </div>
-
-        <div style={{ flex: 1, border: "1px solid #22c55e", padding: "16px", borderRadius: "10px" }}>
-          <div>Skladem – ostřené</div>
-          <strong style={{ fontSize: "24px" }}>{countSharpened}</strong>
-        </div>
-
-        <div style={{ flex: 1, border: "1px solid #f59e0b", padding: "16px", borderRadius: "10px" }}>
-          <div>V oběhu</div>
-          <strong style={{ fontSize: "24px" }}>{countInProduction}</strong>
-        </div>
+      {/* STAVOVÁ LIŠTA */}
+      <div style={{ display: "flex", gap: 20, marginBottom: 30 }}>
+        <StatusCard title="Skladem – nové" value={countNew} color="#4da3ff" />
+        <StatusCard title="Skladem – ostřené" value={countSharpened} color="#6bd26b" />
+        <StatusCard title="V oběhu" value={countInUse} color="#f0b94d" />
       </div>
 
       {/* DM KUSY */}
-      <h2 style={{ marginTop: "30px" }}>DM kusy</h2>
-      <table width="100%" style={{ borderCollapse: "collapse", marginTop: "10px" }}>
-        <thead>
-          <tr>
-            <th align="left">DM kód</th>
-            <th align="left">Stav</th>
-            <th align="left">Přebroušení</th>
-            <th align="left">Lokace</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dmItems.map(dm => (
-            <tr key={dm.dm_code}>
-              <td>{dm.dm_code}</td>
-              <td>{dm.status}</td>
-              <td>{dm.sharpening_count}</td>
-              <td>{dm.location}</td>
+      <h2>DM kusy</h2>
+
+      {dmItems.length === 0 ? (
+        <p style={{ opacity: 0.6 }}>Zatím nejsou evidovány žádné DM kusy.</p>
+      ) : (
+        <table style={{ width: "100%", marginBottom: 30 }}>
+          <thead>
+            <tr>
+              <th align="left">DM kód</th>
+              <th align="left">Stav</th>
+              <th align="left">Lokace</th>
+              <th align="left">Přebroušení</th>
+              <th align="left">Akce</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {dmItems.map((dm) => {
+              const allowed = getAllowedActions(dm.status);
 
-      {/* AKCE – DEMO */}
-      <h2 style={{ marginTop: "30px" }}>Akce (demo)</h2>
-
-      <button
-        onClick={testScan}
-        style={{
-          marginTop: "10px",
-          padding: "10px 16px",
-          background: "#2563eb",
-          color: "white",
-          borderRadius: "6px",
-          border: "none"
-        }}
-      >
-        TEST – simulovat scan DM
-      </button>
+              return (
+                <tr key={dm.dm_code}>
+                  <td>{dm.dm_code}</td>
+                  <td>{dm.status}</td>
+                  <td>{dm.location || "—"}</td>
+                  <td>
+                    {dm.sharpen_count}/{dm.max_sharpen}
+                  </td>
+                  <td>
+                    {allowed.length === 0 ? (
+                      <span style={{ opacity: 0.4 }}>—</span>
+                    ) : (
+                      allowed.map((a) => (
+                        <button
+                          key={a}
+                          disabled
+                          style={{ marginRight: 8, opacity: 0.5 }}
+                        >
+                          {a}
+                        </button>
+                      ))
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       {/* AUDIT LOG */}
-      <h2 style={{ marginTop: "40px" }}>Historie pohybů</h2>
-      <table width="100%" style={{ borderCollapse: "collapse", marginTop: "10px" }}>
+      <h2>Historie pohybů</h2>
+
+      <table style={{ width: "100%", opacity: 0.9 }}>
         <thead>
           <tr>
             <th align="left">Čas</th>
             <th align="left">DM</th>
             <th align="left">Akce</th>
-            <th align="left">Z → Do</th>
             <th align="left">Lokace</th>
             <th align="left">Uživatel</th>
           </tr>
         </thead>
         <tbody>
           {auditLog
-            .filter(a => dmItems.some(d => d.dm_code === a.dm_code))
-            .map(a => (
-              <tr key={a.id}>
-                <td>{a.timestamp}</td>
-                <td>{a.dm_code}</td>
-                <td>{a.action}</td>
-                <td>{a.from_status || "—"} → {a.to_status}</td>
-                <td>{a.location}</td>
-                <td>{a.user}</td>
+            .filter((a) => a.dm_code?.includes(stockItem.id))
+            .map((log) => (
+              <tr key={log.id}>
+                <td>{new Date(log.timestamp).toLocaleString()}</td>
+                <td>{log.dm_code}</td>
+                <td>{log.action}</td>
+                <td>{log.location}</td>
+                <td>{log.user}</td>
               </tr>
             ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ===== POMOCNÉ KOMPONENTY ===== */
+
+function StatusCard({ title, value, color }) {
+  return (
+    <div
+      style={{
+        border: `1px solid ${color}`,
+        borderRadius: 10,
+        padding: 20,
+        minWidth: 180,
+      }}
+    >
+      <div style={{ opacity: 0.7 }}>{title}</div>
+      <div style={{ fontSize: 32, color }}>{value}</div>
     </div>
   );
 }
