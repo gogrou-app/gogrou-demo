@@ -1,95 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import gpcTools from "../gpc/data";          // GPC data
-import gssStockData from "./data/gssStock"; // GSS stock (demo)
-import { company, warehouses } from "./data/company";
+import gpcTools from "../gpc/data";
+import {
+  loadGssStock,
+} from "./data/gssStore";
 
 export default function GssPage() {
-  const [query, setQuery] = useState("");
-  const [gssStock, setGssStock] = useState(gssStockData);
-  const [error, setError] = useState(null);
+  const [stock, setStock] = useState([]);
 
-  const mainWarehouse = warehouses.find(w => w.type === "MAIN");
-
-  function handleAddFromGPC(e) {
-    e.preventDefault();
-    setError(null);
-
-    const q = query.trim().toLowerCase();
-    if (!q) return;
-
-    const matches = gpcTools.filter(t =>
-      String(t.gpc_id).toLowerCase() === q ||
-      String(t.gtin || "").toLowerCase() === q ||
-      String(t.name).toLowerCase().includes(q)
-    );
-
-    if (matches.length !== 1) {
-      setError("Nenalezena jednoznačná položka v GPC");
-      return;
-    }
-
-    const tool = matches[0];
-
-    const exists = gssStock.some(s => s.gpc_id === tool.gpc_id);
-    if (exists) {
-      setError("Položka už je v GSS založena");
-      return;
-    }
-
-    const newStock = {
-      gss_stock_id: `STOCK-${String(gssStock.length + 1).padStart(3, "0")}`,
-      company_id: company.company_id,
-      warehouse_id: mainWarehouse.warehouse_id,
-      gpc_id: tool.gpc_id,
-      tracking_mode: "dm",
-      min_qty: 0,
-      max_qty: null,
-      items: [],
-    };
-
-    setGssStock([...gssStock, newStock]);
-    setQuery("");
-  }
+  // ==================================================
+  // LOAD ZE STORAGE
+  // ==================================================
+  useEffect(() => {
+    const data = loadGssStock();
+    setStock(data);
+  }, []);
 
   return (
     <div style={{ padding: 30, color: "white" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 12 }}>
+      <h1 style={{ fontSize: 32, marginBottom: 20 }}>
         GSS – Hlavní sklad
       </h1>
 
-      <div style={{ opacity: 0.7, marginBottom: 20 }}>
-        Firma: <strong>{company.name}</strong> · Sklad:{" "}
-        <strong>{mainWarehouse.name}</strong>
-      </div>
-
-      {/* VSTUP – PŘIDAT Z GPC */}
-      <form onSubmit={handleAddFromGPC} style={{ marginBottom: 20 }}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="GTIN / GPC_ID / název + ENTER"
-          style={{
-            width: 420,
-            padding: "10px 12px",
-            borderRadius: 6,
-            border: "1px solid #333",
-            background: "#111",
-            color: "white",
-            fontSize: 14,
-          }}
-        />
-        {error && (
-          <div style={{ color: "#ff6b6b", marginTop: 8 }}>
-            {error}
-          </div>
-        )}
-      </form>
-
-      {/* HLAVIČKA TABULKY */}
+      {/* HLAVIČKA */}
       <div
         style={{
           display: "grid",
@@ -100,7 +36,7 @@ export default function GssPage() {
           borderRadius: 8,
           fontWeight: "bold",
           fontSize: 14,
-          marginBottom: 10,
+          marginBottom: 10
         }}
       >
         <div>Název položky</div>
@@ -109,23 +45,39 @@ export default function GssPage() {
         <div>Stav</div>
       </div>
 
-      {/* ŘÁDKY */}
-      {gssStock.map((stock) => {
+      {/* OBSAH */}
+      {stock.length === 0 && (
+        <div style={{ opacity: 0.6 }}>
+          Žádné položky ve skladu
+        </div>
+      )}
+
+      {stock.map((s) => {
         const tool = gpcTools.find(
-          (t) => String(t.gpc_id) === String(stock.gpc_id)
+          (t) => t.gpc_id === s.gpc_id
         );
 
-        const newCount = stock.items.filter(
-          (i) => i.status === "in_stock" && i.resharpen_count === 0
-        ).length;
+        const newCount =
+          s.tracking_mode === "dm"
+            ? s.items.filter(
+                (i) =>
+                  i.status === "in_stock" &&
+                  i.resharpen_count === 0
+              ).length
+            : s.quantity || 0;
 
-        const sharpenedCount = stock.items.filter(
-          (i) => i.status === "in_stock" && i.resharpen_count > 0
-        ).length;
+        const sharpenedCount =
+          s.tracking_mode === "dm"
+            ? s.items.filter(
+                (i) =>
+                  i.status === "in_stock" &&
+                  i.resharpen_count > 0
+              ).length
+            : 0;
 
         return (
           <div
-            key={stock.gss_stock_id}
+            key={s.gss_stock_id}
             style={{
               display: "grid",
               gridTemplateColumns: "3fr 1fr 2fr 2fr",
@@ -134,16 +86,16 @@ export default function GssPage() {
               background: "#111",
               borderRadius: 8,
               marginBottom: 6,
-              alignItems: "center",
+              alignItems: "center"
             }}
           >
             <div>
               <Link
-                href={`/gss/${stock.gss_stock_id}`}
+                href={`/gss/${s.gss_stock_id}`}
                 style={{
                   color: "#4da6ff",
                   textDecoration: "none",
-                  fontWeight: "bold",
+                  fontWeight: "bold"
                 }}
               >
                 {tool?.name || "Neznámá položka"}
@@ -159,7 +111,9 @@ export default function GssPage() {
               <strong>{sharpenedCount}</strong>
             </div>
 
-            <div style={{ opacity: 0.6 }}>—</div>
+            <div style={{ opacity: 0.6 }}>
+              {s.default_location}
+            </div>
           </div>
         );
       })}
