@@ -3,98 +3,129 @@
 import { useState } from "react";
 import Link from "next/link";
 
-// ✅ SPRÁVNÉ RELATIVNÍ IMPORTY
 import { applyActionToDmItem } from "../data/stateEngine";
-import gssStock from "../data/gssStock";
+import dmItems from "../data/dmItems";
 import locations from "../data/locations";
 
 export default function GssStockDetailPage({ params }) {
   const { stockId } = params;
 
-  const stock = gssStock.find(
-    (s) => String(s.gss_stock_id) === String(stockId)
-  );
-
   const [dmCode, setDmCode] = useState("");
+  const [dmItem, setDmItem] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState("");
-  const [result, setResult] = useState(null);
+  const [actionResult, setActionResult] = useState(null);
 
-  if (!stock) {
-    return (
-      <div style={{ padding: 30, color: "white" }}>
-        <Link href="/gss" style={{ color: "#4da6ff" }}>
-          ← Zpět na GSS
-        </Link>
-        <h1>Neznámá položka</h1>
-        <div>StockId: {stockId}</div>
-      </div>
-    );
+  // ============================
+  // DM SCAN – INFO ONLY
+  // ============================
+  function handleDmScan(value) {
+    setDmCode(value);
+
+    const found = dmItems.find((d) => d.dm_code === value);
+    setDmItem(found || null);
+    setActionResult(null);
   }
 
-  const dmItem = stock.items.find((i) => i.dm_code === dmCode);
+  // ============================
+  // AKCE – ODESLAT DO VÝROBY
+  // ============================
+  function handleSendToProduction() {
+    if (!dmItem) {
+      alert("Nejprve naskenuj DM kód");
+      return;
+    }
 
-  function handleAction() {
-    if (!dmItem || !selectedLocation) return;
+    if (!selectedLocation) {
+      alert("Vyber lokaci");
+      return;
+    }
 
-    const res = applyActionToDmItem({
+    const result = applyActionToDmItem({
       item: dmItem,
       action: "SEND_TO_PRODUCTION",
       locationId: selectedLocation
     });
 
-    setResult(res);
+    setActionResult(result);
   }
 
   return (
     <div style={{ padding: 30, color: "white" }}>
-      <Link href="/gss" style={{ color: "#4da6ff" }}>
+      <Link
+        href="/gss"
+        style={{ color: "#4da6ff", textDecoration: "none" }}
+      >
         ← Zpět na GSS
       </Link>
 
-      <h1>Detail GSS položky</h1>
-      <div style={{ opacity: 0.7, marginBottom: 20 }}>
-        GSS ID: {stock.gss_stock_id}
+      <h1 style={{ marginTop: 10 }}>
+        Neznámá položka
+      </h1>
+
+      <div style={{ opacity: 0.6, marginBottom: 20 }}>
+        StockId: {stockId}
       </div>
 
-      {/* DM SCAN – INFO */}
+      {/* ================= DM SCAN ================= */}
       <div
         style={{
           background: "#111",
-          padding: 16,
-          borderRadius: 8,
+          padding: 20,
+          borderRadius: 10,
           marginBottom: 20
         }}
       >
         <h3>DM scan (info)</h3>
+
         <input
           value={dmCode}
-          onChange={(e) => setDmCode(e.target.value)}
+          onChange={(e) => handleDmScan(e.target.value)}
           placeholder="Zadej / naskenuj DM kód"
-          style={{ width: "100%", padding: 8 }}
+          style={{
+            width: "100%",
+            padding: 10,
+            marginTop: 10,
+            background: "#000",
+            color: "white",
+            border: "1px solid #333",
+            borderRadius: 6
+          }}
         />
 
         {dmItem && (
           <div style={{ marginTop: 10, fontSize: 14 }}>
-            Stav: <strong>{dmItem.status}</strong><br />
-            Lokace: <strong>{dmItem.location}</strong>
+            <div>DM: <strong>{dmItem.dm_code}</strong></div>
+            <div>Stav: {dmItem.status}</div>
+            <div>Přebroušení: {dmItem.resharpen_count}</div>
           </div>
         )}
       </div>
 
-      {/* AKCE */}
+      {/* ================= AKCE ================= */}
       <div
         style={{
           background: "#111",
-          padding: 16,
-          borderRadius: 8
+          padding: 20,
+          borderRadius: 10
         }}
       >
         <h3>Akce s DM kusem</h3>
+        <div style={{ fontSize: 13, opacity: 0.7 }}>
+          Lokace (povinné)
+        </div>
 
         <select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
-          style={{ width: "100%", padding: 8, marginBottom: 10 }}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            padding: 10,
+            background: "#000",
+            color: "white",
+            border: "1px solid #333",
+            borderRadius: 6
+          }}
         >
           <option value="">— vyber lokaci —</option>
           {locations.map((l) => (
@@ -105,23 +136,33 @@ export default function GssStockDetailPage({ params }) {
         </select>
 
         <button
-          onClick={handleAction}
-          disabled={!dmItem || !selectedLocation}
+          onClick={handleSendToProduction}
           style={{
-            padding: "10px 20px",
-            background: "#2d4fff",
+            marginTop: 12,
+            width: "100%",
+            padding: 12,
+            background: "#2a3faa",
+            border: "none",
             color: "white",
             borderRadius: 6,
-            border: "none",
+            fontWeight: "bold",
             cursor: "pointer"
           }}
         >
           Odeslat do výroby
         </button>
 
-        {result && (
-          <pre style={{ marginTop: 10, fontSize: 12 }}>
-            {JSON.stringify(result, null, 2)}
+        {actionResult && (
+          <pre
+            style={{
+              marginTop: 15,
+              fontSize: 12,
+              background: "#000",
+              padding: 10,
+              borderRadius: 6
+            }}
+          >
+            {JSON.stringify(actionResult, null, 2)}
           </pre>
         )}
       </div>
