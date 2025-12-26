@@ -1,65 +1,55 @@
 // /app/gss/data/gssStore.js
-// GSS – jednoduchý LocalStorage store pro DEMO
+// GSS STORE – LocalStorage (MVP DEMO)
 
-const STORAGE_KEY = "GSS_STOCK_DATA";
+const STORAGE_KEY = "gogrou_gss_stock";
 
-// ==================================================
-// LOAD
-// ==================================================
-export function loadGssStock() {
+/* =========================
+   HELPERS
+========================= */
+function loadStock() {
   if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.error("GSS load error", e);
-    return [];
-  }
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
 }
 
-// ==================================================
-// SAVE
-// ==================================================
-export function saveGssStock(stock) {
-  if (typeof window === "undefined") return;
+function saveStock(stock) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stock));
 }
 
-// ==================================================
-// ADD STOCK (z GPC)
-// ==================================================
-export function addGssStockItem(newStockItem) {
-  const stock = loadGssStock();
+/* =========================
+   PUBLIC API
+========================= */
+
+// vrátí celý sklad
+export function getGssStock() {
+  return loadStock();
+}
+
+// přidání položky z GPC (0 ks)
+export function addStockItemFromGPC(tool) {
+  const stock = loadStock();
 
   const exists = stock.find(
-    (s) => s.gpc_id === newStockItem.gpc_id
+    (item) => item.gpc_id === tool.gpc_id
   );
 
-  if (exists) return stock;
+  if (exists) return; // už existuje → nic nedělej
 
-  const updated = [...stock, newStockItem];
-  saveGssStock(updated);
-  return updated;
-}
+  stock.push({
+    stock_id: `STOCK-${tool.gpc_id}`,
+    gpc_id: tool.gpc_id,
+    name: tool.name,
+    type: tool.type,
+    manufacturer: tool.manufacturer,
 
-// ==================================================
-// UPDATE STOCK
-// ==================================================
-export function updateGssStock(stockId, updater) {
-  const stock = loadGssStock();
+    qty_new: 0,
+    qty_sharpened: 0,
 
-  const updated = stock.map((s) =>
-    s.gss_stock_id === stockId ? updater(s) : s
-  );
+    min_qty: null,
+    max_qty: null,
 
-  saveGssStock(updated);
-  return updated;
-}
+    created_at: new Date().toISOString(),
+  });
 
-// ==================================================
-// CLEAR (jen pro DEMO / RESET)
-// ==================================================
-export function clearGssStock() {
-  localStorage.removeItem(STORAGE_KEY);
+  saveStock(stock);
 }
