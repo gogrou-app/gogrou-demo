@@ -1,62 +1,81 @@
 import "./globals.css";
 import AppHeader from "./components/AppHeader";
 
+export const metadata = {
+  title: "Gogrou DEMO",
+  description: "Gogrou – výrobní a skladový systém",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="cs">
       <body
         style={{
           margin: 0,
-          background: "#000",
+          backgroundColor: "#000",
           color: "#fff",
           fontFamily: "Arial, sans-serif",
         }}
       >
-        {/* LEVÉ MENU */}
-        <div
+        {/* SIDEBAR */}
+        <aside
           style={{
             width: 220,
             height: "100vh",
             position: "fixed",
-            left: 0,
             top: 0,
+            left: 0,
             background: "#111",
             borderRight: "1px solid #222",
             padding: 20,
             boxSizing: "border-box",
           }}
         >
-          <h2>
+          <h2 style={{ margin: 0 }}>
             GOGROU
             <br />
             DEMO
           </h2>
 
-          <nav style={{ marginTop: 20 }}>
-            <a href="/" style={linkStyle}>Dashboard</a>
-            <a href="/gpc" style={linkStyle}>GPC</a>
-            <a href="/gss" style={linkStyle}>GSS</a>
-            <a href="/smartsplit" style={linkStyle}>SmartSplit</a>
-            <a href="/ai" style={linkStyle}>AI Assistant</a>
+          <nav style={{ marginTop: 30 }}>
+            <NavLink href="/">Dashboard</NavLink>
+            <NavLink href="/gpc">GPC</NavLink>
+            <NavLink href="/gss">GSS</NavLink>
+            <NavLink href="/ss">SmartSplit</NavLink>
+            <NavLink href="/ai">AI Assistant</NavLink>
           </nav>
-        </div>
+        </aside>
 
-        {/* OBSAH + HEADER */}
-        <div style={{ marginLeft: 220 }}>
-          <AppHeader />
+        {/* HLAVIČKA – GLOBÁLNÍ KONTEXT */}
+        <AppHeader />
 
-          <div style={{ padding: 30 }}>
-            {children}
-          </div>
-        </div>
+        {/* OBSAH STRÁNKY */}
+        <main
+          style={{
+            marginLeft: 220,
+            padding: "100px 30px 30px 30px",
+            boxSizing: "border-box",
+          }}
+        >
+          {children}
+        </main>
       </body>
     </html>
   );
 }
 
-const linkStyle = {
-  display: "block",
-  padding: "10px 0",
-  color: "#ccc",
-  textDecoration: "none",
-};
+function NavLink({ href, children }) {
+  return (
+    <a
+      href={href}
+      style={{
+        display: "block",
+        padding: "10px 0",
+        color: "#ccc",
+        textDecoration: "none",
+      }}
+    >
+      {children}
+    </a>
+  );
+}
