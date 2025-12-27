@@ -1,58 +1,39 @@
 "use client";
-
-import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
-import {
-  getMainWarehouseStock,
-} from "./data/gssStore";
+import { gssData } from "./data/gssStore";
 
-export default function GssPage() {
-  const { company, warehouse } = useAppContext();
-  const [stock, setStock] = useState([]);
+export default function GSSPage() {
+  const { company, setModule, warehouse } = useAppContext();
+  setModule("GSS");
 
-  useEffect(() => {
-    if (!company || !warehouse) return;
-
-    // 🔥 TADY JE VAZBA NA KONTEXT
-    const data = getMainWarehouseStock(
-      company.id,
-      warehouse.id
-    );
-    setStock(data);
-  }, [company, warehouse]);
+  const items = gssData?.[company]?.[warehouse] || [];
 
   return (
     <div>
       <h1>GSS – Hlavní sklad</h1>
-      <p style={{ opacity: 0.6 }}>
-        Firma: <strong>{company.name}</strong> ·
-        Sklad: <strong>{warehouse.name}</strong>
+      <p>
+        Firma: <b>{company}</b> • Sklad: <b>{warehouse}</b>
       </p>
 
-      <div style={{ marginTop: 24 }}>
-        {stock.length === 0 && (
-          <div style={{ opacity: 0.5 }}>
-            Tento sklad je zatím prázdný
-          </div>
-        )}
+      {items.length === 0 && <p>Tento sklad je zatím prázdný</p>}
 
-        {stock.map((item) => (
-          <div
-            key={item.gss_stock_id}
-            style={{
-              border: "1px solid #222",
-              borderRadius: 10,
-              padding: 16,
-              marginBottom: 12,
-            }}
-          >
-            <strong>{item.name}</strong>
-            <div style={{ opacity: 0.6 }}>
-              Stav: {item.quantity} ks
-            </div>
+      {items.map((item) => (
+        <div
+          key={item.id}
+          style={{
+            border: "1px solid #333",
+            padding: "12px",
+            marginBottom: "8px",
+            borderRadius: "8px",
+          }}
+        >
+          <b>{item.name}</b>
+          <div>Stav: {item.qty} ks</div>
+          <div>
+            MIN: {item.min} / MAX: {item.max}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
