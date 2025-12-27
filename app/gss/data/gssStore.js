@@ -1,4 +1,3 @@
-// /app/gss/data/gssStore.js
 "use client";
 
 import company from "./company";
@@ -17,7 +16,7 @@ export function getGssState() {
       company_id: company.company_id,
       warehouses: company.warehouses.map((w) => ({
         ...w,
-        stock: [], // ← tady budou GSS STOCK položky
+        stock: [], // GSS STOCK položky
       })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
@@ -61,6 +60,7 @@ export function addStockItemFromGPC(tool) {
     gss_stock_id: crypto.randomUUID(),
     gpc_id: tool.gpc_id,
     name: tool.name,
+
     tracking_mode: "quantity", // DM později
     quantity: 0,
 
@@ -82,4 +82,24 @@ export function getMainWarehouseStock() {
 
   const main = state.warehouses.find((w) => w.is_default);
   return main ? main.stock : [];
+}
+
+/**
+ * Uloží změnu jedné GSS STOCK položky (min/max, později cokoliv)
+ */
+export function saveStockItem(updatedItem) {
+  const state = getGssState();
+  if (!state) return;
+
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return;
+
+  const idx = main.stock.findIndex(
+    (s) => s.gss_stock_id === updatedItem.gss_stock_id
+  );
+
+  if (idx === -1) return;
+
+  main.stock[idx] = updatedItem;
+  saveGssState(state);
 }
