@@ -1,33 +1,22 @@
+// /app/layout.jsx
 "use client";
 
-import "./globals.css";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export default function RootLayout({ children }) {
   const pathname = usePathname();
 
-  // ===== DEMO KONTEXT (zatím natvrdo) =====
-  const companyName = "Gogrou Demo s.r.o.";
-
-  let moduleName = "Dashboard";
-  let warehouseName = null;
-
-  if (pathname.startsWith("/gss")) {
-    moduleName = "GSS – Skladový systém";
-    warehouseName = "Hlavní sklad";
-  }
+  // určení modulu podle URL
+  let moduleLabel = "Dashboard";
+  let warehouseLabel = null;
 
   if (pathname.startsWith("/gpc")) {
-    moduleName = "GPC – Produktová databáze";
-  }
-
-  if (pathname.startsWith("/smartsplit")) {
-    moduleName = "SmartSplit";
-  }
-
-  if (pathname.startsWith("/ai")) {
-    moduleName = "AI Assistant";
+    moduleLabel = "GPC – Produktový katalog";
+  } else if (pathname.startsWith("/gss")) {
+    moduleLabel = "GSS – Skladový systém";
+    warehouseLabel = "Hlavní sklad";
+  } else if (pathname.startsWith("/smartsplit")) {
+    moduleLabel = "SmartSplit";
   }
 
   return (
@@ -40,7 +29,7 @@ export default function RootLayout({ children }) {
           fontFamily: "Arial, sans-serif",
         }}
       >
-        {/* ===== LEVÉ MENU ===== */}
+        {/* LEVÉ MENU – zatím beze změn */}
         <div
           style={{
             width: 220,
@@ -49,49 +38,49 @@ export default function RootLayout({ children }) {
             left: 0,
             top: 0,
             background: "#111",
-            borderRight: "1px solid #222",
             padding: 20,
             boxSizing: "border-box",
+            borderRight: "1px solid #222",
           }}
         >
           <h2 style={{ marginTop: 0 }}>GOGROU<br />DEMO</h2>
 
           <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Link href="/" style={navStyle}>Dashboard</Link>
-            <Link href="/gpc" style={navStyle}>GPC</Link>
-            <Link href="/gss" style={navStyle}>GSS</Link>
-            <Link href="/smartsplit" style={navStyle}>SmartSplit</Link>
-            <Link href="/ai" style={navStyle}>AI Assistant</Link>
+            <a href="/" style={navStyle}>Dashboard</a>
+            <a href="/gpc" style={navStyle}>GPC</a>
+            <a href="/gss" style={navStyle}>GSS</a>
+            <a href="/smartsplit" style={navStyle}>SmartSplit</a>
+            <a href="#" style={navStyle}>AI Assistant</a>
           </nav>
         </div>
 
-        {/* ===== OBSAH ===== */}
+        {/* HLAVNÍ OBSAH */}
         <div
           style={{
             marginLeft: 220,
-            padding: 30,
+            padding: "24px 32px",
             boxSizing: "border-box",
           }}
         >
-          {/* ===== GLOBÁLNÍ HLAVIČKA ===== */}
+          {/* 🔥 CENTRÁLNÍ HLAVIČKA – VŠUDE */}
           <div
             style={{
-              background: "#0b0b0b",
+              marginBottom: 20,
+              padding: "10px 14px",
               border: "1px solid #222",
               borderRadius: 10,
-              padding: "10px 16px",
-              marginBottom: 24,
+              background: "#0b0b0b",
               fontSize: 14,
               opacity: 0.9,
             }}
           >
-            <strong>Firma:</strong> {companyName}
+            <strong>Firma:</strong> Gogrou Demo s.r.o.
             {"  •  "}
-            <strong>Modul:</strong> {moduleName}
-            {warehouseName && (
+            <strong>Modul:</strong> {moduleLabel}
+            {warehouseLabel && (
               <>
                 {"  •  "}
-                <strong>Sklad:</strong> {warehouseName}
+                <strong>Sklad:</strong> {warehouseLabel}
               </>
             )}
           </div>
@@ -104,9 +93,9 @@ export default function RootLayout({ children }) {
 }
 
 const navStyle = {
-  color: "white",
+  color: "#fff",
   textDecoration: "none",
-  padding: "8px 10px",
+  padding: "8px 12px",
   borderRadius: 6,
   background: "#1a1a1a",
 };
