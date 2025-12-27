@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import tools from "../gpc/data";
 import {
   getMainWarehouseStock,
   addStockItemFromGPC,
 } from "./data/gssStore";
 
-export default function GssPage() {
-  const router = useRouter();
+import ContextBar from "../components/ContextBar";
+import company from "./data/company";
 
+export default function GssPage() {
   const [stock, setStock] = useState([]);
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -44,12 +44,20 @@ export default function GssPage() {
 
   return (
     <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+
+      {/* 🧠 KONTEXT – KDE JSEM */}
+      <ContextBar
+        company={company.name}
+        module="GSS – Skladový systém"
+        warehouse="Hlavní sklad"
+      />
+
       <h1>GSS – Hlavní sklad</h1>
       <p style={{ opacity: 0.6 }}>
         Centrální sklad firmy (uživatelský pohled)
       </p>
 
-      {/* FIXNÍ OVLÁDACÍ BLOK */}
+      {/* FIXNÍ TLAČÍTKO + INLINE ADD */}
       <div
         style={{
           position: "sticky",
@@ -73,7 +81,6 @@ export default function GssPage() {
           + Přidat položku do hlavního skladu
         </button>
 
-        {/* INLINE VYHLEDÁVÁNÍ */}
         {showAdd && (
           <div
             style={{
@@ -130,7 +137,7 @@ export default function GssPage() {
         )}
       </div>
 
-      {/* SEZNAM GSS STOCK – CELÝ BOX KLIKACÍ */}
+      {/* SEZNAM SKLADU */}
       <div style={{ marginTop: 30 }}>
         {stock.length === 0 && (
           <div style={{ opacity: 0.5 }}>
@@ -141,24 +148,15 @@ export default function GssPage() {
         {stock.map((item) => (
           <div
             key={item.gss_stock_id}
-            onClick={() =>
-              router.push(`/gss/${item.gss_stock_id}`)
-            }
             style={{
               border: "1px solid #222",
               borderRadius: 10,
               padding: 16,
               marginBottom: 12,
               cursor: "pointer",
-              transition: "border 0.2s, background 0.2s",
             }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.border =
-                "1px solid #2563eb")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.border =
-                "1px solid #222")
+            onClick={() =>
+              window.location.href = `/gss/${item.gss_stock_id}`
             }
           >
             <strong>{item.name}</strong>
