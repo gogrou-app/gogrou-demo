@@ -1,3 +1,4 @@
+// /app/gss/data/gssStore.js
 "use client";
 
 import company from "./company";
@@ -58,6 +59,7 @@ export function addStockItemFromGPC(tool) {
 
   mainWarehouse.stock.push({
     gss_stock_id: crypto.randomUUID(),
+
     gpc_id: tool.gpc_id,
     name: tool.name,
 
@@ -68,6 +70,9 @@ export function addStockItemFromGPC(tool) {
     max: null,
 
     created_at: new Date().toISOString(),
+
+    // připraveno do budoucna
+    last_receipt: null,
   });
 
   saveGssState(state);
@@ -85,7 +90,7 @@ export function getMainWarehouseStock() {
 }
 
 /**
- * Uloží změnu jedné GSS STOCK položky (min/max, později cokoliv)
+ * Uloží změny jedné GSS STOCK položky
  */
 export function saveStockItem(updatedItem) {
   const state = getGssState();
@@ -94,12 +99,43 @@ export function saveStockItem(updatedItem) {
   const main = state.warehouses.find((w) => w.is_default);
   if (!main) return;
 
-  const idx = main.stock.findIndex(
+  const index = main.stock.findIndex(
     (s) => s.gss_stock_id === updatedItem.gss_stock_id
   );
+  if (index === -1) return;
 
-  if (idx === -1) return;
+  main.stock[index] = updatedItem;
+  saveGssState(state);
+}
 
-  main.stock[idx] = updatedItem;
+/**
+ * PŘÍJEM NA SKLAD (quantity režim)
+ * ✔ navýší stav
+ * ✔ uloží doklad (bez historie – zatím)
+ */
+export function receiveStock({
+  gssStockId,
+  amount,
+  document,
+}) {
+  const state = getGssState();
+  if (!state) return;
+
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return;
+
+  const item = main.stock.find(
+    (s) => s.gss_stock_id === gssStockId
+  );
+  if (!item) return;
+
+  item.quantity += amount;
+
+  item.last_receipt = {
+    ...document,
+    amount,
+    received_at: new Date().toISOString(),
+  };
+
   saveGssState(state);
 }
