@@ -1,82 +1,182 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { getGssState } from "../data/gssStore";
+import { useEffect, useState } from "react";
+import {
+  getMainWarehouseStock,
+  saveStockItem,
+} from "../data/gssStore";
 
 export default function GssStockDetailPage() {
   const { stockId } = useParams();
   const router = useRouter();
 
-  const state = getGssState();
-  if (!state) return null;
+  const [item, setItem] = useState(null);
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+  const [info, setInfo] = useState("");
 
-  const mainWarehouse = state.warehouses.find(w => w.is_default);
-  const stockItem = mainWarehouse?.stock.find(
-    s => String(s.gss_stock_id) === String(stockId)
-  );
+  useEffect(() => {
+    const stock = getMainWarehouseStock();
+    const found = stock.find(
+      (s) => String(s.gss_stock_id) === String(stockId)
+    );
 
-  if (!stockItem) {
+    if (!found) return;
+
+    setItem(found);
+    setMin(found.min ?? "");
+    setMax(found.max ?? "");
+  }, [stockId]);
+
+  if (!item) {
     return (
       <div style={{ padding: 40, color: "white" }}>
         <h2>Položka nenalezena</h2>
         <button onClick={() => router.push("/gss")}>
-          ← Zpět na GSS
+          ← Zpět na sklad
         </button>
       </div>
     );
   }
 
+  function saveLimits() {
+    const updated = {
+      ...item,
+      min: min === "" ? null : Number(min),
+      max: max === "" ? null : Number(max),
+    };
+
+    saveStockItem(updated);
+    setItem(updated);
+    setInfo("Uloženo");
+    setTimeout(() => setInfo(""), 1500);
+  }
+
   return (
-    <div style={{ padding: 40, color: "white", maxWidth: 800 }}>
-      <h1>{stockItem.name}</h1>
+    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+      <button
+        onClick={() => router.push("/gss")}
+        style={{
+          marginBottom: 20,
+          background: "transparent",
+          color: "#aaa",
+          border: "none",
+          cursor: "pointer",
+        }}
+      >
+        ← Zpět na hlavní sklad
+      </button>
 
-      <p style={{ opacity: 0.7 }}>
-        GPC_ID: {stockItem.gpc_id}
-      </p>
+      <h1 style={{ fontSize: 28 }}>{item.name}</h1>
 
-      <hr style={{ margin: "20px 0", opacity: 0.2 }} />
-
-      <h3>📦 Stav skladu</h3>
-      <p>
-        <strong>Množství:</strong> {stockItem.quantity} ks
-      </p>
-      <p>
-        <strong>Režim sledování:</strong>{" "}
-        {stockItem.tracking_mode === "quantity"
-          ? "Množství"
-          : "Jednotlivé kusy (DM)"}
-      </p>
-
-      <hr style={{ margin: "20px 0", opacity: 0.2 }} />
-
-      <h3>⚙️ Nastavení</h3>
-      <p>
-        <strong>Minimum:</strong>{" "}
-        {stockItem.min ?? "nenastaveno"}
-      </p>
-      <p>
-        <strong>Maximum:</strong>{" "}
-        {stockItem.max ?? "nenastaveno"}
-      </p>
-
-      <hr style={{ margin: "20px 0", opacity: 0.2 }} />
-
-      <h3>🔧 Akce (zatím jednoduché)</h3>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <button disabled>➕ Příjem</button>
-        <button disabled>➖ Výdej</button>
+      <div style={{ opacity: 0.6, marginBottom: 20 }}>
+        GSS STOCK · režim:{" "}
+        <strong>{item.tracking_mode}</strong>
       </div>
 
-      <p style={{ opacity: 0.5, marginTop: 10 }}>
-        (logika pohybů přijde v dalším kroku)
-      </p>
+      {/* STAV */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 10,
+          padding: 16,
+          marginBottom: 20,
+          background: "#0b0b0b",
+        }}
+      >
+        <strong>Aktuální stav</strong>
+        <div style={{ fontSize: 24, marginTop: 6 }}>
+          {item.quantity} ks
+        </div>
+      </div>
 
-      <hr style={{ margin: "30px 0", opacity: 0.2 }} />
+      {/* MIN / MAX */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 10,
+          padding: 16,
+          marginBottom: 20,
+        }}
+      >
+        <strong>Nastavení skladu</strong>
 
-      <button onClick={() => router.push("/gss")}>
-        ← Zpět na GSS
-      </button>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "120px 1fr",
+            gap: 12,
+            marginTop: 12,
+            maxWidth: 300,
+          }}
+        >
+          <label>MIN</label>
+          <input
+            type="number"
+            value={min}
+            onChange={(e) => setMin(e.target.value)}
+            placeholder="—"
+            style={inputStyle}
+          />
+
+          <label>MAX</label>
+          <input
+            type="number"
+            value={max}
+            onChange={(e) => setMax(e.target.value)}
+            placeholder="—"
+            style={inputStyle}
+          />
+        </div>
+
+        <button
+          onClick={saveLimits}
+          style={{
+            marginTop: 16,
+            padding: "8px 14px",
+            borderRadius: 6,
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          Uložit
+        </button>
+
+        {info && (
+          <div style={{ marginTop: 10, color: "#4ade80" }}>
+            {info}
+          </div>
+        )}
+      </div>
+
+      {/* DALŠÍ KROKY (zatím vypnuté) */}
+      <div
+        style={{
+          border: "1px dashed #333",
+          borderRadius: 10,
+          padding: 16,
+          opacity: 0.4,
+        }}
+      >
+        <strong>Další kroky (brzy)</strong>
+        <ul>
+          <li>Příjem na sklad</li>
+          <li>Výdej do výroby</li>
+          <li>DM režim</li>
+          <li>Převody na dceřiné sklady</li>
+        </ul>
+      </div>
     </div>
   );
 }
+
+const inputStyle = {
+  padding: "6px 8px",
+  borderRadius: 6,
+  border: "1px solid #333",
+  background: "#000",
+  color: "white",
+};
