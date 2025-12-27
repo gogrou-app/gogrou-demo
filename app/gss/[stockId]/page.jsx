@@ -1,158 +1,85 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   getMainWarehouseStock,
-  adjustQuantity,
-  setMinMax,
-  getServiceSettings,
-  updateServiceSettings,
-  registerReturnFromProduction,
-  registerSendToService,
-  registerDiscard,
+  updateStockMinMax,
+  receiveStock,
+  issueStock,
+  updateServiceConfig,
+  incrementUseCount,
 } from "../data/gssStore";
 
 export default function GssStockDetailPage() {
   const { stockId } = useParams();
+  const router = useRouter();
 
-  const [stockItem, setStockItem] = useState(null);
-  const [service, setService] = useState(null);
+  const [item, setItem] = useState(null);
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+  const [receiveQty, setReceiveQty] = useState("");
+  const [issueQty, setIssueQty] = useState("");
 
-  const [minVal, setMinVal] = useState("");
-  const [maxVal, setMaxVal] = useState("");
-
-  const [deltaIn, setDeltaIn] = useState("");
-  const [deltaOut, setDeltaOut] = useState("");
-
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [uiInfo, setUiInfo] = useState("");
-
-  function refresh() {
-    const items = getMainWarehouseStock();
-    const found = items.find((i) => String(i.gss_stock_id) === String(stockId));
-    setStockItem(found || null);
-
-    const s = getServiceSettings(stockId);
-    setService(s || null);
-
-    setMinVal(found?.min ?? "");
-    setMaxVal(found?.max ?? "");
-  }
+  const [service, setService] = useState({
+    sharpenable: false,
+    max_sharpenings: 0,
+    grinder: "MTTM",
+    note: "",
+  });
 
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const stock = getMainWarehouseStock();
+    const found = stock.find(
+      (s) => String(s.gss_stock_id) === String(stockId)
+    );
+    if (!found) return;
+
+    setItem(found);
+    setMin(found.min ?? "");
+    setMax(found.max ?? "");
+    setService(
+      found.service ?? {
+        sharpenable: false,
+        max_sharpenings: 0,
+        grinder: "MTTM",
+        note: "",
+        use_count: 0,
+      }
+    );
   }, [stockId]);
 
-  const maxUses = useMemo(() => {
-    if (!service?.sharpenable) return null;
-    const mr = Number(service?.max_resharpens || 0);
-    return 1 + mr; // 1× nový + X× přeostřený
-  }, [service]);
-
-  const recommendDiscard = useMemo(() => {
-    if (!service?.sharpenable) return false;
-    if (!maxUses) return false;
-    const useCount = Number(service?.use_count || 0);
-    return useCount >= maxUses;
-  }, [service, maxUses]);
-
-  if (!stockItem) {
+  if (!item) {
     return (
       <div style={{ padding: 40, color: "white" }}>
         <h2>Položka nenalezena</h2>
+        <button onClick={() => router.push("/gss")}>
+          ← Zpět na GSS
+        </button>
       </div>
     );
   }
 
-  function updateService(partial) {
-    const next = {
-      sharpenable: service?.sharpenable ?? false,
-      max_resharpens: service?.max_resharpens ?? 0,
-      service_provider: service?.service_provider ?? "MTTM",
-      note: service?.note ?? "",
-      use_count: service?.use_count ?? 0,
-      service_count: service?.service_count ?? 0,
-      discarded_count: service?.discarded_count ?? 0,
-      ...partial,
-    };
-    updateServiceSettings(stockId, next);
-    setService(next);
-  }
-
-  // =======================
-  // KROK 11: návrat z výroby
-  // =======================
-  function handleReturnFromProduction() {
-    const next = registerReturnFromProduction(stockId);
-    setService(next);
-    setPanelOpen(true);
-    setUiInfo("Návrat z výroby zapsán (use_count +1).");
-  }
-
-  function handleSendToService() {
-    const next = registerSendToService(stockId);
-    setService(next);
-    setUiInfo("Zapsáno: NA SERVIS (service_count +1).");
-    setPanelOpen(false);
-  }
-
-  function handleDiscard() {
-    const next = registerDiscard(stockId);
-    setService(next);
-    setUiInfo("Zapsáno: VYŘADIT (evidenčně).");
-    setPanelOpen(false);
-  }
-
-  function handleReceive() {
-    const n = Number(deltaIn || 0);
-    if (!n || n <= 0) return;
-    adjustQuantity(stockId, n);
-    setDeltaIn("");
-    refresh();
-    setUiInfo(`Příjem: +${n} ks.`);
-  }
-
-  function handleIssue() {
-    const n = Number(deltaOut || 0);
-    if (!n || n <= 0) return;
-    adjustQuantity(stockId, -n);
-    setDeltaOut("");
-    refresh();
-    setUiInfo(`Výdej: -${n} ks.`);
-  }
-
-  function handleSaveMinMax() {
-    setMinMax(stockId, minVal, maxVal);
-    setUiInfo("Min/Max uloženo.");
-    refresh();
-  }
+  const maxUses = 1 + (service.max_sharpenings || 0);
+  const recommendDiscard =
+    service.sharpenable &&
+    service.use_count >= maxUses;
 
   return (
-    <div style={{ padding: 40, color: "white", maxWidth: 950 }}>
-      <h1 style={{ marginBottom: 6 }}>{stockItem.name}</h1>
-      <div style={{ opacity: 0.6, marginBottom: 18 }}>
-        GSS STOCK · {stockItem.gpc_id}
-      </div>
+    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+      <button
+        onClick={() => router.push("/gss")}
+        style={{ marginBottom: 20 }}
+      >
+        ← Zpět na hlavní sklad
+      </button>
 
-      {uiInfo ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #222",
-            background: "#0b1a10",
-            marginBottom: 16,
-            opacity: 0.95,
-          }}
-        >
-          {uiInfo}
-        </div>
-      ) : null}
+      <h1>{item.name}</h1>
+      <p style={{ opacity: 0.6 }}>
+        GSS STOCK · {item.gss_stock_id}
+      </p>
 
-      {/* STAV */}
+      {/* ===== STAV / SKLADEM ===== */}
       <div
         style={{
           border: "1px solid #222",
@@ -162,332 +89,218 @@ export default function GssStockDetailPage() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.7 }}>Skladem</div>
-        <div style={{ fontSize: 34, fontWeight: "bold" }}>
-          {Number(stockItem.quantity || 0)} ks
+        <div style={{ fontSize: 14, opacity: 0.6 }}>
+          Skladem
+        </div>
+        <div style={{ fontSize: 28, fontWeight: "bold" }}>
+          {item.quantity} ks
         </div>
 
-        {/* KROK 11: návrat z výroby */}
-        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 10 }}>
           <button
-            onClick={handleReturnFromProduction}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #444",
-              background: "#111",
-              color: "white",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
+            onClick={() => incrementUseCount(item.gss_stock_id)}
+            style={{ marginRight: 8 }}
           >
             Vrátit z výroby
           </button>
+          <button>Rozhodnutí (panel)</button>
+        </div>
 
-          <button
-            onClick={() => setPanelOpen((v) => !v)}
+        {/* ===== STAV POUŽITÍ / ŽIVOTNOST ===== */}
+        {service.sharpenable && (
+          <div
             style={{
+              marginTop: 14,
               padding: "10px 14px",
               borderRadius: 10,
-              border: "1px solid #444",
-              background: "#111",
-              color: "white",
-              cursor: "pointer",
-              opacity: 0.85,
+              fontWeight: "bold",
+              background: recommendDiscard
+                ? "#2a1414"
+                : service.use_count >= maxUses - 1
+                ? "#2a2414"
+                : "#142a1a",
+              border: "1px solid #333",
+              color: recommendDiscard
+                ? "#ffb4b4"
+                : service.use_count >= maxUses - 1
+                ? "#ffe7a3"
+                : "#b6f3c2",
             }}
           >
-            Rozhodnutí (panel)
-          </button>
-        </div>
+            🔧 Použití: {service.use_count} / {maxUses}
+            {recommendDiscard && (
+              <span style={{ marginLeft: 10 }}>
+                ⚠️ Doporučeno vyřadit
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* PANEL: doporučení po návratu */}
-      {panelOpen && (
-        <div
-          style={{
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: 18,
-            background: "#0f0f0f",
-            marginBottom: 18,
+      {/* ===== MIN / MAX ===== */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 18,
+          marginBottom: 18,
+        }}
+      >
+        <h3>Min / Max</h3>
+        <input
+          placeholder="MIN"
+          value={min}
+          onChange={(e) => setMin(e.target.value)}
+        />
+        <input
+          placeholder="MAX"
+          value={max}
+          onChange={(e) => setMax(e.target.value)}
+          style={{ marginLeft: 10 }}
+        />
+        <button
+          onClick={() =>
+            updateStockMinMax(
+              item.gss_stock_id,
+              Number(min),
+              Number(max)
+            )
+          }
+          style={{ marginLeft: 10 }}
+        >
+          Uložit
+        </button>
+      </div>
+
+      {/* ===== PŘÍJEM / VÝDEJ ===== */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 18,
+          marginBottom: 18,
+        }}
+      >
+        <h3>Příjem / Výdej (jednoduše)</h3>
+
+        <input
+          placeholder="Příjem +ks"
+          value={receiveQty}
+          onChange={(e) => setReceiveQty(e.target.value)}
+        />
+        <button
+          onClick={() => {
+            receiveStock(
+              item.gss_stock_id,
+              Number(receiveQty)
+            );
+            setReceiveQty("");
           }}
         >
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>
-            🧠 Návrat z výroby – doporučení systému
-          </div>
+          Přijmout
+        </button>
 
-          <div style={{ opacity: 0.8, marginBottom: 10 }}>
-            Použití:{" "}
-            <strong>{Number(service?.use_count || 0)}</strong>
-            {maxUses ? (
-              <>
-                {" "} / <strong>{maxUses}</strong> (max)
-              </>
-            ) : (
-              <span> (bez limitu)</span>
-            )}
-            {" "} · Servisů: <strong>{Number(service?.service_count || 0)}</strong>
-          </div>
+        <br />
 
-          {service?.sharpenable ? (
-            recommendDiscard ? (
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #553",
-                  background: "#221a10",
-                  color: "#ffda9a",
-                  marginBottom: 12,
-                }}
-              >
-                ✅ Systém <strong>doporučuje vyřadit</strong> (dosažen limit použití).
-                Neprovádí se automaticky.
-              </div>
-            ) : (
-              <div style={{ opacity: 0.7, marginBottom: 12 }}>
-                OK – nástroj je v limitu. Může jít na servis nebo zpět do skladu.
-              </div>
-            )
-          ) : (
-            <div style={{ opacity: 0.7, marginBottom: 12 }}>
-              Nástroj není nastaven jako brousitelný (servisní logika se neaplikuje).
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={handleSendToService}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #2b5",
-                background: "#113322",
-                color: "white",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
-            >
-              NA SERVIS
-            </button>
-
-            <button
-              onClick={handleDiscard}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #633",
-                background: "#2a1414",
-                color: "white",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
-            >
-              VYŘADIT
-            </button>
-
-            <button
-              onClick={() => setPanelOpen(false)}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #444",
-                background: "#111",
-                color: "white",
-                cursor: "pointer",
-                opacity: 0.9,
-              }}
-            >
-              ZAVŘÍT
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MIN / MAX */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-          background: "#0b0b0b",
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ fontWeight: "bold", marginBottom: 10 }}>📉 Min / Max</div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>MIN</div>
-            <input
-              value={minVal}
-              onChange={(e) => setMinVal(e.target.value)}
-              placeholder="např. 5"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>MAX</div>
-            <input
-              value={maxVal}
-              onChange={(e) => setMaxVal(e.target.value)}
-              placeholder="např. 20"
-              style={inputStyle}
-            />
-          </div>
-
-          <button onClick={handleSaveMinMax} style={btnStyle}>
-            Uložit
-          </button>
-        </div>
+        <input
+          placeholder="Výdej -ks"
+          value={issueQty}
+          onChange={(e) => setIssueQty(e.target.value)}
+          style={{ marginTop: 10 }}
+        />
+        <button
+          onClick={() => {
+            issueStock(
+              item.gss_stock_id,
+              Number(issueQty)
+            );
+            setIssueQty("");
+          }}
+        >
+          Vydat
+        </button>
       </div>
 
-      {/* PŘÍJEM / VÝDEJ (bez historie, jednoduché) */}
+      {/* ===== SERVIS / OSTŘENÍ ===== */}
       <div
         style={{
           border: "1px solid #222",
           borderRadius: 12,
           padding: 18,
-          background: "#0b0b0b",
-          marginBottom: 18,
         }}
       >
-        <div style={{ fontWeight: "bold", marginBottom: 10 }}>
-          📦 Příjem / Výdej (jednoduše)
-        </div>
+        <h3>Servis / ostření</h3>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>PŘÍJEM +ks</div>
-            <input
-              value={deltaIn}
-              onChange={(e) => setDeltaIn(e.target.value)}
-              placeholder="např. 10"
-              style={inputStyle}
-            />
-          </div>
-          <button onClick={handleReceive} style={btnStyle}>
-            Přijmout
-          </button>
-
-          <div style={{ width: 16 }} />
-
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>VÝDEJ -ks</div>
-            <input
-              value={deltaOut}
-              onChange={(e) => setDeltaOut(e.target.value)}
-              placeholder="např. 3"
-              style={inputStyle}
-            />
-          </div>
-          <button onClick={handleIssue} style={btnStyle}>
-            Vydat
-          </button>
-        </div>
-      </div>
-
-      {/* SERVIS BOX (KROK 10) */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-          background: "#0b0b0b",
-        }}
-      >
-        <div style={{ fontWeight: "bold", marginBottom: 10 }}>
-          🔧 Servis / ostření
-        </div>
-
-        <label style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <label>
           <input
             type="checkbox"
-            checked={service?.sharpenable || false}
-            onChange={(e) => updateService({ sharpenable: e.target.checked })}
+            checked={service.sharpenable}
+            onChange={(e) =>
+              setService({
+                ...service,
+                sharpenable: e.target.checked,
+              })
+            }
           />
-          <span>Nástroj je brousitelný</span>
+          &nbsp;Nástroj je brousitelný
         </label>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>
-              Max. přebroušení (X)
-            </div>
-            <input
-              type="number"
-              min={0}
-              disabled={!service?.sharpenable}
-              value={service?.max_resharpens ?? 0}
-              onChange={(e) =>
-                updateService({ max_resharpens: Number(e.target.value) })
-              }
-              style={inputStyle}
-            />
-            <div style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
-              Max použití = 1 + X
-            </div>
-          </div>
-
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>
-              Brusírna
-            </div>
-            <select
-              disabled={!service?.sharpenable}
-              value={service?.service_provider || "MTTM"}
-              onChange={(e) => updateService({ service_provider: e.target.value })}
-              style={{
-                ...inputStyle,
-                width: 220,
-              }}
-            >
-              <option value="MTTM">MTTM (default)</option>
-              <option value="JINA_BRUSIRNA">Jiná brusírna</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>
-            Poznámka (povlak, omezení, cokoliv)
-          </div>
-          <textarea
-            rows={3}
-            disabled={!service?.sharpenable}
-            value={service?.note || ""}
-            onChange={(e) => updateService({ note: e.target.value })}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid #333",
-              background: "#000",
-              color: "white",
-            }}
+        <div style={{ marginTop: 8 }}>
+          Max. přebroušení (X):
+          <input
+            value={service.max_sharpenings}
+            onChange={(e) =>
+              setService({
+                ...service,
+                max_sharpenings: Number(e.target.value),
+              })
+            }
+            style={{ marginLeft: 10 }}
           />
         </div>
+
+        <div style={{ marginTop: 8 }}>
+          Brusírna:
+          <select
+            value={service.grinder}
+            onChange={(e) =>
+              setService({
+                ...service,
+                grinder: e.target.value,
+              })
+            }
+            style={{ marginLeft: 10 }}
+          >
+            <option value="MTTM">MTTM (default)</option>
+          </select>
+        </div>
+
+        <div style={{ marginTop: 8 }}>
+          Poznámka:
+          <textarea
+            value={service.note}
+            onChange={(e) =>
+              setService({
+                ...service,
+                note: e.target.value,
+              })
+            }
+            style={{ width: "100%", marginTop: 4 }}
+          />
+        </div>
+
+        <button
+          onClick={() =>
+            updateServiceConfig(
+              item.gss_stock_id,
+              service
+            )
+          }
+          style={{ marginTop: 10 }}
+        >
+          Uložit servisní nastavení
+        </button>
       </div>
     </div>
   );
 }
-
-const inputStyle = {
-  width: 140,
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #333",
-  background: "#000",
-  color: "white",
-};
-
-const btnStyle = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #444",
-  background: "#111",
-  color: "white",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
