@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import tools from "../gpc/data";
 import {
   getMainWarehouseStock,
@@ -8,6 +9,8 @@ import {
 } from "./data/gssStore";
 
 export default function GssPage() {
+  const router = useRouter();
+
   const [stock, setStock] = useState([]);
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -46,7 +49,7 @@ export default function GssPage() {
         Centrální sklad firmy (uživatelský pohled)
       </p>
 
-      {/* FIXNÍ TLAČÍTKO */}
+      {/* FIXNÍ OVLÁDACÍ BLOK */}
       <div
         style={{
           position: "sticky",
@@ -127,7 +130,7 @@ export default function GssPage() {
         )}
       </div>
 
-      {/* SEZNAM GSS STOCK */}
+      {/* SEZNAM GSS STOCK – CELÝ BOX KLIKACÍ */}
       <div style={{ marginTop: 30 }}>
         {stock.length === 0 && (
           <div style={{ opacity: 0.5 }}>
@@ -138,12 +141,25 @@ export default function GssPage() {
         {stock.map((item) => (
           <div
             key={item.gss_stock_id}
+            onClick={() =>
+              router.push(`/gss/${item.gss_stock_id}`)
+            }
             style={{
               border: "1px solid #222",
               borderRadius: 10,
               padding: 16,
               marginBottom: 12,
+              cursor: "pointer",
+              transition: "border 0.2s, background 0.2s",
             }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.border =
+                "1px solid #2563eb")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.border =
+                "1px solid #222")
+            }
           >
             <strong>{item.name}</strong>
             <div style={{ opacity: 0.6 }}>
