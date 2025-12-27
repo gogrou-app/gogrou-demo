@@ -5,6 +5,10 @@ import company from "./company";
 
 const STORAGE_KEY = "gogrou_gss_stock";
 
+/* ======================================================
+   ZÁKLAD
+====================================================== */
+
 /**
  * Vrátí celý GSS stav (firma + sklady + položky)
  */
@@ -27,17 +31,14 @@ export function getGssState() {
   return JSON.parse(raw);
 }
 
-/**
- * Uloží celý GSS stav
- */
 function saveGssState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-/**
- * Přidání položky z GPC do GSS
- * → vznikne GSS STOCK (0 ks) v HLAVNÍM skladu
- */
+/* ======================================================
+   GSS STOCK – ZALOŽENÍ POLOŽKY
+====================================================== */
+
 export function addStockItemFromGPC(tool) {
   const state = getGssState();
   if (!state) return;
@@ -61,25 +62,19 @@ export function addStockItemFromGPC(tool) {
     gss_stock_id: crypto.randomUUID(),
     gpc_id: tool.gpc_id,
     name: tool.name,
-
     tracking_mode: "quantity",
     quantity: 0,
 
     min: null,
     max: null,
 
-    // pohybový základ – připraveno, ale zatím skryté
     last_movement: null,
-
     created_at: new Date().toISOString(),
   });
 
   saveGssState(state);
 }
 
-/**
- * Vrátí stock hlavního skladu
- */
 export function getMainWarehouseStock() {
   const state = getGssState();
   if (!state) return [];
@@ -88,66 +83,98 @@ export function getMainWarehouseStock() {
   return main ? main.stock : [];
 }
 
-/* =========================================================
-   === KROK 6 – ZÁKLAD POHYBU (READ-ONLY, BEZ HISTORIE) ===
-   ========================================================= */
+/* ======================================================
+   KROK 5 – PŘÍJEM NA HLAVNÍ SKLAD (IN)
+====================================================== */
 
 /**
- * PŘÍJEM NA SKLAD
- * – zvýší quantity
- * – uloží poslední pohyb (bez historie)
+ * Příjem z nákupu / dodavatele
+ * – bezpečný
+ * – bez historie (zatím)
+ * – připravený na audit
  */
 export function receiveToMainWarehouse({
   gss_stock_id,
   quantity,
-  document,
+  document_ref, // dodací list / faktura / cokoliv
 }) {
   const state = getGssState();
   if (!state) return;
 
-  const mainWarehouse = state.warehouses.find((w) => w.is_default);
-  if (!mainWarehouse) return;
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return;
 
-  const item = mainWarehouse.stock.find(
-    (s) => s.gss_stock_id === gss_stock_id
+  const item = main.stock.find(
+    (s) => String(s.gss_stock_id) === String(gss_stock_id)
   );
 
-  if (!item) return;
-
-  const qty = Number(quantity);
-  if (!qty || qty <= 0) {
-    alert("Zadej platné množství.");
+  if (!item) {
+    alert("Položka ve skladu nenalezena.");
     return;
   }
 
-  item.quantity += qty;
+  if (quantity <= 0) {
+    alert("Počet kusů musí být větší než 0.");
+    return;
+  }
 
+  item.quantity += quantity;
   item.last_movement = {
     type: "RECEIPT",
-    direction: "IN",
-    quantity: qty,
-    document: document || null,
-    at: new Date().toISOString(),
+    quantity,
+    document_ref,
+    timestamp: new Date().toISOString(),
   };
 
   saveGssState(state);
 }
 
+/* ======================================================
+   KROK 7 – VÝDEJ DO VÝROBY (OUT)
+====================================================== */
+
 /**
- * Vrátí poslední pohyb položky (read-only)
+ * Výdej do výroby / na zakázku / stroj
+ * – nikdy nejde do mínusu
+ * – symetrie k příjmu
  */
-export function getLastMovement(gss_stock_id) {
+export function issueToProduction({
+  gss_stock_id,
+  quantity,
+  target_ref, // zakázka / stroj / pracoviště
+}) {
   const state = getGssState();
-  if (!state) return null;
+  if (!state) return;
 
-  const mainWarehouse = state.warehouses.find((w) => w.is_default);
-  if (!mainWarehouse) return null;
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return;
 
-  const item = mainWarehouse.stock.find(
-    (s) => s.gss_stock_id === gss_stock_id
+  const item = main.stock.find(
+    (s) => String(s.gss_stock_id) === String(gss_stock_id)
   );
 
-  return item?.last_movement || null;
-}
+  if (!item) {
+    alert("Položka ve skladu nenalezena.");
+    return;
+  }
 
-issueToProduction(...)
+  if (quantity <= 0) {
+    alert("Počet kusů musí být větší než 0.");
+    return;
+  }
+
+  if (item.quantity < quantity) {
+    alert("Nedostatek kusů na skladě.");
+    return;
+  }
+
+  item.quantity -= quantity;
+  item.last_movement = {
+    type: "ISSUE",
+    quantity,
+    target_ref,
+    timestamp: new Date().toISOString(),
+  };
+
+  saveGssState(state);
+}
