@@ -149,3 +149,5 @@ export function getLastMovement(gss_stock_id) {
 
   return item?.last_movement || null;
 }
+
+issueToProduction(...)
