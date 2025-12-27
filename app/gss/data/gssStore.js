@@ -1,180 +1,76 @@
-// /app/gss/data/gssStore.js
-"use client";
-
-import company from "./company";
-
-const STORAGE_KEY = "gogrou_gss_stock";
-
-/* ======================================================
-   ZÁKLAD
-====================================================== */
+/**
+ * ================================
+ * SERVICE / OSTŘENÍ – GSS STOCK
+ * ================================
+ * Rozšíření dat o servisní informace nástroje
+ * (bez historie, bez DM, pouze metadata)
+ */
 
 /**
- * Vrátí celý GSS stav (firma + sklady + položky)
+ * Nastaví servisní informace položky
+ * @param {string} gssStockId
+ * @param {object} serviceData
  */
-export function getGssState() {
-  if (typeof window === "undefined") return null;
+export function updateServiceSettings(gssStockId, serviceData) {
+  const state = getGssState();
+  if (!state) return;
 
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const initial = {
-      company_id: company.company_id,
-      warehouses: company.warehouses.map((w) => ({
-        ...w,
-        stock: [],
-      })),
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return;
+
+  const stockItem = main.stock.find(
+    (s) => String(s.gss_stock_id) === String(gssStockId)
+  );
+  if (!stockItem) return;
+
+  stockItem.service = {
+    sharpenable: Boolean(serviceData.sharpenable),
+    max_resharpens: Number(serviceData.max_resharpens || 0),
+    service_provider: serviceData.service_provider || "MTTM",
+    note: serviceData.note || "",
+  };
+
+  saveGssState(state);
+}
+
+/**
+ * Vrátí servisní info položky
+ * @param {string} gssStockId
+ */
+export function getServiceSettings(gssStockId) {
+  const state = getGssState();
+  if (!state) return null;
+
+  const main = state.warehouses.find((w) => w.is_default);
+  if (!main) return null;
+
+  const stockItem = main.stock.find(
+    (s) => String(s.gss_stock_id) === String(gssStockId)
+  );
+
+  return stockItem?.service || null;
+}
+
+/**
+ * Vyhodnocení doporučení po návratu z výroby
+ * (pouze doporučení – žádná automatická akce)
+ *
+ * @param {number} usedCount   // kolikrát byl nástroj použit
+ * @param {object} service     // service nastavení
+ */
+export function evaluateServiceRecommendation(usedCount, service) {
+  if (!service?.sharpenable) return null;
+
+  const maxUses = 1 + Number(service.max_resharpens || 0);
+
+  if (usedCount >= maxUses) {
+    return {
+      recommendation: "DISCARD",
+      message:
+        "Byl dosažen maximální počet použití. Doporučeno nástroj vyřadit.",
+      actions: ["SEND_TO_SERVICE", "DISCARD"],
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
   }
 
-  return JSON.parse(raw);
-}
-
-function saveGssState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-/* ======================================================
-   GSS STOCK – ZALOŽENÍ POLOŽKY
-====================================================== */
-
-export function addStockItemFromGPC(tool) {
-  const state = getGssState();
-  if (!state) return;
-
-  const mainWarehouse = state.warehouses.find((w) => w.is_default);
-  if (!mainWarehouse) {
-    alert("Chybí hlavní sklad firmy!");
-    return;
-  }
-
-  const exists = mainWarehouse.stock.find(
-    (s) => String(s.gpc_id) === String(tool.gpc_id)
-  );
-
-  if (exists) {
-    alert("Tato položka už je ve skladu založena.");
-    return;
-  }
-
-  mainWarehouse.stock.push({
-    gss_stock_id: crypto.randomUUID(),
-    gpc_id: tool.gpc_id,
-    name: tool.name,
-    tracking_mode: "quantity",
-    quantity: 0,
-
-    min: null,
-    max: null,
-
-    last_movement: null,
-    created_at: new Date().toISOString(),
-  });
-
-  saveGssState(state);
-}
-
-export function getMainWarehouseStock() {
-  const state = getGssState();
-  if (!state) return [];
-
-  const main = state.warehouses.find((w) => w.is_default);
-  return main ? main.stock : [];
-}
-
-/* ======================================================
-   KROK 5 – PŘÍJEM NA HLAVNÍ SKLAD (IN)
-====================================================== */
-
-/**
- * Příjem z nákupu / dodavatele
- * – bezpečný
- * – bez historie (zatím)
- * – připravený na audit
- */
-export function receiveToMainWarehouse({
-  gss_stock_id,
-  quantity,
-  document_ref, // dodací list / faktura / cokoliv
-}) {
-  const state = getGssState();
-  if (!state) return;
-
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
-
-  const item = main.stock.find(
-    (s) => String(s.gss_stock_id) === String(gss_stock_id)
-  );
-
-  if (!item) {
-    alert("Položka ve skladu nenalezena.");
-    return;
-  }
-
-  if (quantity <= 0) {
-    alert("Počet kusů musí být větší než 0.");
-    return;
-  }
-
-  item.quantity += quantity;
-  item.last_movement = {
-    type: "RECEIPT",
-    quantity,
-    document_ref,
-    timestamp: new Date().toISOString(),
-  };
-
-  saveGssState(state);
-}
-
-/* ======================================================
-   KROK 7 – VÝDEJ DO VÝROBY (OUT)
-====================================================== */
-
-/**
- * Výdej do výroby / na zakázku / stroj
- * – nikdy nejde do mínusu
- * – symetrie k příjmu
- */
-export function issueToProduction({
-  gss_stock_id,
-  quantity,
-  target_ref, // zakázka / stroj / pracoviště
-}) {
-  const state = getGssState();
-  if (!state) return;
-
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
-
-  const item = main.stock.find(
-    (s) => String(s.gss_stock_id) === String(gss_stock_id)
-  );
-
-  if (!item) {
-    alert("Položka ve skladu nenalezena.");
-    return;
-  }
-
-  if (quantity <= 0) {
-    alert("Počet kusů musí být větší než 0.");
-    return;
-  }
-
-  if (item.quantity < quantity) {
-    alert("Nedostatek kusů na skladě.");
-    return;
-  }
-
-  item.quantity -= quantity;
-  item.last_movement = {
-    type: "ISSUE",
-    quantity,
-    target_ref,
-    timestamp: new Date().toISOString(),
-  };
-
-  saveGssState(state);
+  return null;
 }
