@@ -7,81 +7,56 @@ export default function RootLayout({ children }) {
       <body
         style={{
           margin: 0,
-          backgroundColor: "#000",
+          background: "#000",
           color: "#fff",
-          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
+          fontFamily: "Arial, sans-serif",
         }}
       >
         {/* LEVÉ MENU */}
-        <aside
+        <div
           style={{
             width: 220,
             height: "100vh",
             position: "fixed",
-            top: 0,
             left: 0,
-            backgroundColor: "#111",
+            top: 0,
+            background: "#111",
             borderRight: "1px solid #222",
             padding: 20,
             boxSizing: "border-box",
           }}
         >
-          <h2 style={{ margin: 0, lineHeight: 1.2 }}>
-            GOGROU<br />DEMO
+          <h2>
+            GOGROU
+            <br />
+            DEMO
           </h2>
 
-          <nav style={{ marginTop: 24 }}>
-            <NavLink href="/">Dashboard</NavLink>
-            <NavLink href="/gpc">GPC</NavLink>
-            <NavLink href="/gss">GSS</NavLink>
-            <NavLink href="/smartsplit">SmartSplit</NavLink>
-            <NavLink href="/ai">AI Assistant</NavLink>
+          <nav style={{ marginTop: 20 }}>
+            <a href="/" style={linkStyle}>Dashboard</a>
+            <a href="/gpc" style={linkStyle}>GPC</a>
+            <a href="/gss" style={linkStyle}>GSS</a>
+            <a href="/smartsplit" style={linkStyle}>SmartSplit</a>
+            <a href="/ai" style={linkStyle}>AI Assistant</a>
           </nav>
-        </aside>
+        </div>
 
-        {/* HLAVNÍ OBSAH */}
-        <main
-          style={{
-            marginLeft: 220,
-            minHeight: "100vh",
-            boxSizing: "border-box",
-          }}
-        >
-          {/* GLOBÁLNÍ HEADER – FIRMA / MODUL / SKLAD */}
+        {/* OBSAH + HEADER */}
+        <div style={{ marginLeft: 220 }}>
           <AppHeader />
 
-          {/* OBSAH STRÁNKY */}
-          <div
-            style={{
-              padding: 30,
-              boxSizing: "border-box",
-            }}
-          >
+          <div style={{ padding: 30 }}>
             {children}
           </div>
-        </main>
+        </div>
       </body>
     </html>
   );
 }
 
-/* ---------- POMOCNÉ KOMPONENTY ---------- */
-
-function NavLink({ href, children }) {
-  return (
-    <a
-      href={href}
-      style={{
-        display: "block",
-        padding: "10px 0",
-        color: "#ccc",
-        textDecoration: "none",
-        fontSize: 15,
-      }}
-      onMouseEnter={(e) => (e.target.style.color = "#fff")}
-      onMouseLeave={(e) => (e.target.style.color = "#ccc")}
-    >
-      {children}
-    </a>
-  );
-}
+const linkStyle = {
+  display: "block",
+  padding: "10px 0",
+  color: "#ccc",
+  textDecoration: "none",
+};
