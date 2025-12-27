@@ -7,56 +7,81 @@ export default function RootLayout({ children }) {
       <body
         style={{
           margin: 0,
-          background: "#000",
+          backgroundColor: "#000",
           color: "#fff",
-          fontFamily: "Arial, sans-serif",
+          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
         }}
       >
         {/* LEVÉ MENU */}
-        <div
+        <aside
           style={{
             width: 220,
             height: "100vh",
             position: "fixed",
-            left: 0,
             top: 0,
-            background: "#111",
+            left: 0,
+            backgroundColor: "#111",
             borderRight: "1px solid #222",
             padding: 20,
             boxSizing: "border-box",
           }}
         >
-          <h2>GOGROU<br />DEMO</h2>
-          <nav style={{ marginTop: 20 }}>
-            <a href="/" style={linkStyle}>Dashboard</a>
-            <a href="/gpc" style={linkStyle}>GPC</a>
-            <a href="/gss" style={linkStyle}>GSS</a>
-            <a href="/smartsplit" style={linkStyle}>SmartSplit</a>
-            <a href="/ai" style={linkStyle}>AI Assistant</a>
+          <h2 style={{ margin: 0, lineHeight: 1.2 }}>
+            GOGROU<br />DEMO
+          </h2>
+
+          <nav style={{ marginTop: 24 }}>
+            <NavLink href="/">Dashboard</NavLink>
+            <NavLink href="/gpc">GPC</NavLink>
+            <NavLink href="/gss">GSS</NavLink>
+            <NavLink href="/smartsplit">SmartSplit</NavLink>
+            <NavLink href="/ai">AI Assistant</NavLink>
           </nav>
-        </div>
+        </aside>
 
-        {/* HEADER – GLOBÁLNÍ KONTEXT */}
-        <AppHeader />
-
-        {/* OBSAH STRÁNKY */}
-        <div
+        {/* HLAVNÍ OBSAH */}
+        <main
           style={{
             marginLeft: 220,
-            padding: 30,
+            minHeight: "100vh",
             boxSizing: "border-box",
           }}
         >
-          {children}
-        </div>
+          {/* GLOBÁLNÍ HEADER – FIRMA / MODUL / SKLAD */}
+          <AppHeader />
+
+          {/* OBSAH STRÁNKY */}
+          <div
+            style={{
+              padding: 30,
+              boxSizing: "border-box",
+            }}
+          >
+            {children}
+          </div>
+        </main>
       </body>
     </html>
   );
 }
 
-const linkStyle = {
-  display: "block",
-  padding: "10px 0",
-  color: "#ccc",
-  textDecoration: "none",
-};
+/* ---------- POMOCNÉ KOMPONENTY ---------- */
+
+function NavLink({ href, children }) {
+  return (
+    <a
+      href={href}
+      style={{
+        display: "block",
+        padding: "10px 0",
+        color: "#ccc",
+        textDecoration: "none",
+        fontSize: 15,
+      }}
+      onMouseEnter={(e) => (e.target.style.color = "#fff")}
+      onMouseLeave={(e) => (e.target.style.color = "#ccc")}
+    >
+      {children}
+    </a>
+  );
+}
