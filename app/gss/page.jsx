@@ -42,10 +42,25 @@ export default function GssPage() {
     refreshStock();
   }
 
+  function getStockStatus(item) {
+    if (item.quantity == null) return { label: "—", color: "#444" };
+
+    if (item.min != null) {
+      if (item.quantity < item.min) {
+        return { label: "POD MIN", color: "#7f1d1d" };
+      }
+      if (item.quantity === item.min) {
+        return { label: "MIN", color: "#92400e" };
+      }
+    }
+
+    return { label: "OK", color: "#14532d" };
+  }
+
   return (
     <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
 
-      {/* 🧠 KONTEXT – KDE JSEM */}
+      {/* KONTEXT */}
       <ContextBar
         company={company.name}
         module="GSS – Skladový systém"
@@ -54,10 +69,10 @@ export default function GssPage() {
 
       <h1>GSS – Hlavní sklad</h1>
       <p style={{ opacity: 0.6 }}>
-        Centrální sklad firmy (uživatelský pohled)
+        Centrální sklad firmy
       </p>
 
-      {/* FIXNÍ TLAČÍTKO + INLINE ADD */}
+      {/* FIXNÍ ADD */}
       <div
         style={{
           position: "sticky",
@@ -137,7 +152,7 @@ export default function GssPage() {
         )}
       </div>
 
-      {/* SEZNAM SKLADU */}
+      {/* SEZNAM */}
       <div style={{ marginTop: 30 }}>
         {stock.length === 0 && (
           <div style={{ opacity: 0.5 }}>
@@ -145,26 +160,50 @@ export default function GssPage() {
           </div>
         )}
 
-        {stock.map((item) => (
-          <div
-            key={item.gss_stock_id}
-            style={{
-              border: "1px solid #222",
-              borderRadius: 10,
-              padding: 16,
-              marginBottom: 12,
-              cursor: "pointer",
-            }}
-            onClick={() =>
-              window.location.href = `/gss/${item.gss_stock_id}`
-            }
-          >
-            <strong>{item.name}</strong>
-            <div style={{ opacity: 0.6 }}>
-              Stav: {item.quantity} ks
+        {stock.map((item) => {
+          const status = getStockStatus(item);
+
+          return (
+            <div
+              key={item.gss_stock_id}
+              onClick={() =>
+                window.location.href = `/gss/${item.gss_stock_id}`
+              }
+              style={{
+                border: "1px solid #222",
+                borderLeft: `6px solid ${status.color}`,
+                borderRadius: 10,
+                padding: 16,
+                marginBottom: 12,
+                cursor: "pointer",
+                background: "#0b0b0b",
+              }}
+            >
+              <strong>{item.name}</strong>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 16,
+                  marginTop: 6,
+                  fontSize: 13,
+                  opacity: 0.8,
+                }}
+              >
+                <div>Stav: {item.quantity} ks</div>
+                <div>MIN: {item.min ?? "—"}</div>
+                <div
+                  style={{
+                    fontWeight: "bold",
+                    color: status.color,
+                  }}
+                >
+                  {status.label}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
