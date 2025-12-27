@@ -17,7 +17,7 @@ export function getGssState() {
       company_id: company.company_id,
       warehouses: company.warehouses.map((w) => ({
         ...w,
-        stock: [], // GSS STOCK položky
+        stock: [],
       })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
@@ -59,20 +59,19 @@ export function addStockItemFromGPC(tool) {
 
   mainWarehouse.stock.push({
     gss_stock_id: crypto.randomUUID(),
-
     gpc_id: tool.gpc_id,
     name: tool.name,
 
-    tracking_mode: "quantity", // DM později
+    tracking_mode: "quantity",
     quantity: 0,
 
     min: null,
     max: null,
 
-    created_at: new Date().toISOString(),
+    // pohybový základ – připraveno, ale zatím skryté
+    last_movement: null,
 
-    // připraveno do budoucna
-    last_receipt: null,
+    created_at: new Date().toISOString(),
   });
 
   saveGssState(state);
@@ -89,53 +88,64 @@ export function getMainWarehouseStock() {
   return main ? main.stock : [];
 }
 
-/**
- * Uloží změny jedné GSS STOCK položky
- */
-export function saveStockItem(updatedItem) {
-  const state = getGssState();
-  if (!state) return;
-
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
-
-  const index = main.stock.findIndex(
-    (s) => s.gss_stock_id === updatedItem.gss_stock_id
-  );
-  if (index === -1) return;
-
-  main.stock[index] = updatedItem;
-  saveGssState(state);
-}
+/* =========================================================
+   === KROK 6 – ZÁKLAD POHYBU (READ-ONLY, BEZ HISTORIE) ===
+   ========================================================= */
 
 /**
- * PŘÍJEM NA SKLAD (quantity režim)
- * ✔ navýší stav
- * ✔ uloží doklad (bez historie – zatím)
+ * PŘÍJEM NA SKLAD
+ * – zvýší quantity
+ * – uloží poslední pohyb (bez historie)
  */
-export function receiveStock({
-  gssStockId,
-  amount,
+export function receiveToMainWarehouse({
+  gss_stock_id,
+  quantity,
   document,
 }) {
   const state = getGssState();
   if (!state) return;
 
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
+  const mainWarehouse = state.warehouses.find((w) => w.is_default);
+  if (!mainWarehouse) return;
 
-  const item = main.stock.find(
-    (s) => s.gss_stock_id === gssStockId
+  const item = mainWarehouse.stock.find(
+    (s) => s.gss_stock_id === gss_stock_id
   );
+
   if (!item) return;
 
-  item.quantity += amount;
+  const qty = Number(quantity);
+  if (!qty || qty <= 0) {
+    alert("Zadej platné množství.");
+    return;
+  }
 
-  item.last_receipt = {
-    ...document,
-    amount,
-    received_at: new Date().toISOString(),
+  item.quantity += qty;
+
+  item.last_movement = {
+    type: "RECEIPT",
+    direction: "IN",
+    quantity: qty,
+    document: document || null,
+    at: new Date().toISOString(),
   };
 
   saveGssState(state);
+}
+
+/**
+ * Vrátí poslední pohyb položky (read-only)
+ */
+export function getLastMovement(gss_stock_id) {
+  const state = getGssState();
+  if (!state) return null;
+
+  const mainWarehouse = state.warehouses.find((w) => w.is_default);
+  if (!mainWarehouse) return null;
+
+  const item = mainWarehouse.stock.find(
+    (s) => s.gss_stock_id === gss_stock_id
+  );
+
+  return item?.last_movement || null;
 }
