@@ -1,182 +1,183 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   getMainWarehouseStock,
-  saveStockItem,
+  receiveToMainWarehouse,
+  issueToProduction,
 } from "../data/gssStore";
 
 export default function GssStockDetailPage() {
   const { stockId } = useParams();
-  const router = useRouter();
-
   const [item, setItem] = useState(null);
-  const [min, setMin] = useState("");
-  const [max, setMax] = useState("");
-  const [info, setInfo] = useState("");
+
+  const [inQty, setInQty] = useState("");
+  const [inDoc, setInDoc] = useState("");
+
+  const [outQty, setOutQty] = useState("");
+  const [outTarget, setOutTarget] = useState("");
 
   useEffect(() => {
+    refresh();
+  }, []);
+
+  function refresh() {
     const stock = getMainWarehouseStock();
     const found = stock.find(
       (s) => String(s.gss_stock_id) === String(stockId)
     );
-
-    if (!found) return;
-
-    setItem(found);
-    setMin(found.min ?? "");
-    setMax(found.max ?? "");
-  }, [stockId]);
+    setItem(found || null);
+  }
 
   if (!item) {
     return (
       <div style={{ padding: 40, color: "white" }}>
         <h2>Položka nenalezena</h2>
-        <button onClick={() => router.push("/gss")}>
-          ← Zpět na sklad
-        </button>
       </div>
     );
   }
 
-  function saveLimits() {
-    const updated = {
-      ...item,
-      min: min === "" ? null : Number(min),
-      max: max === "" ? null : Number(max),
-    };
-
-    saveStockItem(updated);
-    setItem(updated);
-    setInfo("Uloženo");
-    setTimeout(() => setInfo(""), 1500);
-  }
-
   return (
-    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
-      <button
-        onClick={() => router.push("/gss")}
-        style={{
-          marginBottom: 20,
-          background: "transparent",
-          color: "#aaa",
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        ← Zpět na hlavní sklad
-      </button>
-
-      <h1 style={{ fontSize: 28 }}>{item.name}</h1>
+    <div style={{ padding: 40, color: "white", maxWidth: 800 }}>
+      <h1>{item.name}</h1>
 
       <div style={{ opacity: 0.6, marginBottom: 20 }}>
-        GSS STOCK · režim:{" "}
-        <strong>{item.tracking_mode}</strong>
+        Stav skladu: <strong>{item.quantity} ks</strong>
       </div>
 
-      {/* STAV */}
+      {/* ===============================
+          PŘÍJEM NA SKLAD
+      =============================== */}
       <div
         style={{
-          border: "1px solid #222",
-          borderRadius: 10,
-          padding: 16,
-          marginBottom: 20,
-          background: "#0b0b0b",
-        }}
-      >
-        <strong>Aktuální stav</strong>
-        <div style={{ fontSize: 24, marginTop: 6 }}>
-          {item.quantity} ks
-        </div>
-      </div>
-
-      {/* MIN / MAX */}
-      <div
-        style={{
-          border: "1px solid #222",
+          border: "1px solid #1f2937",
           borderRadius: 10,
           padding: 16,
           marginBottom: 20,
         }}
       >
-        <strong>Nastavení skladu</strong>
+        <h3>➕ Příjem na hlavní sklad</h3>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "120px 1fr",
-            gap: 12,
-            marginTop: 12,
-            maxWidth: 300,
-          }}
-        >
-          <label>MIN</label>
-          <input
-            type="number"
-            value={min}
-            onChange={(e) => setMin(e.target.value)}
-            placeholder="—"
-            style={inputStyle}
-          />
+        <input
+          placeholder="Počet ks"
+          type="number"
+          value={inQty}
+          onChange={(e) => setInQty(e.target.value)}
+          style={inputStyle}
+        />
 
-          <label>MAX</label>
-          <input
-            type="number"
-            value={max}
-            onChange={(e) => setMax(e.target.value)}
-            placeholder="—"
-            style={inputStyle}
-          />
-        </div>
+        <input
+          placeholder="Dodací list / faktura / poznámka"
+          value={inDoc}
+          onChange={(e) => setInDoc(e.target.value)}
+          style={inputStyle}
+        />
 
         <button
-          onClick={saveLimits}
-          style={{
-            marginTop: 16,
-            padding: "8px 14px",
-            borderRadius: 6,
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
+          onClick={() => {
+            receiveToMainWarehouse({
+              gss_stock_id: item.gss_stock_id,
+              quantity: Number(inQty),
+              document_ref: inDoc || "bez dokladu",
+            });
+            setInQty("");
+            setInDoc("");
+            refresh();
           }}
+          style={primaryBtn}
         >
-          Uložit
+          Přijmout na sklad
         </button>
-
-        {info && (
-          <div style={{ marginTop: 10, color: "#4ade80" }}>
-            {info}
-          </div>
-        )}
       </div>
 
-      {/* DALŠÍ KROKY (zatím vypnuté) */}
+      {/* ===============================
+          VÝDEJ DO VÝROBY
+      =============================== */}
       <div
         style={{
-          border: "1px dashed #333",
+          border: "1px solid #1f2937",
           borderRadius: 10,
           padding: 16,
-          opacity: 0.4,
         }}
       >
-        <strong>Další kroky (brzy)</strong>
-        <ul>
-          <li>Příjem na sklad</li>
-          <li>Výdej do výroby</li>
-          <li>DM režim</li>
-          <li>Převody na dceřiné sklady</li>
-        </ul>
+        <h3>⬇️ Výdej do výroby</h3>
+
+        <input
+          placeholder="Počet ks"
+          type="number"
+          value={outQty}
+          onChange={(e) => setOutQty(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Zakázka / stroj / pracoviště"
+          value={outTarget}
+          onChange={(e) => setOutTarget(e.target.value)}
+          style={inputStyle}
+        />
+
+        <button
+          onClick={() => {
+            issueToProduction({
+              gss_stock_id: item.gss_stock_id,
+              quantity: Number(outQty),
+              target_ref: outTarget || "neurčeno",
+            });
+            setOutQty("");
+            setOutTarget("");
+            refresh();
+          }}
+          style={secondaryBtn}
+        >
+          Vydat do výroby
+        </button>
       </div>
+
+      {/* ===============================
+          POSLEDNÍ POHYB
+      =============================== */}
+      {item.last_movement && (
+        <div style={{ marginTop: 30, opacity: 0.6 }}>
+          Poslední pohyb:{" "}
+          <strong>{item.last_movement.type}</strong> ·{" "}
+          {item.last_movement.quantity} ks
+        </div>
+      )}
     </div>
   );
 }
 
+/* ===============================
+   STYLY
+=============================== */
+
 const inputStyle = {
-  padding: "6px 8px",
+  display: "block",
+  width: "100%",
+  padding: 10,
+  marginBottom: 10,
   borderRadius: 6,
   border: "1px solid #333",
   background: "#000",
   color: "white",
+};
+
+const primaryBtn = {
+  background: "#16a34a",
+  color: "white",
+  padding: "10px 16px",
+  borderRadius: 6,
+  border: "none",
+  cursor: "pointer",
+};
+
+const secondaryBtn = {
+  background: "#2563eb",
+  color: "white",
+  padding: "10px 16px",
+  borderRadius: 6,
+  border: "none",
+  cursor: "pointer",
 };
