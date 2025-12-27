@@ -2,35 +2,28 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+
 import {
   getMainWarehouseStock,
-  receiveToMainWarehouse,
-  issueToProduction,
+  updateServiceSettings,
+  getServiceSettings,
 } from "../data/gssStore";
 
 export default function GssStockDetailPage() {
   const { stockId } = useParams();
-  const [item, setItem] = useState(null);
-
-  const [inQty, setInQty] = useState("");
-  const [inDoc, setInDoc] = useState("");
-
-  const [outQty, setOutQty] = useState("");
-  const [outTarget, setOutTarget] = useState("");
+  const [stockItem, setStockItem] = useState(null);
+  const [service, setService] = useState(null);
 
   useEffect(() => {
-    refresh();
-  }, []);
-
-  function refresh() {
-    const stock = getMainWarehouseStock();
-    const found = stock.find(
-      (s) => String(s.gss_stock_id) === String(stockId)
+    const items = getMainWarehouseStock();
+    const found = items.find(
+      (i) => String(i.gss_stock_id) === String(stockId)
     );
-    setItem(found || null);
-  }
+    setStockItem(found || null);
+    setService(getServiceSettings(stockId));
+  }, [stockId]);
 
-  if (!item) {
+  if (!stockItem) {
     return (
       <div style={{ padding: 40, color: "white" }}>
         <h2>Položka nenalezena</h2>
@@ -38,146 +31,131 @@ export default function GssStockDetailPage() {
     );
   }
 
+  function updateService(partial) {
+    const next = {
+      sharpenable: service?.sharpenable ?? false,
+      max_resharpens: service?.max_resharpens ?? 0,
+      service_provider: service?.service_provider ?? "MTTM",
+      note: service?.note ?? "",
+      ...partial,
+    };
+
+    updateServiceSettings(stockId, next);
+    setService(next);
+  }
+
   return (
-    <div style={{ padding: 40, color: "white", maxWidth: 800 }}>
-      <h1>{item.name}</h1>
+    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+      <h1>{stockItem.name}</h1>
 
       <div style={{ opacity: 0.6, marginBottom: 20 }}>
-        Stav skladu: <strong>{item.quantity} ks</strong>
+        GSS STOCK · {stockItem.gpc_id}
       </div>
 
-      {/* ===============================
-          PŘÍJEM NA SKLAD
-      =============================== */}
+      {/* ========================= */}
+      {/* SERVIS / OSTŘENÍ BOX */}
+      {/* ========================= */}
       <div
         style={{
-          border: "1px solid #1f2937",
-          borderRadius: 10,
-          padding: 16,
-          marginBottom: 20,
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 20,
+          marginTop: 30,
+          background: "#0b0b0b",
         }}
       >
-        <h3>➕ Příjem na hlavní sklad</h3>
+        <h3 style={{ marginBottom: 16 }}>
+          🔧 Servis / ostření nástroje
+        </h3>
 
-        <input
-          placeholder="Počet ks"
-          type="number"
-          value={inQty}
-          onChange={(e) => setInQty(e.target.value)}
-          style={inputStyle}
-        />
+        {/* Brousitelný */}
+        <label style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={service?.sharpenable || false}
+            onChange={(e) =>
+              updateService({ sharpenable: e.target.checked })
+            }
+          />
+          <span>Nástroj je brousitelný</span>
+        </label>
 
-        <input
-          placeholder="Dodací list / faktura / poznámka"
-          value={inDoc}
-          onChange={(e) => setInDoc(e.target.value)}
-          style={inputStyle}
-        />
-
-        <button
-          onClick={() => {
-            receiveToMainWarehouse({
-              gss_stock_id: item.gss_stock_id,
-              quantity: Number(inQty),
-              document_ref: inDoc || "bez dokladu",
-            });
-            setInQty("");
-            setInDoc("");
-            refresh();
-          }}
-          style={primaryBtn}
-        >
-          Přijmout na sklad
-        </button>
-      </div>
-
-      {/* ===============================
-          VÝDEJ DO VÝROBY
-      =============================== */}
-      <div
-        style={{
-          border: "1px solid #1f2937",
-          borderRadius: 10,
-          padding: 16,
-        }}
-      >
-        <h3>⬇️ Výdej do výroby</h3>
-
-        <input
-          placeholder="Počet ks"
-          type="number"
-          value={outQty}
-          onChange={(e) => setOutQty(e.target.value)}
-          style={inputStyle}
-        />
-
-        <input
-          placeholder="Zakázka / stroj / pracoviště"
-          value={outTarget}
-          onChange={(e) => setOutTarget(e.target.value)}
-          style={inputStyle}
-        />
-
-        <button
-          onClick={() => {
-            issueToProduction({
-              gss_stock_id: item.gss_stock_id,
-              quantity: Number(outQty),
-              target_ref: outTarget || "neurčeno",
-            });
-            setOutQty("");
-            setOutTarget("");
-            refresh();
-          }}
-          style={secondaryBtn}
-        >
-          Vydat do výroby
-        </button>
-      </div>
-
-      {/* ===============================
-          POSLEDNÍ POHYB
-      =============================== */}
-      {item.last_movement && (
-        <div style={{ marginTop: 30, opacity: 0.6 }}>
-          Poslední pohyb:{" "}
-          <strong>{item.last_movement.type}</strong> ·{" "}
-          {item.last_movement.quantity} ks
+        {/* Max přebroušení */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ opacity: 0.7, marginBottom: 6 }}>
+            Maximální počet přebroušení
+          </div>
+          <input
+            type="number"
+            min={0}
+            disabled={!service?.sharpenable}
+            value={service?.max_resharpens ?? 0}
+            onChange={(e) =>
+              updateService({
+                max_resharpens: Number(e.target.value),
+              })
+            }
+            style={{
+              width: 120,
+              padding: 8,
+              borderRadius: 6,
+              border: "1px solid #333",
+              background: "#000",
+              color: "white",
+            }}
+          />
+          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>
+            1× nový + X× přeostřený
+          </div>
         </div>
-      )}
+
+        {/* Brusírna */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ opacity: 0.7, marginBottom: 6 }}>
+            Brusírna / servis
+          </div>
+          <select
+            value={service?.service_provider || "MTTM"}
+            onChange={(e) =>
+              updateService({ service_provider: e.target.value })
+            }
+            disabled={!service?.sharpenable}
+            style={{
+              padding: 8,
+              borderRadius: 6,
+              border: "1px solid #333",
+              background: "#000",
+              color: "white",
+            }}
+          >
+            <option value="MTTM">MTTM (default)</option>
+            <option value="JINA_BRUSIRNA">Jiná brusírna</option>
+          </select>
+        </div>
+
+        {/* Poznámka */}
+        <div>
+          <div style={{ opacity: 0.7, marginBottom: 6 }}>
+            Poznámka (povlak, omezení, cokoliv)
+          </div>
+          <textarea
+            rows={3}
+            disabled={!service?.sharpenable}
+            value={service?.note || ""}
+            onChange={(e) =>
+              updateService({ note: e.target.value })
+            }
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 6,
+              border: "1px solid #333",
+              background: "#000",
+              color: "white",
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
-
-/* ===============================
-   STYLY
-=============================== */
-
-const inputStyle = {
-  display: "block",
-  width: "100%",
-  padding: 10,
-  marginBottom: 10,
-  borderRadius: 6,
-  border: "1px solid #333",
-  background: "#000",
-  color: "white",
-};
-
-const primaryBtn = {
-  background: "#16a34a",
-  color: "white",
-  padding: "10px 16px",
-  borderRadius: 6,
-  border: "none",
-  cursor: "pointer",
-};
-
-const secondaryBtn = {
-  background: "#2563eb",
-  color: "white",
-  padding: "10px 16px",
-  borderRadius: 6,
-  border: "none",
-  cursor: "pointer",
-};
