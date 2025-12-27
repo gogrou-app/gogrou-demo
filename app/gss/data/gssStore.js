@@ -1,229 +1,335 @@
 // /app/gss/data/gssStore.js
 "use client";
 
-import company from "./company";
+import companyTemplate from "./company";
 
-const STORAGE_KEY = "gogrou_gss_state";
-const SERVICE_KEY = "gogrou_gss_service";
+const STORAGE_KEY = "gogrou_gss_state_v2";
 
 /**
- * =========================================================
- *  GSS STATE (firma + sklady + stock)
- * =========================================================
+ * V2 struktura:
+ * {
+ *   companies: [
+ *     {
+ *       id, name,
+ *       warehouses: [{ id, name, is_default, stock: [...] }]
+ *     }
+ *   ]
+ * }
  */
-export function getGssState() {
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function safeParse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeNumber(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function ensureV2State() {
   if (typeof window === "undefined") return null;
 
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const initial = {
-      company_id: company.company_id,
-      warehouses: company.warehouses.map((w) => ({
-        ...w,
-        stock: [],
-      })),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+  if (raw) {
+    const parsed = safeParse(raw);
+    if (parsed?.companies?.length) return parsed;
   }
-  return JSON.parse(raw);
+
+  // 🔁 MIGRACE ze starého klíče (pokud existuje)
+  const legacyRaw = localStorage.getItem("gogrou_gss_stock");
+  const legacy = legacyRaw ? safeParse(legacyRaw) : null;
+
+  // Výchozí firma z template
+  const defaultCompany = {
+    id: companyTemplate.company_id || "company-demo",
+    name: companyTemplate.name || "Gogrou Demo s.r.o.",
+    warehouses: (companyTemplate.warehouses || []).map((w) => ({
+      id: w.id || w.warehouse_id || crypto.randomUUID(),
+      name: w.name || "Sklad",
+      is_default: !!w.is_default,
+      stock: [],
+    })),
+  };
+
+  // když template nemá sklady, vytvoř 1 default
+  if (!defaultCompany.warehouses.length) {
+    defaultCompany.warehouses.push({
+      id: "wh-main",
+      name: "Hlavní sklad",
+      is_default: true,
+      stock: [],
+    });
+  }
+
+  // pokud legacy existuje ve formátu { company_id, warehouses:[{...stock:[]}] }
+  if (legacy?.warehouses?.length) {
+    defaultCompany.warehouses = legacy.warehouses.map((w) => ({
+      id: w.id || w.warehouse_id || crypto.randomUUID(),
+      name: w.name || "Sklad",
+      is_default: !!w.is_default,
+      stock: Array.isArray(w.stock) ? w.stock : [],
+    }));
+  }
+
+  const v2 = { companies: [defaultCompany] };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(v2));
+  return v2;
 }
 
-function saveGssState(state) {
+function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-/**
- * Vrátí stock hlavního skladu
- */
-export function getMainWarehouseStock() {
-  const state = getGssState();
-  if (!state) return [];
+function getDefaultCompany(state) {
+  return state?.companies?.[0] || null;
+}
 
-  const main = state.warehouses.find((w) => w.is_default);
-  return main ? main.stock : [];
+function getCompanyById(state, companyId) {
+  if (!state?.companies?.length) return null;
+  if (!companyId) return getDefaultCompany(state);
+  return state.companies.find((c) => String(c.id) === String(companyId)) || null;
+}
+
+function getDefaultWarehouse(company) {
+  if (!company?.warehouses?.length) return null;
+  return company.warehouses.find((w) => w.is_default) || company.warehouses[0];
+}
+
+function getWarehouseById(company, warehouseId) {
+  if (!company?.warehouses?.length) return null;
+  if (!warehouseId) return getDefaultWarehouse(company);
+  return (
+    company.warehouses.find((w) => String(w.id) === String(warehouseId)) || null
+  );
 }
 
 /**
- * Přidání položky z GPC do GSS (0 ks) v hlavním skladu
+ * PUBLIC: Vrátí celý stav (V2)
  */
-export function addStockItemFromGPC(tool) {
-  const state = getGssState();
+export function getGssState() {
+  return ensureV2State();
+}
+
+/**
+ * PUBLIC: Vrátí stock konkrétní firmy + skladu
+ * (když nedáš nic, vezme default firmu + default sklad)
+ */
+export function getMainWarehouseStock(companyId, warehouseId) {
+  const state = ensureV2State();
+  if (!state) return [];
+
+  const company = getCompanyById(state, companyId);
+  if (!company) return [];
+
+  const wh = getWarehouseById(company, warehouseId);
+  if (!wh) return [];
+
+  return Array.isArray(wh.stock) ? wh.stock : [];
+}
+
+/**
+ * PUBLIC: Najde jednu položku podle stockId (pro detail /app/gss/[stockId])
+ * hledá napříč firmami i sklady
+ */
+export function getStockItemById(stockId) {
+  const state = ensureV2State();
+  if (!state) return null;
+
+  for (const c of state.companies || []) {
+    for (const w of c.warehouses || []) {
+      const found = (w.stock || []).find(
+        (s) => String(s.gss_stock_id) === String(stockId)
+      );
+      if (found) {
+        return {
+          item: found,
+          company: { id: c.id, name: c.name },
+          warehouse: { id: w.id, name: w.name },
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * PUBLIC: Přidání položky z GPC do konkrétní firmy + skladu
+ * (když nedáš companyId/warehouseId, jde to do default firmy + default skladu)
+ */
+export function addStockItemFromGPC(tool, companyId, warehouseId) {
+  const state = ensureV2State();
   if (!state) return;
 
-  const mainWarehouse = state.warehouses.find((w) => w.is_default);
-  if (!mainWarehouse) {
-    alert("Chybí hlavní sklad firmy!");
+  const company = getCompanyById(state, companyId);
+  if (!company) {
+    alert("Chybí firma v GSS stavu!");
     return;
   }
 
-  const exists = mainWarehouse.stock.find(
+  const wh = getWarehouseById(company, warehouseId);
+  if (!wh) {
+    alert("Chybí sklad firmy!");
+    return;
+  }
+
+  const exists = (wh.stock || []).find(
     (s) => String(s.gpc_id) === String(tool.gpc_id)
   );
+
   if (exists) {
-    alert("Tato položka už je ve skladu založena.");
+    alert("Tato položka už je v tomto skladu založena.");
     return;
   }
 
-  const newId =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `STOCK-${Date.now()}`;
+  if (!Array.isArray(wh.stock)) wh.stock = [];
 
-  mainWarehouse.stock.push({
-    gss_stock_id: newId,
+  wh.stock.push({
+    gss_stock_id: crypto.randomUUID(),
     gpc_id: tool.gpc_id,
     name: tool.name,
 
-    // DEMO: zatím quantity (DM přijde později)
-    tracking_mode: "quantity",
+    tracking_mode: "quantity", // DM později
     quantity: 0,
 
     min: null,
     max: null,
 
-    created_at: new Date().toISOString(),
+    // příjem/výdej doklady (zatím jen poslední)
+    last_doc_no: null,
+    last_doc_type: null, // "receipt" | "issue" | null
+
+    // servis
+    service_enabled: false,
+    max_resharpen: 0, // X (0..n)
+    uses_count: 0, // kolikrát bylo "vráceno z výroby"
+    grinder: "MTTM", // default
+    service_note: "",
+
+    created_at: nowIso(),
+    updated_at: nowIso(),
   });
 
-  saveGssState(state);
+  saveState(state);
+}
 
-  // init servisních nastavení
-  ensureServiceState();
-  const map = getServiceMap();
-  if (!map[newId]) {
-    map[newId] = {
-      sharpenable: false,
-      max_resharpens: 0,
-      service_provider: "MTTM",
-      note: "",
-      use_count: 0,
-      service_count: 0,
-      discarded_count: 0,
-      last_recommendation: "",
-      updated_at: new Date().toISOString(),
-    };
-    saveServiceMap(map);
+/**
+ * PUBLIC: Uloží min/max pro položku
+ */
+export function updateStockMinMax(stockId, min, max) {
+  const state = ensureV2State();
+  if (!state) return false;
+
+  const ctx = getStockItemById(stockId);
+  if (!ctx?.item) return false;
+
+  ctx.item.min = normalizeNumber(min);
+  ctx.item.max = normalizeNumber(max);
+  ctx.item.updated_at = nowIso();
+
+  saveState(state);
+  return true;
+}
+
+/**
+ * PUBLIC: Příjem +ks (jednoduše) + číslo dokladu
+ */
+export function receiveStock(stockId, qty, docNo = "") {
+  const state = ensureV2State();
+  if (!state) return false;
+
+  const ctx = getStockItemById(stockId);
+  if (!ctx?.item) return false;
+
+  const q = Number(qty);
+  if (!Number.isFinite(q) || q <= 0) {
+    alert("Zadej kladné číslo pro příjem.");
+    return false;
   }
+
+  ctx.item.quantity = Number(ctx.item.quantity || 0) + q;
+  ctx.item.last_doc_no = String(docNo || "").trim() || null;
+  ctx.item.last_doc_type = "receipt";
+  ctx.item.updated_at = nowIso();
+
+  saveState(state);
+  return true;
 }
 
 /**
- * =========================================================
- *  SERVICE SETTINGS (per GSS_STOCK)
- *  - sharpenable, max_resharpens, provider, note
- *  - use_count, service_count
- * =========================================================
+ * PUBLIC: Výdej -ks (jednoduše) + číslo dokladu
  */
-function ensureServiceState() {
-  if (typeof window === "undefined") return;
-  const raw = localStorage.getItem(SERVICE_KEY);
-  if (!raw) localStorage.setItem(SERVICE_KEY, JSON.stringify({}));
-}
+export function issueStock(stockId, qty, docNo = "") {
+  const state = ensureV2State();
+  if (!state) return false;
 
-function getServiceMap() {
-  ensureServiceState();
-  const raw = localStorage.getItem(SERVICE_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
+  const ctx = getStockItemById(stockId);
+  if (!ctx?.item) return false;
 
-function saveServiceMap(map) {
-  localStorage.setItem(SERVICE_KEY, JSON.stringify(map));
-}
+  const q = Number(qty);
+  if (!Number.isFinite(q) || q <= 0) {
+    alert("Zadej kladné číslo pro výdej.");
+    return false;
+  }
 
-export function getServiceSettings(stockId) {
-  const map = getServiceMap();
-  return map[stockId] || null;
-}
+  const current = Number(ctx.item.quantity || 0);
+  if (q > current) {
+    alert("Nelze vydat více, než je skladem.");
+    return false;
+  }
 
-export function updateServiceSettings(stockId, settings) {
-  const map = getServiceMap();
-  map[stockId] = {
-    ...(map[stockId] || {}),
-    ...settings,
-    updated_at: new Date().toISOString(),
-  };
-  saveServiceMap(map);
+  ctx.item.quantity = current - q;
+  ctx.item.last_doc_no = String(docNo || "").trim() || null;
+  ctx.item.last_doc_type = "issue";
+  ctx.item.updated_at = nowIso();
+
+  saveState(state);
+  return true;
 }
 
 /**
- * NÁVRAT Z VÝROBY = zvýší use_count o 1 a vrátí nový stav
+ * PUBLIC: Servisní nastavení položky (brousitelnost, max přebroušení, brusírna, pozn.)
  */
-export function registerReturnFromProduction(stockId) {
-  const s = getServiceSettings(stockId) || {};
-  const next = {
-    ...s,
-    use_count: Number(s.use_count || 0) + 1,
-    updated_at: new Date().toISOString(),
-  };
-  updateServiceSettings(stockId, next);
-  return next;
+export function updateServiceSettings(stockId, data) {
+  const state = ensureV2State();
+  if (!state) return false;
+
+  const ctx = getStockItemById(stockId);
+  if (!ctx?.item) return false;
+
+  ctx.item.service_enabled = !!data.service_enabled;
+  ctx.item.max_resharpen = Math.max(0, Number(data.max_resharpen || 0) || 0);
+  ctx.item.grinder = String(data.grinder || "MTTM");
+  ctx.item.service_note = String(data.service_note || "");
+  ctx.item.updated_at = nowIso();
+
+  saveState(state);
+  return true;
 }
 
 /**
- * NA SERVIS = zvýší service_count o 1
+ * PUBLIC: Návrat z výroby = zvýší počitadlo použití
+ * (logika "doporučit servis/vyřadit" řeší UI podle max_resharpen)
  */
-export function registerSendToService(stockId) {
-  const s = getServiceSettings(stockId) || {};
-  const next = {
-    ...s,
-    service_count: Number(s.service_count || 0) + 1,
-    updated_at: new Date().toISOString(),
-  };
-  updateServiceSettings(stockId, next);
-  return next;
-}
+export function returnFromProduction(stockId) {
+  const state = ensureV2State();
+  if (!state) return false;
 
-/**
- * VYŘADIT = jen evidenčně zvýší discarded_count
- */
-export function registerDiscard(stockId) {
-  const s = getServiceSettings(stockId) || {};
-  const next = {
-    ...s,
-    discarded_count: Number(s.discarded_count || 0) + 1,
-    updated_at: new Date().toISOString(),
-  };
-  updateServiceSettings(stockId, next);
-  return next;
-}
+  const ctx = getStockItemById(stockId);
+  if (!ctx?.item) return false;
 
-/**
- * Změna množství (příjem/výdej) – jednoduché, bez historie
- */
-export function adjustQuantity(stockId, delta) {
-  const state = getGssState();
-  if (!state) return;
+  ctx.item.uses_count = Number(ctx.item.uses_count || 0) + 1;
+  ctx.item.updated_at = nowIso();
 
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
-
-  const idx = main.stock.findIndex(
-    (s) => String(s.gss_stock_id) === String(stockId)
-  );
-  if (idx === -1) return;
-
-  const current = Number(main.stock[idx].quantity || 0);
-  const next = Math.max(0, current + Number(delta || 0));
-
-  main.stock[idx] = { ...main.stock[idx], quantity: next };
-  saveGssState(state);
-}
-
-export function setMinMax(stockId, min, max) {
-  const state = getGssState();
-  if (!state) return;
-
-  const main = state.warehouses.find((w) => w.is_default);
-  if (!main) return;
-
-  const idx = main.stock.findIndex(
-    (s) => String(s.gss_stock_id) === String(stockId)
-  );
-  if (idx === -1) return;
-
-  main.stock[idx] = {
-    ...main.stock[idx],
-    min: min === "" ? null : Number(min),
-    max: max === "" ? null : Number(max),
-  };
-  saveGssState(state);
+  saveState(state);
+  return true;
 }
