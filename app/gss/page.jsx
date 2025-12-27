@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import ContextHeader from "../components/ContextHeader";
 import { useAppContext } from "../context/AppContext";
 import { gssData } from "./data/gssStore";
 
