@@ -17,9 +17,9 @@ export default function GpcPage() {
     <div style={{ padding: 30, color: "white" }}>
       <ContextHeader />
 
-      <h1>GPC – Gogrou Product Center</h1>
+      <h1>Gogrou Product Center</h1>
       <p style={{ opacity: 0.7 }}>
-        Tady bude katalog nástrojů, datové modely, GTIN, parametry…
+        Tady bude katalog nástrojů, GTIN, datové modely, parametry…
       </p>
     </div>
   );
