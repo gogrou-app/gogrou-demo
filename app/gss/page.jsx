@@ -1,113 +1,162 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAppContext } from "../context/AppContext";
-import { gssData, addStockItemFromGPC } from "./data/gssStore";
-import { gpcData } from "../gpc/data";
+import tools from "../gpc/data"; // GPC katalog
+import {
+  getMainWarehouseStock,
+  addStockItemFromGPC,
+} from "./data/gssStore";
 
-export default function GSSPage() {
-  const { company, warehouse, setModule } = useAppContext();
-  const [showPicker, setShowPicker] = useState(false);
+export default function GssPage() {
+  const [stock, setStock] = useState([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
-    setModule("GSS – Skladový systém");
-  }, [setModule]);
+    refreshStock();
+  }, []);
 
-  const items = gssData?.[company]?.[warehouse] || [];
+  function refreshStock() {
+    const data = getMainWarehouseStock();
+    setStock(data || []);
+  }
+
+  function handleSearch(value) {
+    setQuery(value);
+
+    if (value.trim().length < 2) {
+      setResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    const q = value.toLowerCase();
+
+    const filtered = tools.filter((t) => {
+      return (
+        t.name?.toLowerCase().includes(q) ||
+        t.gpc_id?.toLowerCase().includes(q) ||
+        t.gtin?.toLowerCase().includes(q)
+      );
+    });
+
+    setResults(filtered);
+    setShowResults(true);
+  }
+
+  function handleAdd(tool) {
+    addStockItemFromGPC(tool);
+    setQuery("");
+    setResults([]);
+    setShowResults(false);
+    refreshStock();
+  }
 
   return (
-    <div style={{ padding: 30, color: "white", maxWidth: 1000 }}>
-      {/* HLAVIČKA KONTEXTU */}
+    <div style={{ padding: 40, color: "white", maxWidth: 1000 }}>
+      <h1>GSS – Hlavní sklad</h1>
+      <p style={{ opacity: 0.6 }}>
+        Zde spravujete skutečný sklad firmy
+      </p>
+
+      {/* ===== CHYTRÝ ŘÁDEK (NAVEDENÍ Z GPC) ===== */}
       <div
         style={{
-          opacity: 0.7,
-          marginBottom: 10,
-          fontSize: 13,
+          marginTop: 20,
+          marginBottom: 30,
+          background: "#0b0b0b",
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 16,
         }}
       >
-        Firma: <b>{company}</b> • Modul: <b>GSS – Skladový systém</b> • Sklad:{" "}
-        <b>{warehouse}</b>
+        <input
+          autoFocus
+          placeholder="Zadej název / GPC_ID / GTIN / čtečka…"
+          value={query}
+          onChange={(e) => handleSearch(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 12,
+            fontSize: 15,
+            borderRadius: 8,
+            border: "1px solid #333",
+            background: "#000",
+            color: "white",
+          }}
+        />
+
+        {showResults && results.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            {results.map((tool) => (
+              <div
+                key={tool.gpc_id}
+                onClick={() => handleAdd(tool)}
+                onDoubleClick={() => handleAdd(tool)}
+                style={{
+                  padding: 12,
+                  border: "1px solid #333",
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  cursor: "pointer",
+                  background: "#111",
+                }}
+              >
+                <strong>{tool.name}</strong>
+                <div style={{ fontSize: 12, opacity: 0.6 }}>
+                  {tool.manufacturer} · {tool.gpc_id}
+                  {tool.gtin ? ` · GTIN ${tool.gtin}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showResults && results.length === 0 && (
+          <div style={{ marginTop: 12, opacity: 0.5 }}>
+            Nic nenalezeno
+          </div>
+        )}
       </div>
 
-      <h1>GSS – Hlavní sklad</h1>
-      <p style={{ opacity: 0.7 }}>Centrální sklad firmy</p>
-
-      {/* TLAČÍTKO */}
-      <button
-        onClick={() => setShowPicker((v) => !v)}
-        style={{
-          background: "#2563eb",
-          padding: "10px 16px",
-          borderRadius: 8,
-          fontWeight: 600,
-          marginBottom: 20,
-        }}
-      >
-        + Přidat položku do hlavního skladu
-      </button>
-
-      {/* INLINE GPC PICKER */}
-      {showPicker && (
-        <div
-          style={{
-            border: "1px solid #222",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 30,
-            background: "#0b0b0b",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>
-            Vyber položku z katalogu (GPC)
+      {/* ===== SEZNAM SKLADU ===== */}
+      <div>
+        {stock.length === 0 && (
+          <div style={{ opacity: 0.5 }}>
+            Zatím žádné položky ve skladu
           </div>
+        )}
 
-          {gpcData.map((tool) => (
-            <div
-              key={tool.id}
-              onClick={() => {
-                addStockItemFromGPC(tool, company, warehouse);
-                setShowPicker(false);
-              }}
-              style={{
-                padding: 12,
-                borderBottom: "1px solid #1f1f1f",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{tool.name}</div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {tool.manufacturer} • {tool.type}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* OBSAH SKLADU */}
-      {items.length === 0 && (
-        <div style={{ opacity: 0.6, marginTop: 20 }}>
-          Tento sklad je zatím prázdný
-        </div>
-      )}
-
-      <div style={{ marginTop: 20 }}>
-        {items.map((item) => (
+        {stock.map((item) => (
           <div
-            key={item.id}
+            key={item.gss_stock_id}
+            onClick={() =>
+              (window.location.href = `/gss/${item.gss_stock_id}`)
+            }
             style={{
               border: "1px solid #222",
               borderRadius: 12,
               padding: 16,
-              marginBottom: 10,
+              marginBottom: 12,
+              cursor: "pointer",
               background: "#0b0b0b",
             }}
           >
-            <div style={{ fontWeight: 700 }}>{item.name}</div>
-            <div style={{ opacity: 0.75 }}>
-              Stav: <b>{item.qty} ks</b>
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              MIN: {item.min ?? "—"} / MAX: {item.max ?? "—"}
+            <strong>{item.name}</strong>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 16,
+                marginTop: 6,
+                fontSize: 13,
+                opacity: 0.8,
+              }}
+            >
+              <div>Stav: {item.quantity} ks</div>
+              <div>MIN: {item.min ?? "—"}</div>
+              <div>MAX: {item.max ?? "—"}</div>
             </div>
           </div>
         ))}
@@ -115,3 +164,4 @@ export default function GSSPage() {
     </div>
   );
 }
+

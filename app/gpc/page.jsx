@@ -1,87 +1,92 @@
 "use client";
 
-import Link from "next/link";
-import tools from "./data";
+import { useRouter } from "next/navigation";
+import { gpcTools } from "./data/gpcTools";
 
-export default function GpcPage() {
+export default function GPCPage() {
+  const router = useRouter();
+
   return (
-    <div style={{ padding: 30, maxWidth: 1000, color: "white" }}>
-
-      {/* ===== STICKY HEADER ===== */}
+    <div style={{ padding: "32px 24px", color: "white" }}>
+      {/* FIXNÍ HLAVIČKA */}
       <div
         style={{
           position: "sticky",
           top: 0,
-          zIndex: 20,
+          zIndex: 10,
           background: "#000",
           paddingBottom: 16,
-          marginBottom: 20,
+          marginBottom: 24,
           borderBottom: "1px solid #222",
         }}
       >
-        <Link
-          href="/dashboard"
+        <button
+          onClick={() => router.push("/dashboard")}
           style={{
-            display: "inline-block",
-            padding: "8px 14px",
-            borderRadius: 8,
+            marginBottom: 12,
             background: "#1f2937",
+            border: "1px solid #333",
             color: "white",
-            textDecoration: "none",
-            fontSize: 14,
+            padding: "6px 12px",
+            borderRadius: 8,
+            cursor: "pointer",
           }}
         >
           ← Zpět na Dashboard
-        </Link>
+        </button>
 
-        <h1 style={{ marginTop: 16 }}>
+        <h1 style={{ fontSize: 28, marginBottom: 4 }}>
           GPC – Seznam nástrojů (interní)
         </h1>
-
-        <p style={{ opacity: 0.6 }}>
+        <div style={{ opacity: 0.6 }}>
           Interní katalog nástrojů (zákazník GPC přímo neupravuje)
-        </p>
+        </div>
       </div>
 
-      {/* ===== LIST KARET POD SEBE ===== */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {tools.map((tool) => (
+      {/* CENTRÁLNÍ OBSAH */}
+      <div
+        style={{
+          maxWidth: 1000,
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        {gpcTools.map((tool) => (
           <div
-            key={tool.gpc_id}
+            key={tool.id}
             style={{
               border: "1px solid #222",
-              borderRadius: 12,
-              padding: 16,
+              borderRadius: 14,
+              padding: "16px 18px",
               background: "#0b0b0b",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              gap: 20,
             }}
           >
             <div>
-              <div style={{ fontWeight: 700 }}>
-                {tool.name}
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>
-                {tool.manufacturer} · {tool.type}
+              <div style={{ fontWeight: 700 }}>{tool.name}</div>
+              <div style={{ opacity: 0.6, fontSize: 13 }}>
+                {tool.manufacturer} • {tool.type}
               </div>
             </div>
 
-            <Link
-              href={`/gpc/${tool.gpc_id}`}
+            <button
+              onClick={() => router.push(`/gpc/${tool.id}`)}
               style={{
-                padding: "6px 12px",
-                borderRadius: 6,
                 background: "#2563eb",
+                border: "none",
                 color: "white",
-                textDecoration: "none",
-                fontSize: 13,
-                whiteSpace: "nowrap",
+                padding: "8px 14px",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontWeight: 600,
               }}
             >
               Detail →
-            </Link>
+            </button>
           </div>
         ))}
       </div>
