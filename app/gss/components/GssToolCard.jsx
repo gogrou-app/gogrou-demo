@@ -21,44 +21,61 @@ export default function GssToolCard({ item }) {
       style={{
         border: "1px solid #222",
         borderRadius: 12,
-        padding: 16,
+        padding: "14px 16px",
         marginBottom: 12,
         background: "#0b0b0b",
+        display: "grid",
+        gridTemplateColumns: "1.5fr 1fr 1fr auto",
+        alignItems: "center",
+        gap: 16,
       }}
     >
-      {/* NÁZEV */}
-      <div style={{ fontSize: 16, fontWeight: 700 }}>
-        {item.name}
+      {/* LEVÁ ČÁST – NÁZEV */}
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>
+          {item.name}
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+          {item.type || "Nástroj"} · GPC: {item.gpc_id}
+        </div>
+
+        {item.service_enabled && (
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+            🔧 Brousitelný ({item.max_resharpen}×)
+          </div>
+        )}
       </div>
 
-      {/* INFO */}
-      <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-        {item.type || "Nástroj"} · GPC: {item.gpc_id}
+      {/* STŘED – POČTY */}
+      <div style={{ fontSize: 13 }}>
+        <div>Celkem: <b>{total}</b></div>
+        <div style={{ opacity: 0.7 }}>
+          MIN: {min ?? "–"} / MAX: {max ?? "–"}
+        </div>
       </div>
 
       {/* STAV */}
       <div
         style={{
-          display: "flex",
-          gap: 16,
-          marginTop: 10,
           fontSize: 13,
+          fontWeight: 700,
+          color: statusColor,
+          textAlign: "center",
         }}
       >
-        <div>Celkem: <b>{total}</b> ks</div>
-        <div>MIN: {min ?? "-"}</div>
-        <div>MAX: {max ?? "-"}</div>
-        <div style={{ fontWeight: "bold", color: statusColor }}>
-          {statusLabel}
-        </div>
+        {statusLabel}
       </div>
 
-      {/* ŽIVOTNÍ CYKLUS – patří SEM (GSS) */}
-      {item.service_enabled && (
-        <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-          🔧 Brousitelný ({item.max_resharpen}×)
-        </div>
-      )}
+      {/* AKCE / DETAIL (připraveno do budoucna) */}
+      <div
+        style={{
+          fontSize: 12,
+          opacity: 0.6,
+          cursor: "pointer",
+        }}
+      >
+        Detail →
+      </div>
     </div>
   );
-}
+
