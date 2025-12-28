@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import ContextBar from "../components/ContextBar";
+import ContextHeader from "../components/ContextHeader";
 import { useAppContext } from "../context/AppContext";
+
+export const dynamic = "force-dynamic";
 
 export default function DashboardPage() {
   const { setModule } = useAppContext();
@@ -12,12 +14,11 @@ export default function DashboardPage() {
   }, [setModule]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <ContextBar />
-
+    <div style={{ padding: 30, color: "white" }}>
+      <ContextHeader />
       <h1>Dashboard</h1>
       <p style={{ opacity: 0.7 }}>
-        Tady bude přehled: upozornění, min/max, servis, objednávky…
+        Tady bude později přehled: upozornění, min/max, servis, objednávky…
       </p>
     </div>
   );
