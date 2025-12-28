@@ -1,19 +1,16 @@
-import "./globals.css";
-import { AppProvider } from "./context/AppContext";
-import Sidebar from "./Sidebar";
+"use client";
 
-export const metadata = {
-  title: "Gogrou DEMO",
-  description: "Gogrou – unified manufacturing platform",
-};
+import { AppProvider } from "./context/AppContext";
+import "./globals.css";
+import Sidebar from "./Sidebar";
 
 export default function RootLayout({ children }) {
   return (
     <html lang="cs">
-      <body style={{ display: "flex", minHeight: "100vh" }}>
+      <body style={{ display: "flex", minHeight: "100vh", background: "#0f172a" }}>
         <AppProvider>
           <Sidebar />
-          <main style={{ flex: 1, background: "#111" }}>
+          <main style={{ flex: 1 }}>
             {children}
           </main>
         </AppProvider>
