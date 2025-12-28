@@ -1,13 +1,21 @@
-"use client";
-
-import GssToolCard from "./components/GssToolCard";
 import stockData from "./data/stock";
+import GssToolCard from "./components/GssToolCard";
 
 export default function GssPage() {
   return (
-    <div style={{ padding: 24, maxWidth: 1200 }}>
-      <h1 style={{ fontSize: 24, marginBottom: 8 }}>
-        Sklad nástrojů (interní)
+    <div
+      style={{
+        width: "100%",
+        maxWidth: 1100,
+        margin: "0 auto",
+        padding: "24px 24px 80px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+      }}
+    >
+      <h1 style={{ fontSize: 26, marginBottom: 4 }}>
+        Sklad nástrojů
       </h1>
 
       <div style={{ opacity: 0.6, marginBottom: 20 }}>
