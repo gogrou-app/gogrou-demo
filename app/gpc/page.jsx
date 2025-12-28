@@ -1,95 +1,76 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { gpcTools } from "./data/gpcTools";
+import { useEffect } from "react";
+import tools from "./data"; // ✅ SPRÁVNÝ IMPORT
+import { useAppContext } from "../context/AppContext";
+import Link from "next/link";
 
-export default function GPCPage() {
-  const router = useRouter();
+export default function GpcPage() {
+  const { setModule } = useAppContext();
+
+  useEffect(() => {
+    setModule("GPC – Interní katalog");
+  }, [setModule]);
 
   return (
-    <div style={{ padding: "32px 24px", color: "white" }}>
-      {/* FIXNÍ HLAVIČKA */}
-      <div
+    <div style={{ padding: 40, color: "white", maxWidth: 1100 }}>
+      <Link
+        href="/dashboard"
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          background: "#000",
-          paddingBottom: 16,
-          marginBottom: 24,
-          borderBottom: "1px solid #222",
+          display: "inline-block",
+          marginBottom: 20,
+          padding: "8px 14px",
+          background: "#222",
+          borderRadius: 8,
+          textDecoration: "none",
+          color: "white",
+          fontSize: 14,
         }}
       >
-        <button
-          onClick={() => router.push("/dashboard")}
+        ← Zpět na Dashboard
+      </Link>
+
+      <h1>GPC – Seznam nástrojů (interní)</h1>
+      <p style={{ opacity: 0.6, marginBottom: 30 }}>
+        Interní katalog nástrojů (zákazník GPC přímo neupravuje)
+      </p>
+
+      {tools.map((tool) => (
+        <div
+          key={tool.gpc_id}
           style={{
-            marginBottom: 12,
-            background: "#1f2937",
-            border: "1px solid #333",
-            color: "white",
-            padding: "6px 12px",
-            borderRadius: 8,
-            cursor: "pointer",
+            border: "1px solid #222",
+            borderRadius: 14,
+            padding: 18,
+            marginBottom: 14,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: "#0b0b0b",
           }}
         >
-          ← Zpět na Dashboard
-        </button>
+          <div>
+            <div style={{ fontWeight: 700 }}>{tool.name}</div>
+            <div style={{ fontSize: 13, opacity: 0.7 }}>
+              {tool.manufacturer} · {tool.type}
+            </div>
+          </div>
 
-        <h1 style={{ fontSize: 28, marginBottom: 4 }}>
-          GPC – Seznam nástrojů (interní)
-        </h1>
-        <div style={{ opacity: 0.6 }}>
-          Interní katalog nástrojů (zákazník GPC přímo neupravuje)
-        </div>
-      </div>
-
-      {/* CENTRÁLNÍ OBSAH */}
-      <div
-        style={{
-          maxWidth: 1000,
-          margin: "0 auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-        }}
-      >
-        {gpcTools.map((tool) => (
-          <div
-            key={tool.id}
+          <Link
+            href={`/gpc/${tool.gpc_id}`}
             style={{
-              border: "1px solid #222",
-              borderRadius: 14,
-              padding: "16px 18px",
-              background: "#0b0b0b",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
+              padding: "8px 14px",
+              background: "#2563eb",
+              borderRadius: 8,
+              color: "white",
+              textDecoration: "none",
+              fontSize: 14,
             }}
           >
-            <div>
-              <div style={{ fontWeight: 700 }}>{tool.name}</div>
-              <div style={{ opacity: 0.6, fontSize: 13 }}>
-                {tool.manufacturer} • {tool.type}
-              </div>
-            </div>
-
-            <button
-              onClick={() => router.push(`/gpc/${tool.id}`)}
-              style={{
-                background: "#2563eb",
-                border: "none",
-                color: "white",
-                padding: "8px 14px",
-                borderRadius: 8,
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Detail →
-            </button>
-          </div>
-        ))}
-      </div>
+            Detail →
+          </Link>
+        </div>
+      ))}
     </div>
   );
 }
