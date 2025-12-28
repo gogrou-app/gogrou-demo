@@ -3,53 +3,32 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  getMainWarehouseStock,
+  getStockItemById,
   updateStockMinMax,
   receiveStock,
   issueStock,
-  updateServiceConfig,
-  incrementUseCount,
+  returnFromProduction,
 } from "../data/gssStore";
 
 export default function GssStockDetailPage() {
   const { stockId } = useParams();
   const router = useRouter();
 
-  const [item, setItem] = useState(null);
+  const [ctx, setCtx] = useState(null);
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
   const [receiveQty, setReceiveQty] = useState("");
   const [issueQty, setIssueQty] = useState("");
 
-  const [service, setService] = useState({
-    sharpenable: false,
-    max_sharpenings: 0,
-    grinder: "MTTM",
-    note: "",
-  });
-
   useEffect(() => {
-    const stock = getMainWarehouseStock();
-    const found = stock.find(
-      (s) => String(s.gss_stock_id) === String(stockId)
-    );
-    if (!found) return;
-
-    setItem(found);
-    setMin(found.min ?? "");
-    setMax(found.max ?? "");
-    setService(
-      found.service ?? {
-        sharpenable: false,
-        max_sharpenings: 0,
-        grinder: "MTTM",
-        note: "",
-        use_count: 0,
-      }
-    );
+    const data = getStockItemById(stockId);
+    if (!data) return;
+    setCtx(data);
+    setMin(data.item.min ?? "");
+    setMax(data.item.max ?? "");
   }, [stockId]);
 
-  if (!item) {
+  if (!ctx) {
     return (
       <div style={{ padding: 40, color: "white" }}>
         <h2>Položka nenalezena</h2>
@@ -60,92 +39,24 @@ export default function GssStockDetailPage() {
     );
   }
 
-  const maxUses = 1 + (service.max_sharpenings || 0);
-  const recommendDiscard =
-    service.sharpenable &&
-    service.use_count >= maxUses;
+  const { item, company, warehouse } = ctx;
 
   return (
     <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
-      <button
-        onClick={() => router.push("/gss")}
-        style={{ marginBottom: 20 }}
-      >
-        ← Zpět na hlavní sklad
+      <button onClick={() => router.push("/gss")}>
+        ← Zpět na sklad
       </button>
 
       <h1>{item.name}</h1>
       <p style={{ opacity: 0.6 }}>
-        GSS STOCK · {item.gss_stock_id}
+        Firma: {company.name} · Sklad: {warehouse.name}
       </p>
 
-      {/* ===== STAV / SKLADEM ===== */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-          background: "#0b0b0b",
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ fontSize: 14, opacity: 0.6 }}>
-          Skladem
-        </div>
-        <div style={{ fontSize: 28, fontWeight: "bold" }}>
-          {item.quantity} ks
-        </div>
-
-        <div style={{ marginTop: 10 }}>
-          <button
-            onClick={() => incrementUseCount(item.gss_stock_id)}
-            style={{ marginRight: 8 }}
-          >
-            Vrátit z výroby
-          </button>
-          <button>Rozhodnutí (panel)</button>
-        </div>
-
-        {/* ===== STAV POUŽITÍ / ŽIVOTNOST ===== */}
-        {service.sharpenable && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "10px 14px",
-              borderRadius: 10,
-              fontWeight: "bold",
-              background: recommendDiscard
-                ? "#2a1414"
-                : service.use_count >= maxUses - 1
-                ? "#2a2414"
-                : "#142a1a",
-              border: "1px solid #333",
-              color: recommendDiscard
-                ? "#ffb4b4"
-                : service.use_count >= maxUses - 1
-                ? "#ffe7a3"
-                : "#b6f3c2",
-            }}
-          >
-            🔧 Použití: {service.use_count} / {maxUses}
-            {recommendDiscard && (
-              <span style={{ marginLeft: 10 }}>
-                ⚠️ Doporučeno vyřadit
-              </span>
-            )}
-          </div>
-        )}
+      <div style={{ marginTop: 20 }}>
+        <strong>Stav:</strong> {item.quantity} ks
       </div>
 
-      {/* ===== MIN / MAX ===== */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-          marginBottom: 18,
-        }}
-      >
+      <div style={{ marginTop: 20 }}>
         <h3>Min / Max</h3>
         <input
           placeholder="MIN"
@@ -160,11 +71,7 @@ export default function GssStockDetailPage() {
         />
         <button
           onClick={() =>
-            updateStockMinMax(
-              item.gss_stock_id,
-              Number(min),
-              Number(max)
-            )
+            updateStockMinMax(item.gss_stock_id, min, max)
           }
           style={{ marginLeft: 10 }}
         >
@@ -172,48 +79,31 @@ export default function GssStockDetailPage() {
         </button>
       </div>
 
-      {/* ===== PŘÍJEM / VÝDEJ ===== */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-          marginBottom: 18,
-        }}
-      >
-        <h3>Příjem / Výdej (jednoduše)</h3>
-
+      <div style={{ marginTop: 20 }}>
+        <h3>Příjem</h3>
         <input
-          placeholder="Příjem +ks"
           value={receiveQty}
           onChange={(e) => setReceiveQty(e.target.value)}
         />
         <button
           onClick={() => {
-            receiveStock(
-              item.gss_stock_id,
-              Number(receiveQty)
-            );
+            receiveStock(item.gss_stock_id, receiveQty);
             setReceiveQty("");
           }}
         >
           Přijmout
         </button>
+      </div>
 
-        <br />
-
+      <div style={{ marginTop: 20 }}>
+        <h3>Výdej</h3>
         <input
-          placeholder="Výdej -ks"
           value={issueQty}
           onChange={(e) => setIssueQty(e.target.value)}
-          style={{ marginTop: 10 }}
         />
         <button
           onClick={() => {
-            issueStock(
-              item.gss_stock_id,
-              Number(issueQty)
-            );
+            issueStock(item.gss_stock_id, issueQty);
             setIssueQty("");
           }}
         >
@@ -221,84 +111,11 @@ export default function GssStockDetailPage() {
         </button>
       </div>
 
-      {/* ===== SERVIS / OSTŘENÍ ===== */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 18,
-        }}
-      >
-        <h3>Servis / ostření</h3>
-
-        <label>
-          <input
-            type="checkbox"
-            checked={service.sharpenable}
-            onChange={(e) =>
-              setService({
-                ...service,
-                sharpenable: e.target.checked,
-              })
-            }
-          />
-          &nbsp;Nástroj je brousitelný
-        </label>
-
-        <div style={{ marginTop: 8 }}>
-          Max. přebroušení (X):
-          <input
-            value={service.max_sharpenings}
-            onChange={(e) =>
-              setService({
-                ...service,
-                max_sharpenings: Number(e.target.value),
-              })
-            }
-            style={{ marginLeft: 10 }}
-          />
-        </div>
-
-        <div style={{ marginTop: 8 }}>
-          Brusírna:
-          <select
-            value={service.grinder}
-            onChange={(e) =>
-              setService({
-                ...service,
-                grinder: e.target.value,
-              })
-            }
-            style={{ marginLeft: 10 }}
-          >
-            <option value="MTTM">MTTM (default)</option>
-          </select>
-        </div>
-
-        <div style={{ marginTop: 8 }}>
-          Poznámka:
-          <textarea
-            value={service.note}
-            onChange={(e) =>
-              setService({
-                ...service,
-                note: e.target.value,
-              })
-            }
-            style={{ width: "100%", marginTop: 4 }}
-          />
-        </div>
-
+      <div style={{ marginTop: 20 }}>
         <button
-          onClick={() =>
-            updateServiceConfig(
-              item.gss_stock_id,
-              service
-            )
-          }
-          style={{ marginTop: 10 }}
+          onClick={() => returnFromProduction(item.gss_stock_id)}
         >
-          Uložit servisní nastavení
+          Vrátit z výroby
         </button>
       </div>
     </div>
