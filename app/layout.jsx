@@ -1,8 +1,8 @@
-"use client";
+export const dynamic = "force-dynamic";
 
-import { AppProvider } from "./context/AppContext";
 import "./globals.css";
 import Sidebar from "./Sidebar";
+import { AppProvider } from "./context/AppContext";
 
 export default function RootLayout({ children }) {
   return (
