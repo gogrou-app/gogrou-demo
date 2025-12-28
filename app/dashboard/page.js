@@ -21,22 +21,22 @@ export default function DashboardPage() {
         />
         <Box
           title="GSS"
-          desc="Skladový systém, min/max, servis, pohyby"
+          desc="Skladový systém, pohyby, minima / maxima"
         />
         <Box
           title="SmartSplit"
-          desc="Skupinové nákupy a cenová optimalizace"
+          desc="Skupinové nákupy a cenové akce"
         />
         <Box
-          title="AI (GINA)"
-          desc="Analytika – zatím vypnuto"
+          title="AI"
+          desc="Analytika (zatím vypnuto)"
         />
       </div>
     </div>
   );
 }
 
-function Box({ title, desc }: { title: string; desc: string }) {
+function Box({ title, desc }) {
   return (
     <div
       style={{
