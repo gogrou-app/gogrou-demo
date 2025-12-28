@@ -1,28 +1,43 @@
 import "./globals.css";
-import { AppProvider } from "./context/AppContext";
 import Sidebar from "./Sidebar";
-import ContextBar from "./components/ContextBar";
 
 export const metadata = {
   title: "GOGROU DEMO",
-  description: "Preview of GPC + GSS + AI",
+  description: "Gogrou demo aplikace",
 };
-
-export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }) {
   return (
     <html lang="cs">
-      <body>
-        <AppProvider>
-          <div style={{ display: "flex" }}>
-            <Sidebar />
-            <main style={{ flex: 1 }}>
-              <ContextBar />
-              {children}
-            </main>
-          </div>
-        </AppProvider>
+      <body
+        style={{
+          margin: 0,
+          padding: 0,
+          background: "#000",
+          color: "#fff",
+          fontFamily: "Arial, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            minHeight: "100vh",
+            width: "100%",
+          }}
+        >
+          <Sidebar />
+
+          <main
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: "22px 28px",
+              overflowX: "hidden",
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );
