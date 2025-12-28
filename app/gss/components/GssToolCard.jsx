@@ -1,81 +1,75 @@
-"use client";
-
 export default function GssToolCard({ item }) {
-  const total = item.total_qty || 0;
-  const min = item.min_qty;
-  const max = item.max_qty;
+  const total = item.total ?? 0;
+  const min = item.min ?? "-";
+  const max = item.max ?? "-";
 
   let statusLabel = "OK";
-  let statusColor = "#22c55e";
+  let statusColor = "#4caf50";
 
-  if (min && total < min) {
+  if (min !== "-" && total < min) {
     statusLabel = "POD MIN";
-    statusColor = "#ef4444";
-  } else if (max && total > max) {
+    statusColor = "#f44336";
+  } else if (max !== "-" && total > max) {
     statusLabel = "NAD MAX";
-    statusColor = "#f59e0b";
+    statusColor = "#ff9800";
   }
 
   return (
     <div
       style={{
         border: "1px solid #222",
-        borderRadius: 12,
-        padding: "14px 16px",
+        borderRadius: 10,
+        padding: 16,
         marginBottom: 12,
-        background: "#0b0b0b",
-        display: "grid",
-        gridTemplateColumns: "1.5fr 1fr 1fr auto",
-        alignItems: "center",
-        gap: 16,
+        background: "#111",
       }}
     >
-      {/* LEVÁ ČÁST – NÁZEV */}
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>
-          {item.name}
-        </div>
-        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
-          {item.type || "Nástroj"} · GPC: {item.gpc_id}
-        </div>
-
-        {item.service_enabled && (
-          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-            🔧 Brousitelný ({item.max_resharpen}×)
-          </div>
-        )}
+      {/* NÁZEV */}
+      <div style={{ fontSize: 16, fontWeight: 700 }}>
+        {item.name}
       </div>
 
-      {/* STŘED – POČTY */}
-      <div style={{ fontSize: 13 }}>
-        <div>Celkem: <b>{total}</b></div>
-        <div style={{ opacity: 0.7 }}>
-          MIN: {min ?? "–"} / MAX: {max ?? "–"}
-        </div>
+      {/* INFO */}
+      <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
+        {item.type || "Nástroj"} · GPC: {item.gpc_id}
       </div>
 
       {/* STAV */}
       <div
         style={{
+          display: "flex",
+          gap: 16,
+          marginTop: 10,
           fontSize: 13,
-          fontWeight: 700,
-          color: statusColor,
-          textAlign: "center",
+          alignItems: "center",
         }}
       >
-        {statusLabel}
+        <div>Celkem: <b>{total}</b> ks</div>
+        <div>MIN: {min}</div>
+        <div>MAX: {max}</div>
+
+        <div
+          style={{
+            fontWeight: "bold",
+            color: statusColor,
+          }}
+        >
+          {statusLabel}
+        </div>
       </div>
 
-      {/* AKCE / DETAIL (připraveno do budoucna) */}
-      <div
-        style={{
-          fontSize: 12,
-          opacity: 0.6,
-          cursor: "pointer",
-        }}
-      >
-        Detail →
-      </div>
+      {/* ŽIVOTNÍ CYKLUS */}
+      {item.service_enabled && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            opacity: 0.75,
+          }}
+        >
+          🔧 Brousitelný ({item.max_resharpen}×)
+        </div>
+      )}
     </div>
   );
-
+}
