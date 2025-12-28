@@ -16,6 +16,7 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: 30, color: "white" }}>
       <ContextHeader />
+
       <h1>Dashboard</h1>
       <p style={{ opacity: 0.7 }}>
         Tady bude později přehled: upozornění, min/max, servis, objednávky…
