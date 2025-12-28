@@ -338,3 +338,18 @@ export function returnFromProduction(stockId) {
   saveState(state);
   return true;
 }
+// ------------------------------------------------------------
+// COMPATIBILITY EXPORTS (for legacy GSS pages)
+// ------------------------------------------------------------
+
+// fallback export for old imports
+export const gssData = store;
+
+// legacy no-op functions (UI expects them)
+export function incrementUseCount() {
+  // intentionally empty – handled in V2 logic later
+}
+
+export function updateServiceConfig() {
+  // intentionally empty – handled in V2 logic later
+}
