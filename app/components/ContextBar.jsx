@@ -1,22 +1,38 @@
 "use client";
 
-export default function ContextBar({ company, module, warehouse, item }) {
+import { usePathname } from "next/navigation";
+import { useAppContext } from "../context/AppContext";
+
+export default function ContextBar() {
+  const pathname = usePathname();
+  const { company, warehouse } = useAppContext();
+
+  let moduleLabel = "Dashboard";
+
+  if (pathname.startsWith("/gpc")) moduleLabel = "GPC – Produktový katalog";
+  else if (pathname.startsWith("/gss")) moduleLabel = "GSS – Skladový systém";
+  else if (pathname.startsWith("/ss")) moduleLabel = "SmartSplit";
+  else if (pathname.startsWith("/ai")) moduleLabel = "AI Assistant";
+
   return (
-    <div style={bar}>
-      <strong>Firma:</strong> {company}
-      {" • "}
-      <strong>Modul:</strong> {module}
-      {warehouse && <> {" • "} <strong>Sklad:</strong> {warehouse}</>}
-      {item && <> {" • "} <strong>Položka:</strong> {item}</>}
+    <div
+      style={{
+        background: "#0b0b0b",
+        borderBottom: "1px solid #222",
+        padding: "10px 16px",
+        fontSize: 14,
+        color: "#e5e7eb",
+      }}
+    >
+      <strong>Firma:</strong> {company?.name}
+      {"  •  "}
+      <strong>Modul:</strong> {moduleLabel}
+      {warehouse && (
+        <>
+          {"  •  "}
+          <strong>Sklad:</strong> {warehouse.name}
+        </>
+      )}
     </div>
   );
 }
-
-const bar = {
-  background: "#0a0a0a",
-  border: "1px solid #222",
-  borderRadius: 10,
-  padding: "10px 16px",
-  marginBottom: 24,
-  fontSize: 13,
-};
