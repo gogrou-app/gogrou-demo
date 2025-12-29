@@ -1,184 +1,134 @@
-import Link from "next/link";
-import { gpcData } from "../data";
+import gpcData from "../data";
 
-export default function GPCDetail({ params }) {
-  const item = gpcData.find((i) => i.id === params.id);
+export default function GPCDetailPage({ params }) {
+  const product = gpcData.find(p => p.id === params.id);
 
-  if (!item) {
+  if (!product) {
     return (
-      <div style={{ padding: 40, color: "#fff" }}>
+      <div style={{ padding: "40px", color: "#fff" }}>
         Produkt nenalezen
       </div>
     );
   }
 
   return (
-    <div style={styles.wrapper}>
-      {/* HLAVIČKA – BEZ GSS TLAČÍTEK */}
-      <div style={styles.header}>
-        <Link href="/gpc" style={styles.back}>
-          ← Zpět do GPC
-        </Link>
-      </div>
-
-      {/* TITUL */}
-      <div style={styles.titleBlock}>
-        <div style={styles.label}>
+    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px" }}>
+      
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ color: "#888", fontSize: "13px" }}>
           GPC – Produktová karta (statická pravda)
         </div>
 
-        <h1 style={styles.title}>{item.name}</h1>
+        <h1 style={{ fontSize: "32px", margin: "8px 0" }}>
+          {product.name}
+        </h1>
 
-        <div style={styles.subtitle}>
-          {item.brand} · {item.type}
+        <div style={{ color: "#aaa", fontSize: "15px" }}>
+          {product.brand} · {product.type}
         </div>
 
-        <div style={styles.meta}>
-          GPC ID: {item.id} · GTIN: {item.gtin}
+        <div style={{ color: "#666", fontSize: "13px", marginTop: "6px" }}>
+          GPC ID: {product.id} · GTIN: {product.gtin}
         </div>
       </div>
 
       {/* OBRÁZKY */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Obrázky / výkres</h3>
+      <div style={box}>
+        <h2 style={boxTitle}>Obrázky / výkres</h2>
 
-        <div style={styles.imageGrid}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
           <div>
-            <div style={styles.imageLabel}>Hlavní foto</div>
-            <div style={styles.imageBox}>
-              {item.image ? (
-                <img src={item.image} style={styles.image} />
-              ) : (
-                "—"
-              )}
-            </div>
+            <div style={label}>Hlavní foto</div>
+            <img
+              src={product.image}
+              alt={product.name}
+              style={img}
+            />
           </div>
 
           <div>
-            <div style={styles.imageLabel}>Výkres</div>
-            <div style={styles.imageBox}>
-              {item.drawing ? (
-                <img src={item.drawing} style={styles.image} />
-              ) : (
-                "—"
-              )}
-            </div>
+            <div style={label}>Výkres</div>
+            <img
+              src={product.drawing}
+              alt="Výkres"
+              style={img}
+            />
           </div>
         </div>
       </div>
 
       {/* GEOMETRIE */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Geometrie</h3>
+      <div style={box}>
+        <h2 style={boxTitle}>Geometrie</h2>
 
-        <div style={styles.grid}>
+        <div style={grid}>
           <div>
-            <div style={styles.key}>Průměr (mm)</div>
-            <div style={styles.value}>{item.diameter}</div>
+            <div style={label}>Průměr (mm)</div>
+            <div style={value}>{product.diameter}</div>
+          </div>
+
+          <div>
+            <div style={label}>Délka břitu (mm)</div>
+            <div style={value}>{product.cutLength}</div>
+          </div>
+
+          <div>
+            <div style={label}>Celková délka (mm)</div>
+            <div style={value}>{product.totalLength}</div>
+          </div>
+
+          <div>
+            <div style={label}>Počet zubů</div>
+            <div style={value}>{product.flutes}</div>
           </div>
         </div>
       </div>
+
+      {/* POPIS */}
+      <div style={box}>
+        <h2 style={boxTitle}>Popis</h2>
+        <div style={{ color: "#ccc", fontSize: "14px", lineHeight: "1.6" }}>
+          {product.description}
+        </div>
+      </div>
+
     </div>
   );
 }
 
-/* ===================== STYLY ===================== */
+/* ===== STYLY ===== */
 
-const styles = {
-  wrapper: {
-    padding: "32px 40px",
-    color: "#fff",
-    maxWidth: 1100,
-  },
+const box = {
+  background: "#111",
+  borderRadius: "14px",
+  padding: "24px",
+  marginBottom: "24px",
+};
 
-  header: {
-    marginBottom: 20,
-  },
+const boxTitle = {
+  fontSize: "18px",
+  marginBottom: "16px",
+};
 
-  back: {
-    color: "#aaa",
-    textDecoration: "none",
-    fontSize: 14,
-  },
+const label = {
+  fontSize: "12px",
+  color: "#777",
+  marginBottom: "6px",
+};
 
-  titleBlock: {
-    marginBottom: 30,
-  },
+const value = {
+  fontSize: "15px",
+  fontWeight: "600",
+};
 
-  label: {
-    fontSize: 13,
-    color: "#888",
-    marginBottom: 6,
-  },
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "16px",
+};
 
-  title: {
-    fontSize: 34,
-    margin: 0,
-  },
-
-  subtitle: {
-    fontSize: 16,
-    marginTop: 6,
-  },
-
-  meta: {
-    fontSize: 13,
-    color: "#aaa",
-    marginTop: 6,
-  },
-
-  card: {
-    background: "#111",
-    borderRadius: 14,
-    padding: 24,
-    marginBottom: 24,
-  },
-
-  cardTitle: {
-    margin: 0,
-    marginBottom: 16,
-  },
-
-  imageGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 20,
-  },
-
-  imageLabel: {
-    fontSize: 13,
-    color: "#aaa",
-    marginBottom: 6,
-  },
-
-  imageBox: {
-    height: 200,
-    border: "1px solid #333",
-    borderRadius: 10,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#555",
-  },
-
-  image: {
-    maxWidth: "100%",
-    maxHeight: "100%",
-  },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 20,
-  },
-
-  key: {
-    fontSize: 13,
-    color: "#aaa",
-  },
-
-  value: {
-    fontSize: 18,
-    marginTop: 4,
-  },
+const img = {
+  width: "100%",
+  borderRadius: "10px",
+  background: "#000",
 };
