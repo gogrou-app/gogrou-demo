@@ -1,143 +1,184 @@
-import Image from "next/image";
+import Link from "next/link";
+import { gpcData } from "../data";
 
-export default function GPCDetailPage() {
-  const product = {
-    name: "Walter DC170-05-10.500A1-WJ30EJ",
-    manufacturer: "Walter",
-    type: "Vrták – monolitní TK",
-    gpcId: "73-555-321-50392",
-    gtin: "06745276",
-    images: {
-      main: "/images/tools/walter_dc170.png",
-      drawing: "/images/tools/walter_dc170_drawing.png",
-    },
-    geometry: {
-      diameter: "10.5",
-    },
-  };
+export default function GPCDetail({ params }) {
+  const item = gpcData.find((i) => i.id === params.id);
+
+  if (!item) {
+    return (
+      <div style={{ padding: 40, color: "#fff" }}>
+        Produkt nenalezen
+      </div>
+    );
+  }
 
   return (
-    <div style={styles.page}>
+    <div style={styles.wrapper}>
+      {/* HLAVIČKA – BEZ GSS TLAČÍTEK */}
       <div style={styles.header}>
-        <div style={styles.metaTitle}>GPC – Produktová karta (statická pravda)</div>
-        <h1 style={styles.title}>{product.name}</h1>
-        <div style={styles.subtitle}>
-          {product.manufacturer} · {product.type}
+        <Link href="/gpc" style={styles.back}>
+          ← Zpět do GPC
+        </Link>
+      </div>
+
+      {/* TITUL */}
+      <div style={styles.titleBlock}>
+        <div style={styles.label}>
+          GPC – Produktová karta (statická pravda)
         </div>
+
+        <h1 style={styles.title}>{item.name}</h1>
+
+        <div style={styles.subtitle}>
+          {item.brand} · {item.type}
+        </div>
+
         <div style={styles.meta}>
-          GPC ID: {product.gpcId} · GTIN: {product.gtin}
+          GPC ID: {item.id} · GTIN: {item.gtin}
         </div>
       </div>
 
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Obrázky / výkres</h2>
-        <div style={styles.images}>
-          <div style={styles.imageBox}>
+      {/* OBRÁZKY */}
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>Obrázky / výkres</h3>
+
+        <div style={styles.imageGrid}>
+          <div>
             <div style={styles.imageLabel}>Hlavní foto</div>
-            <Image
-              src={product.images.main}
-              alt={product.name}
-              width={400}
-              height={160}
-              style={styles.image}
-            />
+            <div style={styles.imageBox}>
+              {item.image ? (
+                <img src={item.image} style={styles.image} />
+              ) : (
+                "—"
+              )}
+            </div>
           </div>
-          <div style={styles.imageBox}>
+
+          <div>
             <div style={styles.imageLabel}>Výkres</div>
-            <Image
-              src={product.images.drawing}
-              alt="Výkres"
-              width={400}
-              height={160}
-              style={styles.image}
-            />
+            <div style={styles.imageBox}>
+              {item.drawing ? (
+                <img src={item.drawing} style={styles.image} />
+              ) : (
+                "—"
+              )}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Geometrie</h2>
+      {/* GEOMETRIE */}
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>Geometrie</h3>
+
         <div style={styles.grid}>
           <div>
-            <div style={styles.label}>Průměr (mm)</div>
-            <div style={styles.value}>{product.geometry.diameter}</div>
+            <div style={styles.key}>Průměr (mm)</div>
+            <div style={styles.value}>{item.diameter}</div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
 
+/* ===================== STYLY ===================== */
+
 const styles = {
-  page: {
-    maxWidth: "1100px",
-    margin: "0 auto",
-    padding: "32px 24px 80px",
+  wrapper: {
+    padding: "32px 40px",
+    color: "#fff",
+    maxWidth: 1100,
   },
+
   header: {
-    marginBottom: "32px",
+    marginBottom: 20,
   },
-  metaTitle: {
-    fontSize: "13px",
+
+  back: {
+    color: "#aaa",
+    textDecoration: "none",
+    fontSize: 14,
+  },
+
+  titleBlock: {
+    marginBottom: 30,
+  },
+
+  label: {
+    fontSize: 13,
     color: "#888",
-    marginBottom: "8px",
+    marginBottom: 6,
   },
+
   title: {
-    fontSize: "34px",
-    fontWeight: "700",
-    marginBottom: "6px",
+    fontSize: 34,
+    margin: 0,
   },
+
   subtitle: {
-    fontSize: "16px",
-    color: "#ccc",
-    marginBottom: "6px",
+    fontSize: 16,
+    marginTop: 6,
   },
+
   meta: {
-    fontSize: "13px",
-    color: "#777",
+    fontSize: 13,
+    color: "#aaa",
+    marginTop: 6,
   },
-  section: {
-    marginTop: "32px",
-    padding: "24px",
-    background: "linear-gradient(180deg,#111,#0b0b0b)",
-    borderRadius: "14px",
+
+  card: {
+    background: "#111",
+    borderRadius: 14,
+    padding: 24,
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: "18px",
-    marginBottom: "16px",
+
+  cardTitle: {
+    margin: 0,
+    marginBottom: 16,
   },
-  images: {
+
+  imageGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: "20px",
+    gap: 20,
   },
-  imageBox: {
-    background: "#0e0e0e",
-    borderRadius: "12px",
-    padding: "16px",
-  },
+
   imageLabel: {
-    fontSize: "13px",
+    fontSize: 13,
     color: "#aaa",
-    marginBottom: "10px",
+    marginBottom: 6,
   },
+
+  imageBox: {
+    height: 200,
+    border: "1px solid #333",
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#555",
+  },
+
   image: {
-    width: "100%",
-    height: "auto",
-    objectFit: "contain",
+    maxWidth: "100%",
+    maxHeight: "100%",
   },
+
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
-    gap: "20px",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 20,
   },
-  label: {
-    fontSize: "13px",
-    color: "#888",
-    marginBottom: "4px",
+
+  key: {
+    fontSize: 13,
+    color: "#aaa",
   },
+
   value: {
-    fontSize: "16px",
-    fontWeight: "600",
+    fontSize: 18,
+    marginTop: 4,
   },
 };
