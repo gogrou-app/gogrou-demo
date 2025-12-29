@@ -1,99 +1,84 @@
-"use client";
+import { notFound } from "next/navigation";
+import gssItems from "../data/gssStore";
 
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import {
-  getStockItemById,
-  receiveStock,
-  issueStock,
-  sendToSharpening,
-} from "../data/gssStore";
+export default function GSSDetailPage({ params }) {
+  const { id } = params;
 
-export default function GSSDetailPage() {
-  const { id } = useParams();
-  const item = getStockItemById(id);
+  const item = gssItems.find((i) => i.id === id);
 
   if (!item) {
-    return (
-      <div style={{ padding: 30, color: "white" }}>
-        Položka nenalezena
-      </div>
-    );
+    return notFound();
   }
 
   return (
-    <div style={{ padding: 30, color: "white", maxWidth: 900 }}>
-      <Link href="/gss" style={{ opacity: 0.6 }}>← Zpět do skladu</Link>
+    <div style={styles.wrapper}>
+      <h1 style={styles.title}>GSS – Detail nástroje</h1>
 
-      <h1 style={{ marginTop: 20 }}>{item.name}</h1>
-      <div style={{ opacity: 0.7 }}>{item.type}</div>
+      <div style={styles.card}>
+        <div style={styles.row}>
+          <span style={styles.label}>Název</span>
+          <span>{item.name}</span>
+        </div>
 
-      {/* STAV */}
-      <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
-        <Stat label="🆕 Nové" value={item.qty_new} />
-        <Stat label="🔧 Broušené" value={item.qty_sharpened} />
-        <Stat label="↩️ Použité" value={item.qty_used} />
-      </div>
+        <div style={styles.row}>
+          <span style={styles.label}>Výrobce</span>
+          <span>{item.manufacturer}</span>
+        </div>
 
-      {/* INFO */}
-      <div style={{ marginTop: 20, fontSize: 14, opacity: 0.7 }}>
-        Brousitelný: {item.sharpenable ? `ANO (${item.max_cycles}×)` : "NE"}
-      </div>
+        <div style={styles.row}>
+          <span style={styles.label}>Typ</span>
+          <span>{item.type}</span>
+        </div>
 
-      {/* AKCE */}
-      <div style={{ marginTop: 30, display: "flex", gap: 12 }}>
-        <Action
-          label="+ Příjem"
-          onClick={() => receiveStock(id, 1)}
-        />
-        <Action
-          label="− Výdej"
-          onClick={() => issueStock(id, 1)}
-        />
-        <Action
-          label="🔧 Na broušení"
-          onClick={() => sendToSharpening(id)}
-        />
-      </div>
+        <div style={styles.row}>
+          <span style={styles.label}>Stav</span>
+          <span>{item.status}</span>
+        </div>
 
-      <div style={{ marginTop: 20, opacity: 0.5 }}>
-        (DEMO: změny jsou lokální v paměti)
+        <div style={styles.actions}>
+          <button style={styles.disabledButton} disabled>
+            Poslat na ostření (WIP)
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #222",
-        borderRadius: 10,
-        padding: 14,
-        minWidth: 120,
-        background: "#0b0b0b",
-      }}
-    >
-      <div style={{ fontSize: 13, opacity: 0.6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
-    </div>
-  );
-}
-
-function Action({ label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "10px 16px",
-        background: "#1a1a1a",
-        border: "1px solid #333",
-        borderRadius: 8,
-        color: "white",
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
+const styles = {
+  wrapper: {
+    padding: "32px",
+    maxWidth: "900px",
+  },
+  title: {
+    fontSize: "26px",
+    fontWeight: "700",
+    marginBottom: "20px",
+  },
+  card: {
+    background: "#111",
+    borderRadius: "14px",
+    padding: "24px",
+    boxShadow: "0 0 0 1px #222 inset",
+  },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: "12px",
+    fontSize: "14px",
+  },
+  label: {
+    color: "#aaa",
+  },
+  actions: {
+    marginTop: "24px",
+  },
+  disabledButton: {
+    background: "#222",
+    color: "#777",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "8px",
+    cursor: "not-allowed",
+  },
+};
