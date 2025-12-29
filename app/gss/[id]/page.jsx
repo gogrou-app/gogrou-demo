@@ -1,193 +1,88 @@
 "use client";
 
+import { useEffect } from "react";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useAppContext } from "../../context/AppContext";
+import { gssData } from "../data/gssStore";
 
-import {
-  getStockItemById,
-  receiveStock,
-  issueStock,
-  updateStockMinMax,
-  sendToGrinding,
-  returnFromGrinding,
-} from "../data/gssStore";
-
-export default function GssStockDetailPage() {
+export default function GssItemDetailPage() {
   const { id } = useParams();
-
-  const [item, setItem] = useState(null);
-  const [inQty, setInQty] = useState("");
-  const [outQty, setOutQty] = useState("");
-  const [min, setMin] = useState("");
-  const [max, setMax] = useState("");
-
-  function refresh() {
-    const data = getStockItemById(id);
-    setItem({ ...data });
-    setMin(data?.min ?? "");
-    setMax(data?.max ?? "");
-  }
+  const { company, warehouse, setModule } = useAppContext();
 
   useEffect(() => {
-    refresh();
-  }, [id]);
+    setModule("GSS – Detail položky");
+  }, [setModule]);
+
+  const items = gssData?.[company]?.[warehouse] || [];
+  const item = items.find((i) => i.id === id);
 
   if (!item) {
     return (
-      <div style={{ padding: 40, color: "white" }}>
-        <h2>Položka nenalezena</h2>
+      <div style={{ padding: 30, color: "white" }}>
+        Položka nenalezena
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+    <div style={{ padding: 30, color: "white", maxWidth: 900 }}>
       <h1>{item.name}</h1>
+      <p style={{ opacity: 0.7 }}>{item.type}</p>
 
-      <div style={{ opacity: 0.7, marginBottom: 20 }}>
-        ID: {item.id}
-      </div>
+      <hr style={{ margin: "20px 0", borderColor: "#222" }} />
 
-      {/* STAV */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 20,
-          background: "#0b0b0b",
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ fontSize: 14, opacity: 0.6 }}>Skladem</div>
-        <div style={{ fontSize: 32, fontWeight: "bold" }}>
-          {item.count} ks
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div>
+          <h3>📦 Stav kusů</h3>
+          <div>Nové: <b>{item.qty_new || 0}</b></div>
+          <div>Broušené: <b>{item.qty_sharpened || 0}</b></div>
+          <div>Vrácené: <b>{item.qty_used || 0}</b></div>
         </div>
 
-        {item.grinding && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: 10,
-              borderRadius: 8,
-              background: "#2a1f14",
-              color: "#ffd089",
-              fontWeight: "bold",
-            }}
-          >
-            🔧 NÁSTROJ JE NA BROUŠENÍ
+        <div>
+          <h3>⚙️ Nastavení</h3>
+          <div>
+            Brousitelný:{" "}
+            <b>{item.resharpenable ? "ANO" : "NE"}</b>
           </div>
-        )}
-      </div>
-
-      {/* PŘÍJEM / VÝDEJ */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 20,
-        }}
-      >
-        <h3>Příjem / Výdej</h3>
-
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <input
-            placeholder="+ ks"
-            value={inQty}
-            onChange={(e) => setInQty(e.target.value)}
-          />
-          <button
-            onClick={() => {
-              receiveStock(item.id, Number(inQty));
-              setInQty("");
-              refresh();
-            }}
-          >
-            Přijmout
-          </button>
+          <div>
+            Max. přebroušení:{" "}
+            <b>{item.max_resharpens ?? "-"}</b>
+          </div>
+          <div>
+            DM tracking:{" "}
+            <b>{item.dm_tracking ? "ANO" : "NE"}</b>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <input
-            placeholder="- ks"
-            value={outQty}
-            onChange={(e) => setOutQty(e.target.value)}
-          />
-          <button
-            onClick={() => {
-              issueStock(item.id, Number(outQty));
-              setOutQty("");
-              refresh();
-            }}
-          >
-            Vydat
-          </button>
+        <div>
+          <h3>📊 Limity – hlavní sklad</h3>
+          <div>
+            MIN: <b>{item.min ?? "-"}</b>
+          </div>
+          <div>
+            MAX: <b>{item.max ?? "-"}</b>
+          </div>
+        </div>
+
+        <div>
+          <h3>🔁 Návrat po broušení</h3>
+          <div style={{ opacity: 0.7 }}>
+            Vrátit na původní dceřiný sklad:{" "}
+            <b>
+              {item.dm_tracking ? "ANO (DM)" : "NE"}
+            </b>
+          </div>
         </div>
       </div>
 
-      {/* MIN / MAX */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 20,
-        }}
-      >
-        <h3>Min / Max</h3>
+      <hr style={{ margin: "30px 0", borderColor: "#222" }} />
 
-        <input
-          placeholder="MIN"
-          value={min}
-          onChange={(e) => setMin(e.target.value)}
-        />
-        <input
-          placeholder="MAX"
-          value={max}
-          onChange={(e) => setMax(e.target.value)}
-          style={{ marginLeft: 10 }}
-        />
-
-        <button
-          style={{ marginLeft: 10 }}
-          onClick={() => {
-            updateStockMinMax(item.id, Number(min), Number(max));
-            refresh();
-          }}
-        >
-          Uložit
-        </button>
-      </div>
-
-      {/* BROUŠENÍ */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          padding: 20,
-        }}
-      >
-        <h3>Servis / broušení</h3>
-
-        {!item.grinding ? (
-          <button
-            onClick={() => {
-              sendToGrinding(item.id);
-              refresh();
-            }}
-          >
-            Odeslat na broušení
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              returnFromGrinding(item.id);
-              refresh();
-            }}
-          >
-            Vrátit z broušení
-          </button>
-        )}
+      <div style={{ display: "flex", gap: 12 }}>
+        <button onClick={() => console.log("ADD")}>➕ Přidat kus</button>
+        <button onClick={() => console.log("REMOVE")}>➖ Odebrat kus</button>
+        <button onClick={() => console.log("SHARPEN")}>🔧 Označit k broušení</button>
+        <button onClick={() => console.log("SCRAP")}>🗑 Vyřadit</button>
       </div>
     </div>
   );
