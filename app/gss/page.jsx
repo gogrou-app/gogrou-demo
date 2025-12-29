@@ -1,79 +1,77 @@
-"use client";
-
-import { useEffect } from "react";
+// /app/gss/page.jsx
 import Link from "next/link";
-import { useAppContext } from "../context/AppContext";
-import { gssData } from "./data/gssStore";
+
+// GSS data
+import { stockItems } from "./data/stock";
+
+// GPC data (read-only)
+import tools from "../gpc/data";
 
 export default function GSSPage() {
-  const ctx = useAppContext();
+  // napojení GSS → GPC
+  const rows = stockItems.map((stock) => {
+    const tool = tools.find((t) => t.gpc_id === stock.gpc_id);
 
-  // ✅ DEMO FALLBACK (kritické)
-  const company = ctx?.company || "DEMO";
-  const warehouse = ctx?.warehouse || "MAIN";
-  const setModule = ctx?.setModule;
-
-  useEffect(() => {
-    if (setModule) {
-      setModule("GSS – Hlavní sklad");
-    }
-  }, [setModule]);
-
-  const items = gssData?.[company]?.[warehouse] || [];
+    return {
+      ...stock,
+      tool,
+    };
+  });
 
   return (
-    <div style={{ padding: 30, color: "white", maxWidth: 1100 }}>
+    <div style={{ maxWidth: 900 }}>
       <h1>Hlavní sklad</h1>
-
-      <p style={{ opacity: 0.6 }}>
-        Firma: <b>{company}</b> • Sklad: <b>{warehouse}</b>
+      <p>
+        Firma: <b>DEMO</b> · Sklad: <b>MAIN</b>
       </p>
 
-      {items.length === 0 && (
-        <div style={{ marginTop: 20, opacity: 0.6 }}>
-          Sklad je zatím prázdný
-        </div>
-      )}
+      {rows.length === 0 && <p>Sklad je zatím prázdný</p>}
 
-      <div style={{ marginTop: 20 }}>
-        {items.map((item) => (
-          <Link
-            key={item.id}
-            href={`/gss/${item.id}`}
-            style={{ textDecoration: "none", color: "inherit" }}
-          >
-            <div
-              style={{
-                border: "1px solid #222",
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 12,
-                background: "#0b0b0b",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>{item.name}</div>
-
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
-                {item.type}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: 16,
-                  marginTop: 8,
-                  fontSize: 13,
-                }}
-              >
-                <div>🆕 {item.qty_new || 0}</div>
-                <div>🔧 {item.qty_sharpened || 0}</div>
-                <div>↩️ {item.qty_used || 0}</div>
-              </div>
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          style={{
+            background: "#111",
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 16, fontWeight: "bold" }}>
+              {row.tool ? row.tool.name : "⚠️ Neznámý nástroj"}
             </div>
+
+            <div style={{ opacity: 0.7, fontSize: 13 }}>
+              {row.tool?.manufacturer} · {row.tool?.type}
+            </div>
+
+            <div style={{ marginTop: 6 }}>
+              Skladem: <b>{row.quantity} ks</b>{" "}
+              <span style={{ opacity: 0.6 }}>
+                (min {row.min} / max {row.max})
+              </span>
+            </div>
+          </div>
+
+          <Link
+            href={`/gss/${row.id}`}
+            style={{
+              background: "#222",
+              padding: "8px 14px",
+              borderRadius: 8,
+              textDecoration: "none",
+              color: "#fff",
+              fontSize: 14,
+            }}
+          >
+            Detail →
           </Link>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,37 +1,104 @@
-const stockData = [
+// /app/gss/data/stock.js
+// GSS DEMO – skladové položky (provozní data)
+// Napojení na GPC přes gpc_id (read-only z GPC)
+
+export const stockItems = [
   {
-    id: "TK-001",
-    name: "Sandvik Coromant – Vrták",
-    type: "Vrták",
-    gpc_id: "SANDVIK-10.5-056A1",
-    total: 12,
-    min: 8,
+    id: "MAIN-0001",
+    gpc_id: "73-555-321-50391", // Sandvik vrták
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 8,
+    min: 5,
     max: 20,
-    service_enabled: true,
-    max_resharpen: 3,
+
+    // GSS životní cyklus (patří do GSS, ne do GPC)
+    resharpenable: false,
+    max_resharpens: 0,
+    service_provider: "MTTM (default)",
+    note: "DEMO položka",
   },
   {
-    id: "TK-002",
-    name: "Walter – Fréza",
-    type: "Fréza",
-    gpc_id: "WALTER-12-WK40",
-    total: 5,
-    min: 6,
+    id: "MAIN-0002",
+    gpc_id: "73-555-321-50392", // Walter vrták
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 0,
+    min: 5,
+    max: 20,
+    resharpenable: false,
+    max_resharpens: 0,
+    service_provider: "MTTM (default)",
+    note: "",
+  },
+  {
+    id: "MAIN-0003",
+    gpc_id: "73-555-321-50393", // Seco vrták
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 3,
+    min: 5,
+    max: 20,
+    resharpenable: false,
+    max_resharpens: 0,
+    service_provider: "MTTM (default)",
+    note: "",
+  },
+  {
+    id: "MAIN-0004",
+    gpc_id: "73-777-100-00001", // Walter fréza
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 2,
+    min: 2,
+    max: 10,
+    resharpenable: true,
+    max_resharpens: 6,
+    service_provider: "MTTM (default)",
+    note: "Brousitelná – DEMO",
+  },
+  {
+    id: "MAIN-0005",
+    gpc_id: "73-777-100-00002", // ISCAR fréza
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 1,
+    min: 2,
+    max: 8,
+    resharpenable: true,
+    max_resharpens: 8,
+    service_provider: "MTTM (default)",
+    note: "",
+  },
+  {
+    id: "MAIN-0006",
+    gpc_id: "73-777-100-00003", // Seco fréza
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 5,
+    min: 3,
+    max: 12,
+    resharpenable: true,
+    max_resharpens: 10,
+    service_provider: "MTTM (default)",
+    note: "",
+  },
+  {
+    id: "MAIN-0007",
+    gpc_id: "73-777-100-00004", // MTTM fréza
+    company: "DEMO",
+    warehouse: "MAIN",
+    quantity: 4,
+    min: 3,
     max: 15,
-    service_enabled: true,
-    max_resharpen: 2,
-  },
-  {
-    id: "TK-003",
-    name: "HSS – Vrták",
-    type: "Vrták",
-    gpc_id: "HSS-06-STD",
-    total: 22,
-    min: 10,
-    max: 18,
-    service_enabled: false,
-    max_resharpen: 0,
+    resharpenable: true,
+    max_resharpens: 12,
+    service_provider: "MTTM (default)",
+    note: "MTTM – DEMO flagship",
   },
 ];
 
-export default stockData;
+// helper: find by id
+export function getStockItemById(id) {
+  return stockItems.find((s) => String(s.id) === String(id)) || null;
+}
