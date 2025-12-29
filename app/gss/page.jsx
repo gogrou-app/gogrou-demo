@@ -1,3 +1,5 @@
+import Card from "../components/Card";
+
 export default function GSSPage() {
   return (
     <>
@@ -7,20 +9,26 @@ export default function GSSPage() {
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div className="card">
+        <Card
+          right={<span style={{ color: "lime" }}>OK</span>}
+        >
           <strong>Sandvik Coromant – Vrták</strong><br />
-          Celkem: 12 ks | MIN: 8 | MAX: 20 | <span style={{ color: "lime" }}>OK</span>
-        </div>
+          Celkem: 12 ks | MIN: 8 | MAX: 20
+        </Card>
 
-        <div className="card">
+        <Card
+          right={<span style={{ color: "red" }}>POD MIN</span>}
+        >
           <strong>Walter – Fréza</strong><br />
-          Celkem: 5 ks | MIN: 6 | MAX: 15 | <span style={{ color: "red" }}>POD MIN</span>
-        </div>
+          Celkem: 5 ks | MIN: 6 | MAX: 15
+        </Card>
 
-        <div className="card">
+        <Card
+          right={<span style={{ color: "orange" }}>NAD MAX</span>}
+        >
           <strong>HSS – Vrták</strong><br />
-          Celkem: 22 ks | MIN: 10 | MAX: 18 | <span style={{ color: "orange" }}>NAD MAX</span>
-        </div>
+          Celkem: 22 ks | MIN: 10 | MAX: 18
+        </Card>
       </div>
     </>
   );

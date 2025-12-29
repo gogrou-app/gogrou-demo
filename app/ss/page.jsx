@@ -1,3 +1,5 @@
+import Card from "../components/Card";
+
 export default function SmartSplitPage() {
   return (
     <>
@@ -6,10 +8,10 @@ export default function SmartSplitPage() {
         Skupinové nákupy a cenové akce (DEMO režim)
       </p>
 
-      <div className="card">
+      <Card>
         🧩 SmartSplit modul zatím slouží pouze jako vizuální DEMO.<br />
         Logika bude doplněna později.
-      </div>
+      </Card>
     </>
   );
 }

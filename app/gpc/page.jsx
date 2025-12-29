@@ -1,3 +1,5 @@
+import Card from "../components/Card";
+
 export default function GPCPage() {
   return (
     <>
@@ -7,10 +9,10 @@ export default function GPCPage() {
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div className="card">Sandvik Coromant – Vrták – monolitní TK</div>
-        <div className="card">Walter – Vrták – monolitní TK</div>
-        <div className="card">Seco Tools – Fréza – monolitní TK</div>
-        <div className="card">ISCAR – Fréza – monolitní TK</div>
+        <Card>Sandvik Coromant – Vrták – monolitní TK</Card>
+        <Card>Walter – Vrták – monolitní TK</Card>
+        <Card>Seco Tools – Fréza – monolitní TK</Card>
+        <Card>ISCAR – Fréza – monolitní TK</Card>
       </div>
     </>
   );
