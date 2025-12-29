@@ -6,7 +6,18 @@ import { useAppContext } from "../context/AppContext";
 import { gssData } from "./data/gssStore";
 
 export default function GSSPage() {
-  const { company, warehouse, setModule } = useAppContext();
+  const ctx = useAppContext();
+
+  // ⛔️ build / prerender ochrana
+  if (!ctx) {
+    return (
+      <div style={{ padding: 30, color: "white" }}>
+        Načítám sklad…
+      </div>
+    );
+  }
+
+  const { company, warehouse, setModule } = ctx;
 
   useEffect(() => {
     setModule("GSS – Hlavní sklad");
