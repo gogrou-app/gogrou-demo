@@ -6,69 +6,50 @@ import { getStockItemById } from "../data/gssStore";
 
 export default function GssDetailPage() {
   const { id } = useParams();
-
   const item = getStockItemById(id);
 
   if (!item) {
     return (
-      <div style={{ padding: "24px" }}>
-        <h1>GSS – Detail položky</h1>
-        <p>Položka nebyla nalezena.</p>
-        <Link href="/gss">← Zpět do skladu</Link>
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Položka nenalezena</h1>
+        <Link href="/gss" className="text-blue-600 underline">
+          Zpět na sklad
+        </Link>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "24px", maxWidth: "900px" }}>
-      <h1>{item.name}</h1>
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-bold">{item.name}</h1>
 
-      <p style={{ opacity: 0.7 }}>
-        {item.type} · GPC: {item.gpcCode}
-      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="text-sm text-gray-500">Typ</div>
+          <div>{item.type}</div>
+        </div>
 
-      <div
-        style={{
-          marginTop: "24px",
-          padding: "16px",
-          borderRadius: "12px",
-          background: "#111",
-          border: "1px solid #222",
-        }}
-      >
-        <p><strong>Celkem:</strong> {item.qty} ks</p>
-        <p><strong>Minimum:</strong> {item.min}</p>
-        <p><strong>Maximum:</strong> {item.max}</p>
-        <p>
-          <strong>Stav:</strong>{" "}
-          <span
-            style={{
-              color:
-                item.qty < item.min
-                  ? "#ff5555"
-                  : item.qty > item.max
-                  ? "#ffaa00"
-                  : "#22cc88",
-            }}
-          >
-            {item.qty < item.min
-              ? "POD MIN"
-              : item.qty > item.max
-              ? "NAD MAX"
-              : "OK"}
-          </span>
-        </p>
+        <div>
+          <div className="text-sm text-gray-500">Stav</div>
+          <div>{item.status}</div>
+        </div>
 
-        {item.sharpenable && (
-          <p style={{ marginTop: "12px", opacity: 0.8 }}>
-            🔧 Brousitelný ({item.sharpenCount}×)
-          </p>
-        )}
+        <div>
+          <div className="text-sm text-gray-500">Ks celkem</div>
+          <div>{item.qtyTotal}</div>
+        </div>
+
+        <div>
+          <div className="text-sm text-gray-500">Min / Max</div>
+          <div>
+            {item.min} / {item.max}
+          </div>
+        </div>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
-        <Link href="/gss">← Zpět do skladu</Link>
-      </div>
+      <Link href="/gss" className="inline-block text-blue-600 underline">
+        ← Zpět na sklad
+      </Link>
     </div>
   );
 }
