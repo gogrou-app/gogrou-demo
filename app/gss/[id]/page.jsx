@@ -1,105 +1,194 @@
-'use client';
+"use client";
 
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+
 import {
   getStockItemById,
-  updateStockMinMax,
-  issueStock,
   receiveStock,
-  returnFromProduction,
-} from '../data/gssStore';
+  issueStock,
+  updateStockMinMax,
+  sendToGrinding,
+  returnFromGrinding,
+} from "../data/gssStore";
 
-export default function GssDetailPage() {
+export default function GssStockDetailPage() {
   const { id } = useParams();
-  const item = getStockItemById(id);
+
+  const [item, setItem] = useState(null);
+  const [inQty, setInQty] = useState("");
+  const [outQty, setOutQty] = useState("");
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+
+  function refresh() {
+    const data = getStockItemById(id);
+    setItem({ ...data });
+    setMin(data?.min ?? "");
+    setMax(data?.max ?? "");
+  }
+
+  useEffect(() => {
+    refresh();
+  }, [id]);
 
   if (!item) {
     return (
-      <div className="p-6">
-        <h1 className="text-xl font-semibold text-red-600">
-          Položka nenalezena
-        </h1>
-        <Link href="/gss" className="text-blue-600 underline">
-          Zpět na sklad
-        </Link>
+      <div style={{ padding: 40, color: "white" }}>
+        <h2>Položka nenalezena</h2>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* HLAVIČKA */}
-      <div className="border-b pb-4">
-        <h1 className="text-2xl font-bold">{item.name}</h1>
-        <div className="text-sm text-gray-500">
-          {item.type} · GTIN: {item.gtin}
-        </div>
+    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+      <h1>{item.name}</h1>
+
+      <div style={{ opacity: 0.7, marginBottom: 20 }}>
+        ID: {item.id}
       </div>
 
       {/* STAV */}
-      <div className="grid grid-cols-3 gap-4">
-        <Stat label="Celkem kusů" value={item.qtyTotal} />
-        <Stat label="Nové" value={item.qtyNew} />
-        <Stat label="Broušené" value={item.qtySharpened} />
-        <Stat label="Vrácené z výroby" value={item.qtyReturned} />
-        <Stat label="Min" value={item.min} />
-        <Stat label="Max" value={item.max} />
-      </div>
-
-      {/* BROUSITELNOST */}
-      <div className="border rounded p-4">
-        <h2 className="font-semibold mb-2">Brousitelnost</h2>
-        <div className="text-sm">
-          {item.sharpenable
-            ? `Ano – max ${item.maxSharpenings}×`
-            : 'Nebrousitelný'}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 20,
+          background: "#0b0b0b",
+          marginBottom: 20,
+        }}
+      >
+        <div style={{ fontSize: 14, opacity: 0.6 }}>Skladem</div>
+        <div style={{ fontSize: 32, fontWeight: "bold" }}>
+          {item.count} ks
         </div>
-        <div className="text-sm text-gray-500">
-          Aktuální použití: {item.currentUse} /{' '}
-          {item.maxSharpenings + 1}
+
+        {item.grinding && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: 10,
+              borderRadius: 8,
+              background: "#2a1f14",
+              color: "#ffd089",
+              fontWeight: "bold",
+            }}
+          >
+            🔧 NÁSTROJ JE NA BROUŠENÍ
+          </div>
+        )}
+      </div>
+
+      {/* PŘÍJEM / VÝDEJ */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 20,
+          marginBottom: 20,
+        }}
+      >
+        <h3>Příjem / Výdej</h3>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <input
+            placeholder="+ ks"
+            value={inQty}
+            onChange={(e) => setInQty(e.target.value)}
+          />
+          <button
+            onClick={() => {
+              receiveStock(item.id, Number(inQty));
+              setInQty("");
+              refresh();
+            }}
+          >
+            Přijmout
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <input
+            placeholder="- ks"
+            value={outQty}
+            onChange={(e) => setOutQty(e.target.value)}
+          />
+          <button
+            onClick={() => {
+              issueStock(item.id, Number(outQty));
+              setOutQty("");
+              refresh();
+            }}
+          >
+            Vydat
+          </button>
         </div>
       </div>
 
-      {/* AKCE */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => issueStock(id, 1)}
-          className="px-4 py-2 bg-red-600 text-white rounded"
-        >
-          Výdej 1 ks
-        </button>
+      {/* MIN / MAX */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 20,
+          marginBottom: 20,
+        }}
+      >
+        <h3>Min / Max</h3>
+
+        <input
+          placeholder="MIN"
+          value={min}
+          onChange={(e) => setMin(e.target.value)}
+        />
+        <input
+          placeholder="MAX"
+          value={max}
+          onChange={(e) => setMax(e.target.value)}
+          style={{ marginLeft: 10 }}
+        />
 
         <button
-          onClick={() => receiveStock(id, 1)}
-          className="px-4 py-2 bg-green-600 text-white rounded"
+          style={{ marginLeft: 10 }}
+          onClick={() => {
+            updateStockMinMax(item.id, Number(min), Number(max));
+            refresh();
+          }}
         >
-          Příjem 1 ks
-        </button>
-
-        <button
-          onClick={() => returnFromProduction(id)}
-          className="px-4 py-2 bg-yellow-500 text-white rounded"
-        >
-          Návrat z výroby
+          Uložit
         </button>
       </div>
 
-      {/* NAVIGACE */}
-      <div className="pt-4">
-        <Link href="/gss" className="text-blue-600 underline">
-          ← Zpět na hlavní sklad
-        </Link>
-      </div>
-    </div>
-  );
-}
+      {/* BROUŠENÍ */}
+      <div
+        style={{
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 20,
+        }}
+      >
+        <h3>Servis / broušení</h3>
 
-function Stat({ label, value }) {
-  return (
-    <div className="border rounded p-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
+        {!item.grinding ? (
+          <button
+            onClick={() => {
+              sendToGrinding(item.id);
+              refresh();
+            }}
+          >
+            Odeslat na broušení
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              returnFromGrinding(item.id);
+              refresh();
+            }}
+          >
+            Vrátit z broušení
+          </button>
+        )}
+      </div>
     </div>
   );
 }
