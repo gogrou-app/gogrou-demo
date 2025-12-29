@@ -5,20 +5,27 @@ export default function GPCPage() {
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.title}>GPC – Produktový katalog</h1>
-      <p style={styles.subtitle}>Interní katalog nástrojů (DEMO režim)</p>
+      <p style={styles.subtitle}>
+        Interní katalog nástrojů (DEMO režim)
+      </p>
 
       <div style={styles.list}>
         {tools.map((tool) => (
           <div key={tool.gpc_id} style={styles.card}>
-            <div style={styles.left}>
+            <div>
               <div style={styles.name}>
                 {tool.manufacturer} – {tool.type}
               </div>
-              <div style={styles.meta}>{tool.name}</div>
+              <div style={styles.meta}>
+                {tool.name}
+              </div>
             </div>
 
             <div style={styles.actions}>
-              <Link href={`/gpc/${tool.gpc_id}`} style={styles.link}>
+              <Link
+                href={`/gpc/${tool.gpc_id}`}
+                style={styles.link}
+              >
                 Detail →
               </Link>
             </div>
@@ -35,7 +42,7 @@ const styles = {
     maxWidth: "1100px",
   },
   title: {
-    fontSize: "26px",
+    fontSize: "28px",
     fontWeight: "700",
     marginBottom: "6px",
   },
@@ -51,16 +58,11 @@ const styles = {
   },
   card: {
     background: "#111",
-    borderRadius: "12px",
+    borderRadius: "14px",
     padding: "16px 20px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    boxShadow: "0 0 0 1px #222 inset",
-  },
-  left: {
-    display: "flex",
-    flexDirection: "column",
   },
   name: {
     fontSize: "16px",
