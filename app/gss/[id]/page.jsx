@@ -1,20 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
 import { useParams } from "next/navigation";
-import { useAppContext } from "../../context/AppContext";
-import { gssData } from "../data/gssStore";
+import Link from "next/link";
+import {
+  getStockItemById,
+  receiveStock,
+  issueStock,
+  sendToSharpening,
+} from "../data/gssStore";
 
-export default function GssItemDetailPage() {
+export default function GSSDetailPage() {
   const { id } = useParams();
-  const { company, warehouse, setModule } = useAppContext();
-
-  useEffect(() => {
-    setModule("GSS – Detail položky");
-  }, [setModule]);
-
-  const items = gssData?.[company]?.[warehouse] || [];
-  const item = items.find((i) => i.id === id);
+  const item = getStockItemById(id);
 
   if (!item) {
     return (
@@ -26,64 +23,77 @@ export default function GssItemDetailPage() {
 
   return (
     <div style={{ padding: 30, color: "white", maxWidth: 900 }}>
-      <h1>{item.name}</h1>
-      <p style={{ opacity: 0.7 }}>{item.type}</p>
+      <Link href="/gss" style={{ opacity: 0.6 }}>← Zpět do skladu</Link>
 
-      <hr style={{ margin: "20px 0", borderColor: "#222" }} />
+      <h1 style={{ marginTop: 20 }}>{item.name}</h1>
+      <div style={{ opacity: 0.7 }}>{item.type}</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        <div>
-          <h3>📦 Stav kusů</h3>
-          <div>Nové: <b>{item.qty_new || 0}</b></div>
-          <div>Broušené: <b>{item.qty_sharpened || 0}</b></div>
-          <div>Vrácené: <b>{item.qty_used || 0}</b></div>
-        </div>
-
-        <div>
-          <h3>⚙️ Nastavení</h3>
-          <div>
-            Brousitelný:{" "}
-            <b>{item.resharpenable ? "ANO" : "NE"}</b>
-          </div>
-          <div>
-            Max. přebroušení:{" "}
-            <b>{item.max_resharpens ?? "-"}</b>
-          </div>
-          <div>
-            DM tracking:{" "}
-            <b>{item.dm_tracking ? "ANO" : "NE"}</b>
-          </div>
-        </div>
-
-        <div>
-          <h3>📊 Limity – hlavní sklad</h3>
-          <div>
-            MIN: <b>{item.min ?? "-"}</b>
-          </div>
-          <div>
-            MAX: <b>{item.max ?? "-"}</b>
-          </div>
-        </div>
-
-        <div>
-          <h3>🔁 Návrat po broušení</h3>
-          <div style={{ opacity: 0.7 }}>
-            Vrátit na původní dceřiný sklad:{" "}
-            <b>
-              {item.dm_tracking ? "ANO (DM)" : "NE"}
-            </b>
-          </div>
-        </div>
+      {/* STAV */}
+      <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
+        <Stat label="🆕 Nové" value={item.qty_new} />
+        <Stat label="🔧 Broušené" value={item.qty_sharpened} />
+        <Stat label="↩️ Použité" value={item.qty_used} />
       </div>
 
-      <hr style={{ margin: "30px 0", borderColor: "#222" }} />
+      {/* INFO */}
+      <div style={{ marginTop: 20, fontSize: 14, opacity: 0.7 }}>
+        Brousitelný: {item.sharpenable ? `ANO (${item.max_cycles}×)` : "NE"}
+      </div>
 
-      <div style={{ display: "flex", gap: 12 }}>
-        <button onClick={() => console.log("ADD")}>➕ Přidat kus</button>
-        <button onClick={() => console.log("REMOVE")}>➖ Odebrat kus</button>
-        <button onClick={() => console.log("SHARPEN")}>🔧 Označit k broušení</button>
-        <button onClick={() => console.log("SCRAP")}>🗑 Vyřadit</button>
+      {/* AKCE */}
+      <div style={{ marginTop: 30, display: "flex", gap: 12 }}>
+        <Action
+          label="+ Příjem"
+          onClick={() => receiveStock(id, 1)}
+        />
+        <Action
+          label="− Výdej"
+          onClick={() => issueStock(id, 1)}
+        />
+        <Action
+          label="🔧 Na broušení"
+          onClick={() => sendToSharpening(id)}
+        />
+      </div>
+
+      <div style={{ marginTop: 20, opacity: 0.5 }}>
+        (DEMO: změny jsou lokální v paměti)
       </div>
     </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #222",
+        borderRadius: 10,
+        padding: 14,
+        minWidth: 120,
+        background: "#0b0b0b",
+      }}
+    >
+      <div style={{ fontSize: 13, opacity: 0.6 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
+    </div>
+  );
+}
+
+function Action({ label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "10px 16px",
+        background: "#1a1a1a",
+        border: "1px solid #333",
+        borderRadius: 8,
+        color: "white",
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
 }
