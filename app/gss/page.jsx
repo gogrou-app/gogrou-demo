@@ -8,19 +8,15 @@ import { gssData } from "./data/gssStore";
 export default function GSSPage() {
   const ctx = useAppContext();
 
-  // ⛔️ build / prerender ochrana
-  if (!ctx) {
-    return (
-      <div style={{ padding: 30, color: "white" }}>
-        Načítám sklad…
-      </div>
-    );
-  }
-
-  const { company, warehouse, setModule } = ctx;
+  // ✅ DEMO FALLBACK (kritické)
+  const company = ctx?.company || "DEMO";
+  const warehouse = ctx?.warehouse || "MAIN";
+  const setModule = ctx?.setModule;
 
   useEffect(() => {
-    setModule("GSS – Hlavní sklad");
+    if (setModule) {
+      setModule("GSS – Hlavní sklad");
+    }
   }, [setModule]);
 
   const items = gssData?.[company]?.[warehouse] || [];
@@ -28,6 +24,7 @@ export default function GSSPage() {
   return (
     <div style={{ padding: 30, color: "white", maxWidth: 1100 }}>
       <h1>Hlavní sklad</h1>
+
       <p style={{ opacity: 0.6 }}>
         Firma: <b>{company}</b> • Sklad: <b>{warehouse}</b>
       </p>
