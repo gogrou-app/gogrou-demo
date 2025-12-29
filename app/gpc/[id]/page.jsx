@@ -1,151 +1,288 @@
-"use client";
-
-import { useMemo } from "react";
-import { useParams } from "next/navigation";
+// /app/gpc/[id]/page.jsx
 import Link from "next/link";
 import tools from "../data";
 
-export default function GpcDetailPage() {
-  const params = useParams();
-  const idRaw = params?.id ? decodeURIComponent(String(params.id)) : "";
-
-  const item = useMemo(() => {
-    return tools.find((t) => String(t.gpc_id) === String(idRaw)) || null;
-  }, [idRaw]);
-
-  if (!item) {
-    return (
-      <div style={{ padding: 30, color: "white" }}>
-        <h2>Položka nenalezena</h2>
-        <div style={{ opacity: 0.7, marginTop: 6 }}>GPC_ID: {idRaw}</div>
-        <div style={{ marginTop: 16 }}>
-          <Link href="/gpc" style={linkBtn}>← Zpět na GPC</Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ padding: 30, color: "white", maxWidth: 1100 }}>
-      <Link href="/gpc" style={linkBtn}>← Zpět na GPC</Link>
-
-      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "420px 1fr", gap: 18 }}>
-        {/* LEFT */}
-        <div
-          style={{
-            border: "1px solid #222",
-            borderRadius: 14,
-            background: "#0b0b0b",
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ padding: 14, borderBottom: "1px solid #111", fontWeight: 800 }}>
-            Obrázek
-          </div>
-          <div style={{ height: 320, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {item.image_main ? (
-              <img src={item.image_main} alt={item.name} style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain" }} />
-            ) : (
-              <div style={{ opacity: 0.6 }}>bez obrázku</div>
-            )}
-          </div>
-
-          <div style={{ padding: 14, borderTop: "1px solid #111" }}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Výkres</div>
-            <div style={{ marginTop: 10, height: 220, display: "flex", alignItems: "center", justifyContent: "center", background: "#060606", borderRadius: 12, border: "1px solid #111" }}>
-              {item.image_drawing ? (
-                <img src={item.image_drawing} alt="drawing" style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain" }} />
-              ) : (
-                <div style={{ opacity: 0.6 }}>bez výkresu</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT */}
-        <div>
-          <h1 style={{ margin: 0 }}>{item.name}</h1>
-          <div style={{ opacity: 0.75, marginTop: 8 }}>
-            {item.manufacturer} • {item.type}
-          </div>
-
-          <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Chip label={`GPC_ID: ${item.gpc_id}`} />
-            <Chip label={`GTIN: ${item.gtin ?? "—"}`} />
-            <Chip label={`⌀ ${item.geometry?.diameter_mm ?? "—"} mm`} />
-            <Chip label={`L: ${item.geometry?.overall_length_mm ?? "—"} mm`} />
-            <Chip label={`Z: ${item.geometry?.flutes ?? "—"}`} />
-          </div>
-
-          <Section title="Geometrie">
-            <Row k="Průměr" v={fmt(item.geometry?.diameter_mm, "mm")} />
-            <Row k="Délka břitu" v={fmt(item.geometry?.flute_length_mm, "mm")} />
-            <Row k="Celková délka" v={fmt(item.geometry?.overall_length_mm, "mm")} />
-            <Row k="Stopka" v={fmt(item.geometry?.shank_diameter_mm, "mm")} />
-            <Row k="Zuby" v={fmt(item.geometry?.flutes)} />
-            <Row k="Helix" v={fmt(item.geometry?.helix_angle_deg, "°")} />
-            <Row k="Úhel špice" v={fmt(item.geometry?.point_angle_deg, "°")} />
-            <Row k="Rádius" v={fmt(item.geometry?.corner_radius_mm, "mm")} />
-          </Section>
-
-          <Section title="Vlastnosti">
-            <Row k="Materiál" v={item.tool_features?.material ?? "—"} />
-            <Row k="Povlak" v={item.tool_features?.coating ?? "—"} />
-            <Row k="Směr" v={item.tool_features?.hand ?? "—"} />
-          </Section>
-
-          <Section title="Životní cyklus">
-            <Row k="Brousitelné" v={item.lifecycle?.resharpenable ? "ANO" : "NE"} />
-            <Row k="Max. přebroušení" v={item.lifecycle?.max_resharpens ?? "—"} />
-          </Section>
-
-          <div style={{ marginTop: 16, opacity: 0.65, fontSize: 13 }}>
-            (Napojení na GSS / DM / AI / ToolsUnited doplníme v dalších krocích.)
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function getToolById(id) {
+  return tools.find((t) => String(t.gpc_id) === String(id)) || null;
 }
 
-function fmt(v, unit = "") {
-  if (v === null || v === undefined || v === "") return "—";
-  return unit ? `${v} ${unit}` : String(v);
+function Row({ label, value }) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div style={{ display: "flex", gap: 12, padding: "6px 0" }}>
+      <div style={{ width: 180, color: "#aaa" }}>{label}</div>
+      <div style={{ color: "#fff" }}>{String(value)}</div>
+    </div>
+  );
 }
 
 function Section({ title, children }) {
   return (
-    <div style={{ marginTop: 18, border: "1px solid #222", borderRadius: 14, background: "#0b0b0b" }}>
-      <div style={{ padding: 12, borderBottom: "1px solid #111", fontWeight: 800 }}>{title}</div>
-      <div style={{ padding: 12 }}>{children}</div>
+    <div
+      style={{
+        marginTop: 16,
+        padding: 16,
+        borderRadius: 14,
+        background: "rgba(255,255,255,0.05)",
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
+        {title}
+      </div>
+      {children}
     </div>
   );
 }
 
-function Row({ k, v }) {
+export default function GpcDetailPage({ params }) {
+  const tool = getToolById(params.id);
+
+  if (!tool) {
+    return (
+      <div style={{ padding: 28 }}>
+        <h1 style={{ fontSize: 34, margin: 0 }}>GPC – detail</h1>
+        <p style={{ color: "#aaa" }}>Položka nenalezena: {params.id}</p>
+        <Link
+          href="/gpc"
+          style={{
+            display: "inline-block",
+            marginTop: 12,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            color: "#fff",
+            textDecoration: "none",
+          }}
+        >
+          ← Zpět do GPC
+        </Link>
+      </div>
+    );
+  }
+
+  const geom = tool.geometry || {};
+  const feats = tool.tool_features || {};
+  const cutting = tool.cutting || {};
+  const usage = tool.usage || {};
+  const lifecycle = tool.lifecycle || {};
+
+  // Pro demo: GSS detail se typicky váže na stejný ID jako gpc_id (stockId = gpc_id)
+  const gssDetailHref = `/gss/${encodeURIComponent(tool.gpc_id)}`;
+
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #111" }}>
-      <div style={{ opacity: 0.7 }}>{k}</div>
-      <div style={{ fontWeight: 700 }}>{v}</div>
+    <div style={{ padding: 28, maxWidth: 1100 }}>
+      {/* Sticky top actions */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          paddingBottom: 12,
+          marginBottom: 16,
+          background: "linear-gradient(#000 60%, rgba(0,0,0,0))",
+        }}
+      >
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link
+            href="/gpc"
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              color: "#fff",
+              textDecoration: "none",
+            }}
+          >
+            ← Zpět do GPC
+          </Link>
+
+          <Link
+            href="/gss"
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              color: "#fff",
+              textDecoration: "none",
+            }}
+          >
+            ← Zpět do GSS
+          </Link>
+
+          <Link
+            href={gssDetailHref}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              color: "#fff",
+              textDecoration: "none",
+              marginLeft: "auto",
+            }}
+          >
+            Přejít na GSS detail →
+          </Link>
+        </div>
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#aaa", fontSize: 13, marginBottom: 6 }}>
+            GPC – Produktová karta (statická pravda)
+          </div>
+
+          <h1 style={{ fontSize: 36, margin: 0, lineHeight: 1.15 }}>
+            {tool.name}
+          </h1>
+
+          <div style={{ color: "#bbb", marginTop: 10 }}>
+            <b style={{ color: "#fff" }}>{tool.manufacturer}</b> •{" "}
+            {tool.type || "—"}
+          </div>
+
+          <div style={{ color: "#aaa", marginTop: 8, fontSize: 13 }}>
+            GPC ID: <b style={{ color: "#fff" }}>{tool.gpc_id}</b>
+            {tool.gtin ? (
+              <>
+                {" "}
+                • GTIN: <b style={{ color: "#fff" }}>{tool.gtin}</b>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* Images */}
+      <Section title="Obrázky / výkres">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div
+            style={{
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              padding: 12,
+              minHeight: 220,
+            }}
+          >
+            <div style={{ color: "#aaa", fontSize: 13, marginBottom: 10 }}>
+              Hlavní foto
+            </div>
+            {tool.image_main ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tool.image_main}
+                alt={tool.name}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  borderRadius: 12,
+                  display: "block",
+                }}
+              />
+            ) : (
+              <div style={{ color: "#777" }}>Bez obrázku</div>
+            )}
+          </div>
+
+          <div
+            style={{
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              padding: 12,
+              minHeight: 220,
+            }}
+          >
+            <div style={{ color: "#aaa", fontSize: 13, marginBottom: 10 }}>
+              Výkres
+            </div>
+            {tool.image_drawing ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tool.image_drawing}
+                alt={`${tool.name} drawing`}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  borderRadius: 12,
+                  display: "block",
+                  background: "#111",
+                }}
+              />
+            ) : (
+              <div style={{ color: "#777" }}>Bez výkresu</div>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* Geometry */}
+      <Section title="Geometrie">
+        <Row label="Průměr (mm)" value={geom.diameter_mm} />
+        <Row label="Délka břitu (mm)" value={geom.flute_length_mm} />
+        <Row label="Celková délka (mm)" value={geom.overall_length_mm} />
+        <Row label="Průměr stopky (mm)" value={geom.shank_diameter_mm} />
+        <Row label="Počet zubů" value={geom.flutes} />
+        <Row label="Šroubovice (°)" value={geom.helix_angle_deg} />
+        <Row label="Úhel špičky (°)" value={geom.point_angle_deg} />
+        <Row label="Rohový radius (mm)" value={geom.corner_radius_mm} />
+        <Row label="Krček (mm)" value={geom.neck_length_mm} />
+      </Section>
+
+      {/* Tool features */}
+      <Section title="Materiál / povlak / vlastnosti">
+        <Row label="Materiál" value={feats.material} />
+        <Row label="Povlak" value={feats.coating} />
+        <Row label="Tolerance" value={feats.tolerance} />
+        <Row label="Směr (hand)" value={feats.hand} />
+        <Row label="Kvalita povrchu" value={feats.finish_quality} />
+      </Section>
+
+      {/* Cutting */}
+      <Section title="Řezné parametry (pokud jsou)">
+        <Row label="Dop. vc (m/min)" value={cutting.recommended_vc_m_min} />
+        <Row label="Dop. fz (mm)" value={cutting.recommended_fz_mm} />
+        <Row label="Chlazení povinné" value={cutting.coolant_required} />
+        <Row label="Vnitřní chlazení" value={cutting.internal_coolant} />
+        <Row label="Chipbreaker" value={cutting.chipbreaker} />
+      </Section>
+
+      {/* Usage */}
+      <Section title="Použití">
+        <Row
+          label="Operace"
+          value={Array.isArray(usage.operations) ? usage.operations.join(", ") : usage.operations}
+        />
+        <Row
+          label="Materiály obrobku"
+          value={
+            Array.isArray(usage.workpiece_materials)
+              ? usage.workpiece_materials.join(", ")
+              : usage.workpiece_materials
+          }
+        />
+        <Row label="Poznámky" value={usage.notes} />
+      </Section>
+
+      {/* Lifecycle (GPC-only = obecně zobrazitelné) */}
+      <Section title="Životní cyklus (informačně)">
+        <Row label="Brousitelný" value={lifecycle.resharpenable ? "ANO" : "NE"} />
+        <Row label="Max. přebroušení" value={lifecycle.max_resharpens} />
+        <Row label="Servisní poznámky" value={lifecycle.service_notes} />
+        <Row label="Oček. život (min)" value={lifecycle.expected_tool_life_min} />
+        <div style={{ marginTop: 10, color: "#888", fontSize: 12 }}>
+          Pozn.: Skutečný životní cyklus kusů (nový / ostřený / použitý, historie, DM tracking)
+          řeší až GSS.
+        </div>
+      </Section>
+
+      <div style={{ height: 28 }} />
     </div>
   );
 }
-
-function Chip({ label }) {
-  return (
-    <span style={{ fontSize: 12, padding: "6px 10px", borderRadius: 999, border: "1px solid #222", background: "#000" }}>
-      {label}
-    </span>
-  );
-}
-
-const linkBtn = {
-  display: "inline-block",
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #333",
-  background: "#111",
-  color: "white",
-  textDecoration: "none",
-  fontWeight: 700,
-};
