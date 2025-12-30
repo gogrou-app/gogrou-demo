@@ -1,6 +1,7 @@
 // /app/gpc/data.js
 // GPC DEMO – VRTÁKY + FRÉZY
 // !!! JEDEN EXPORT, JEDNA STRUKTURA !!!
+// ŽIVOTNÍ CYKLUS Z GPC ODSTRANĚN (patří do GSS)
 
 const tools = [
   // ============================================================
@@ -48,13 +49,6 @@ const tools = [
       operations: ["Vrtání"],
       workpiece_materials: [],
       notes: null,
-    },
-
-    lifecycle: {
-      resharpenable: false,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
     },
   },
 
@@ -104,13 +98,6 @@ const tools = [
       workpiece_materials: [],
       notes: null,
     },
-
-    lifecycle: {
-      resharpenable: false,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
-    },
   },
 
   // ============================================================
@@ -158,13 +145,6 @@ const tools = [
       operations: ["Vrtání"],
       workpiece_materials: [],
       notes: null,
-    },
-
-    lifecycle: {
-      resharpenable: false,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
     },
   },
 
@@ -214,13 +194,6 @@ const tools = [
       workpiece_materials: [],
       notes: null,
     },
-
-    lifecycle: {
-      resharpenable: true,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
-    },
   },
 
   // ============================================================
@@ -268,13 +241,6 @@ const tools = [
       operations: ["Frézování"],
       workpiece_materials: [],
       notes: null,
-    },
-
-    lifecycle: {
-      resharpenable: true,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
     },
   },
 
@@ -324,13 +290,6 @@ const tools = [
       workpiece_materials: [],
       notes: null,
     },
-
-    lifecycle: {
-      resharpenable: true,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
-    },
   },
 
   // ============================================================
@@ -378,13 +337,6 @@ const tools = [
       operations: ["Frézování"],
       workpiece_materials: [],
       notes: null,
-    },
-
-    lifecycle: {
-      resharpenable: true,
-      max_resharpens: null,
-      service_notes: null,
-      expected_tool_life_min: null,
     },
   },
 ];
