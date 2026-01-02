@@ -1,77 +1,77 @@
-// /app/gss/page.jsx
-import Link from "next/link";
-
-// GSS data
-import { stockItems } from "./data/stock";
-
-// GPC data (read-only)
 import tools from "../gpc/data";
 
 export default function GSSPage() {
-  // napojení GSS → GPC
-  const rows = stockItems.map((stock) => {
-    const tool = tools.find((t) => t.gpc_id === stock.gpc_id);
-
-    return {
-      ...stock,
-      tool,
-    };
-  });
-
   return (
-    <div style={{ maxWidth: 900 }}>
-      <h1>Hlavní sklad</h1>
-      <p>
-        Firma: <b>DEMO</b> · Sklad: <b>MAIN</b>
-      </p>
+    <div style={{ padding: 24, maxWidth: 1000 }}>
+      <h1>GSS – Výběr položky ze skladu</h1>
+      <p>GSS si pouze VYŽÁDÁ položku z GPC (read-only)</p>
 
-      {rows.length === 0 && <p>Sklad je zatím prázdný</p>}
+      <input
+        placeholder="Hledej název / výrobce / průměr / GPC ID"
+        style={{
+          marginTop: 16,
+          padding: 10,
+          width: "100%",
+          borderRadius: 8,
+          border: "1px solid #333",
+          background: "#111",
+          color: "#fff",
+        }}
+      />
 
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          style={{
-            background: "#111",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 12,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 16, fontWeight: "bold" }}>
-              {row.tool ? row.tool.name : "⚠️ Neznámý nástroj"}
-            </div>
-
-            <div style={{ opacity: 0.7, fontSize: 13 }}>
-              {row.tool?.manufacturer} · {row.tool?.type}
-            </div>
-
-            <div style={{ marginTop: 6 }}>
-              Skladem: <b>{row.quantity} ks</b>{" "}
-              <span style={{ opacity: 0.6 }}>
-                (min {row.min} / max {row.max})
-              </span>
-            </div>
-          </div>
-
-          <Link
-            href={`/gss/${row.id}`}
+      <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        {tools.map((tool) => (
+          <div
+            key={tool.gpc_id}
             style={{
-              background: "#222",
-              padding: "8px 14px",
-              borderRadius: 8,
-              textDecoration: "none",
-              color: "#fff",
-              fontSize: 14,
+              display: "flex",
+              gap: 16,
+              padding: 16,
+              borderRadius: 12,
+              background: "#0f0f0f",
+              alignItems: "center",
             }}
           >
-            Detail →
-          </Link>
-        </div>
-      ))}
+            {/* obrázek */}
+            {tool.images?.main && (
+              <img
+                src={tool.images.main}
+                alt={tool.name}
+                style={{
+                  width: 80,
+                  height: 80,
+                  objectFit: "contain",
+                  background: "#000",
+                  borderRadius: 8,
+                }}
+              />
+            )}
+
+            {/* text */}
+            <div style={{ flex: 1 }}>
+              <strong>{tool.name}</strong>
+              <div style={{ opacity: 0.7 }}>
+                {tool.manufacturer} · Ø {tool.geometry?.diameter_mm ?? "?"} mm
+              </div>
+            </div>
+
+            {/* akce */}
+            <button
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                background: "#1e90ff",
+                border: "none",
+                color: "#fff",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Vyžádat do GSS
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
