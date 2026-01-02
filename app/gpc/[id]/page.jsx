@@ -1,178 +1,158 @@
-import Link from "next/link";
+// app/gpc/[id]/page.jsx
 import tools from "../data";
+import Link from "next/link";
 
 export default function GpcDetailPage({ params }) {
-  const tool = tools.find((t) => t.gpc_id === params.id);
+  const { id } = params;
+  const tool = tools.find((t) => t.gpc_id === id);
 
   if (!tool) {
     return (
-      <div>
+      <div style={{ padding: 40 }}>
         <Link href="/gpc">← Zpět do GPC</Link>
-        <h2>Položka nenalezena</h2>
+        <h1>Nástroj nenalezen</h1>
       </div>
     );
   }
 
+  const {
+    name,
+    manufacturer,
+    type,
+    image_main,
+    image_drawing,
+    geometry,
+    cutting,
+    tool_features,
+    usage,
+    lifecycle,
+  } = tool;
+
   return (
-    <div style={{ maxWidth: 1200 }}>
-      {/* NAVIGACE */}
-      <Link href="/gpc" style={back}>
-        ← Zpět do GPC
-      </Link>
+    <div style={{ padding: 40, maxWidth: 1200 }}>
+      <Link href="/gpc">← Zpět do GPC</Link>
 
-      {/* HLAVIČKA */}
-      <h1>{tool.name}</h1>
-      <div style={{ opacity: 0.7, marginBottom: 20 }}>
-        {tool.manufacturer} • {tool.type} • GPC ID: {tool.gpc_id}
-      </div>
+      <h1 style={{ marginTop: 20 }}>{name}</h1>
+      <p><strong>Výrobce:</strong> {manufacturer}</p>
+      <p><strong>Typ:</strong> {type}</p>
 
+      {/* ======================= */}
       {/* OBRÁZKY */}
-      <div style={imagesWrap}>
-        <div style={imageBox}>
-          <div style={imageTitle}>Hlavní obrázek</div>
-          {tool.images?.main ? (
-            <img src={tool.images.main} style={img} />
-          ) : (
-            <div style={empty}>Bez obrázku</div>
-          )}
-        </div>
+      {/* ======================= */}
+      <div style={{ display: "flex", gap: 40, marginTop: 30 }}>
+        {image_main && (
+          <div>
+            <p><strong>Produkt</strong></p>
+            <img
+              src={image_main}
+              alt={name}
+              style={{ maxWidth: 300, background: "#111" }}
+            />
+          </div>
+        )}
 
-        <div style={imageBox}>
-          <div style={imageTitle}>Výkres</div>
-          {tool.images?.drawing ? (
-            <img src={tool.images.drawing} style={img} />
-          ) : (
-            <div style={empty}>Bez výkresu</div>
-          )}
-        </div>
+        {image_drawing && (
+          <div>
+            <p><strong>Výkres</strong></p>
+            <img
+              src={image_drawing}
+              alt={`${name} drawing`}
+              style={{ maxWidth: 300, background: "#111" }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* TECHNICKÝ ROZPAD */}
+      <hr style={{ margin: "40px 0" }} />
+
+      {/* ======================= */}
+      {/* GEOMETRIE */}
+      {/* ======================= */}
       <Section title="Geometrie">
-        <Row label="Průměr (Ø)" value={tool.geometry?.diameter_mm} unit="mm" />
-        <Row label="Délka břitu" value={tool.geometry?.flute_length_mm} unit="mm" />
-        <Row label="Celková délka" value={tool.geometry?.overall_length_mm} unit="mm" />
-        <Row label="Stopka Ø" value={tool.geometry?.shank_diameter_mm} unit="mm" />
-        <Row label="Počet zubů" value={tool.geometry?.flutes} />
-        <Row label="Úhel šroubovice" value={tool.geometry?.helix_angle_deg} unit="°" />
-        <Row label="Úhel špice" value={tool.geometry?.point_angle_deg} unit="°" />
+        <Param label="Průměr [mm]" value={geometry?.diameter_mm} />
+        <Param label="Délka břitu [mm]" value={geometry?.flute_length_mm} />
+        <Param label="Celková délka [mm]" value={geometry?.overall_length_mm} />
+        <Param label="Průměr stopky [mm]" value={geometry?.shank_diameter_mm} />
+        <Param label="Počet zubů" value={geometry?.flutes} />
+        <Param label="Úhel šroubovice [°]" value={geometry?.helix_angle_deg} />
+        <Param label="Úhel špičky [°]" value={geometry?.point_angle_deg} />
+        <Param label="Rádius rohu [mm]" value={geometry?.corner_radius_mm} />
       </Section>
 
+      {/* ======================= */}
+      {/* ŘEZNÉ PODMÍNKY */}
+      {/* ======================= */}
       <Section title="Řezné podmínky">
-        <Row label="Vc" value={tool.cutting?.recommended_vc_m_min} unit="m/min" />
-        <Row label="fz" value={tool.cutting?.recommended_fz_mm} unit="mm" />
-        <Row label="Vnitřní chlazení" value={yesno(tool.cutting?.internal_coolant)} />
-        <Row label="Chlazení nutné" value={yesno(tool.cutting?.coolant_required)} />
+        <Param label="Vc [m/min]" value={cutting?.recommended_vc_m_min} />
+        <Param label="Fz [mm]" value={cutting?.recommended_fz_mm} />
+        <Param label="Chlazení" value={cutting?.coolant_required} />
+        <Param label="Vnitřní chlazení" value={cutting?.internal_coolant} />
       </Section>
 
-      <Section title="Materiál & povrch">
-        <Row label="Materiál" value={tool.tool_features?.material} />
-        <Row label="Povlak" value={tool.tool_features?.coating} />
-        <Row label="Tolerance" value={tool.tool_features?.tolerance} />
-        <Row label="Směr" value={tool.tool_features?.hand} />
+      {/* ======================= */}
+      {/* VLASTNOSTI */}
+      {/* ======================= */}
+      <Section title="Vlastnosti nástroje">
+        <Param label="Materiál" value={tool_features?.material} />
+        <Param label="Povlak" value={tool_features?.coating} />
+        <Param label="Tolerance" value={tool_features?.tolerance} />
+        <Param label="Směr" value={tool_features?.hand} />
       </Section>
 
-      {/* EDIT */}
-      <div style={{ marginTop: 40 }}>
-        <Link href={`/gpc/${tool.gpc_id}/edit`} style={editBtn}>
-          Editovat položku
-        </Link>
-      </div>
+      {/* ======================= */}
+      {/* POUŽITÍ */}
+      {/* ======================= */}
+      <Section title="Použití">
+        <Param
+          label="Operace"
+          value={usage?.operations?.join(", ")}
+        />
+        <Param label="Poznámka" value={usage?.notes} />
+      </Section>
+
+      {/* ======================= */}
+      {/* ŽIVOTNÍ CYKLUS */}
+      {/* ======================= */}
+      <Section title="Životní cyklus">
+        <Param
+          label="Brousitelný"
+          value={lifecycle?.resharpenable ? "Ano" : "Ne"}
+        />
+        <Param
+          label="Max. přebroušení"
+          value={lifecycle?.max_resharpens}
+        />
+        <Param
+          label="Oček. životnost [min]"
+          value={lifecycle?.expected_tool_life_min}
+        />
+      </Section>
     </div>
   );
 }
 
-/* ===================== HELPERY ===================== */
-
-function Row({ label, value, unit }) {
-  if (value === null || value === undefined || value === "") return null;
-  return (
-    <div style={row}>
-      <div style={labelStyle}>{label}</div>
-      <div>
-        {value} {unit}
-      </div>
-    </div>
-  );
-}
+/* ======================= */
+/* POMOCNÉ KOMPONENTY */
+/* ======================= */
 
 function Section({ title, children }) {
   return (
-    <div style={section}>
-      <h3>{title}</h3>
-      {children}
+    <div style={{ marginBottom: 30 }}>
+      <h2>{title}</h2>
+      <table>
+        <tbody>{children}</tbody>
+      </table>
     </div>
   );
 }
 
-function yesno(v) {
-  if (v === true) return "ANO";
-  if (v === false) return "NE";
-  return null;
+function Param({ label, value }) {
+  if (value === null || value === undefined || value === "") return null;
+
+  return (
+    <tr>
+      <td style={{ paddingRight: 20, opacity: 0.7 }}>{label}</td>
+      <td>{value}</td>
+    </tr>
+  );
 }
-
-/* ===================== STYLY ===================== */
-
-const back = {
-  display: "inline-block",
-  marginBottom: 20,
-  textDecoration: "none",
-};
-
-const imagesWrap = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 20,
-  marginBottom: 30,
-};
-
-const imageBox = {
-  padding: 16,
-  borderRadius: 16,
-  background: "rgba(255,255,255,0.05)",
-};
-
-const imageTitle = {
-  marginBottom: 10,
-  fontWeight: 700,
-};
-
-const img = {
-  width: "100%",
-  height: 300,
-  objectFit: "contain",
-};
-
-const empty = {
-  height: 300,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  opacity: 0.5,
-};
-
-const section = {
-  marginTop: 30,
-  padding: 20,
-  borderRadius: 16,
-  background: "rgba(255,255,255,0.05)",
-};
-
-const row = {
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "6px 0",
-  borderBottom: "1px solid rgba(255,255,255,0.08)",
-};
-
-const labelStyle = {
-  opacity: 0.7,
-};
-
-const editBtn = {
-  padding: "12px 18px",
-  borderRadius: 12,
-  background: "#2b6cb0",
-  color: "white",
-  textDecoration: "none",
-};
