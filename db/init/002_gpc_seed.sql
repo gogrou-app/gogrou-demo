@@ -4,7 +4,10 @@ VALUES
   ('11111111-1111-1111-1111-111111111112', 'Walter', 'WALTER', 'https://www.walter-tools.com'),
   ('11111111-1111-1111-1111-111111111113', 'Sandvik Coromant', 'SANDVIK', 'https://www.sandvik.coromant.com'),
   ('11111111-1111-1111-1111-111111111114', 'MAZAK', 'MAZAK', 'https://www.mazakeu.com')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  code = EXCLUDED.code,
+  name = EXCLUDED.name,
+  website_url = EXCLUDED.website_url;
 
 INSERT INTO gpc_product_types (id, code, name, parent_id)
 VALUES
@@ -13,7 +16,10 @@ VALUES
   ('22222222-2222-2222-2222-222222222223', 'DRILL', 'Vrták', '22222222-2222-2222-2222-222222222221'),
   ('22222222-2222-2222-2222-222222222224', 'INSERT', 'Břitová destička', '22222222-2222-2222-2222-222222222221'),
   ('22222222-2222-2222-2222-222222222225', 'COATING', 'Povlak', NULL)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  code = EXCLUDED.code,
+  name = EXCLUDED.name,
+  parent_id = EXCLUDED.parent_id;
 
 INSERT INTO gpc_product_cards (
   id,
@@ -177,7 +183,18 @@ VALUES
     }'::jsonb,
     'MAZAK povlak coating testovací GTIN 8590000000002'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  gpc_id = EXCLUDED.gpc_id,
+  manufacturer_id = EXCLUDED.manufacturer_id,
+  product_type_id = EXCLUDED.product_type_id,
+  name = EXCLUDED.name,
+  manufacturer_part_number = EXCLUDED.manufacturer_part_number,
+  description = EXCLUDED.description,
+  application = EXCLUDED.application,
+  status = EXCLUDED.status,
+  validation_status = EXCLUDED.validation_status,
+  technical_parameters = EXCLUDED.technical_parameters,
+  search_text = EXCLUDED.search_text;
 
 INSERT INTO gpc_gtins (product_card_id, gtin, is_primary)
 VALUES
@@ -260,7 +277,14 @@ VALUES
     10,
     '{"source": "manufacturer", "test_record": true}'::jsonb
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  product_card_id = EXCLUDED.product_card_id,
+  attachment_type = EXCLUDED.attachment_type,
+  title = EXCLUDED.title,
+  url = EXCLUDED.url,
+  mime_type = EXCLUDED.mime_type,
+  sort_order = EXCLUDED.sort_order,
+  metadata = EXCLUDED.metadata;
 
 INSERT INTO gpc_validations (
   id,
@@ -311,7 +335,12 @@ VALUES
     'Karta povlaku je testovací a vyžaduje rozhodnutí, zda povlak zůstane samostatný typ produktu.',
     '[{"field": "product_type", "message": "Ověřit modelování povlaků v GPC."}]'::jsonb
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  product_card_id = EXCLUDED.product_card_id,
+  validation_status = EXCLUDED.validation_status,
+  validated_by = EXCLUDED.validated_by,
+  validation_message = EXCLUDED.validation_message,
+  validation_errors = EXCLUDED.validation_errors;
 
 INSERT INTO gpc_audit_logs (id, product_card_id, actor, action, before_data, after_data, metadata)
 VALUES
