@@ -5,7 +5,8 @@ CREATE TYPE gpc_product_status AS ENUM (
   'draft',
   'active',
   'phase_out',
-  'discontinued'
+  'discontinued',
+  'archived'
 );
 
 -- Stav validace produktových dat.
