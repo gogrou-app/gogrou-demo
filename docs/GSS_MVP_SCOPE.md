@@ -17,22 +17,175 @@ GSS je zákaznický provozní svět. GPC je validovaný zdroj master dat.
 
 Dokument neřeší UI a neprogramuje backend.
 
-## 1. Firma / Tenant
+## 1. Firma / Organizace / Tenant
 
-GSS MVP začíná entitou firma, tedy zákaznický tenant.
+Gogrou MVP začíná obecnou entitou firma / organizace, tedy tenant. GSS je pouze jeden z modulů, který může být pro firmu aktivní.
 
-Firma / tenant obsahuje:
+Firma nemusí mít sklad ani výrobu. Stejná tenant entita může reprezentovat výrobní firmu, výrobce nástrojů, dodavatele, servisní firmu, konzultanta nebo obchodní společnost.
+
+Registrace firmy není součástí GSS. Cílově se firma registruje do obecné Gogrou aplikace přes `/register`, po přihlášení vstupuje do zákaznického portálu `/app` a dostupné moduly se zobrazí podle aktivace, trialu nebo zaplaceného předplatného.
+
+GSS není vstupní brána do Gogrou. GSS je pouze modul pro firmy, které řeší sklad, nástroje a DM tracking. Firma může existovat bez GSS.
+
+Cílová struktura aplikace:
+
+- `/register`: registrace nové firmy do Gogrou
+- `/app`: zákaznický portál po přihlášení
+- `/app/gss`: GSS modul, pouze pokud má firma aktivní GSS
+- `/app/toolshop`: obchodní / nabídky / nákupní modul
+- `/app/services`: služby, například broušení, povlakování, kalírna nebo poradenství
+- `/admin`: interní Gogrou správa, zatím neprecizovaná
+
+Příklady firem bez GSS:
+
+- obchodní firma může používat Toolshop / nabídky bez GSS
+- výrobce nástrojů může používat datový kanál / obchodní vrstvu bez GSS
+- službová firma může používat services profil bez GSS
+
+Typy firmy jsou kombinovatelné:
+
+- `manufacturing_company`
+- `tool_manufacturer`
+- `tool_supplier`
+- `coating_service`
+- `heat_treatment_service`
+- `grinding_service`
+- `consulting`
+- `trading_company`
+- `other`
+
+Aktivní moduly:
+
+- `GSS`
+- `GPC supplier data channel`
+- `Toolshop`
+- `Services`
+- `Promitea/RFQ`
+
+Současné MVP flow v `/gss` je dočasný prototyp tenant registrace a GSS flow. Finální registrace firmy bude mimo GSS.
+
+V MVP jsou firmy uložené lokálně v `localStorage` jako demo tenant model. Produkční verze bude ukládat firmy / organizace v databázi a bude mít samostatnou auth vrstvu pro přihlášení uživatelů.
+
+### Interní Gogrou Správa Firem
+
+Route `/gss` je v MVP interní Gogrou administrační pohled na firmy / organizace. Gogrou tým zde vidí všechny založené firmy a může je provozně spravovat.
+
+Gogrou tým může:
+
+- vyhledat firmu
+- otevřít firmu
+- změnit stav firmy
+- vidět billing status
+- vidět aktivní moduly
+- ručně aktivovat firmu
+- ručně pozastavit firmu
+- ručně blokovat firmu
+
+Zákazník v budoucnu neuvidí seznam všech firem. Zákazník bude vstupovat pouze do svého tenant prostoru. Budoucí zákaznický vstup bude oddělený od interní Gogrou administrace.
+
+Gogrou admin pohled není finální zákaznický portál. Jde o interní operační / administrační vrstvu Gogrou. Zákaznický tenant portál bude oddělený.
+
+Firma může mít více aktivních modulů, různé billing stavy a více typů organizace současně.
+
+Příklady kombinací:
+
+- výrobní firma + brusírna
+- výrobce + toolshop
+- obchodník + služby
+
+Budoucí role se rozdělí na:
+
+- Gogrou Super Admin
+- Gogrou Support/Admin
+- zákaznický tenant admin
+- běžný zákaznický uživatel
+
+V MVP se auth zatím neimplementuje. Texty a model pouze připravují architekturu interní a zákaznické role.
+
+Firma má stav:
+
+- `draft`
+- `trial`
+- `pending_payment`
+- `active`
+- `paused`
+- `blocked`
+- `archived`
+
+Význam stavů:
+
+- `draft`: firma je rozepsaná nebo čeká na dokončení registrace.
+- `trial`: firma může dočasně používat vybrané moduly bez potvrzené platby.
+- `pending_payment`: firma čeká na potvrzení platby nebo objednávky služby.
+- `active`: firma má aktivní službu a může používat zaplacené nebo povolené moduly.
+- `paused`: firma je dočasně pozastavená, typicky administrativně nebo obchodně.
+- `blocked`: firma je zablokovaná kvůli bezpečnostnímu, platebnímu nebo provoznímu důvodu.
+- `archived`: firma je historicky zachovaná, ale běžně se nepoužívá.
+
+Firma může být aktivována:
+
+- automaticky po potvrzení platby
+- ručně administrátorem Gogrou
+- dočasně přes trial režim
+
+Firma může být pozastavena nebo zablokována. V MVP UI stačí základní správa firem: zobrazit stav firmy, změnit stav firmy, zobrazit billing status, zobrazit aktivní moduly a zobrazit zodpovědnou osobu.
+
+### Subscription / Billing / Fee Model
+
+Firma si při registraci nebo později v administraci vybere, které moduly Gogrou chce používat.
+
+Princip:
+
+- firma vybere `selectedModules`
+- systém podle zvolených modulů ukáže orientační cenu / měsíční fee
+- cenová politika se zatím nebude pevně programovat
+- datový model musí být na billing připravený
+- po potvrzení výběru vznikne `subscriptionPlan` / objednávka služby
+- uživatel je v budoucnu naveden do platební brány
+- po úspěšné platbě se nastaví `paymentConfirmedAt`
+- vybrané a zaplacené moduly se propíšou do `activatedModules`
+- firma může Gogrou ihned začít používat
+
+Připravené billing pojmy:
+
+- `selectedModules`
+- `subscriptionPlan`
+- `billingStatus`
+- `trial`
+- `active`
+- `past_due`
+- `cancelled`
+- `paymentProvider`
+- `paymentConfirmedAt`
+- `activatedModules`
+
+V MVP se platební brána neprogramuje a konkrétní cenová politika se nefixuje. GSS modul může být aktivní pouze tehdy, pokud je zaplacený nebo v trial režimu. Různé typy firem mohou mít různé moduly a různé fee.
+
+Firma / organizace obsahuje:
 
 - název firmy
 - zákaznický prefix, například `AH01`
 - IČO
+- DIČ
+- adresa
 - země
-- kontaktní údaje
 - výchozí jazyk
+- firemní e-mail
+- web
+- zodpovědná osoba
+- e-mail zodpovědné osoby
+- telefon zodpovědné osoby
+- typy firmy
+- vybrané moduly
+- aktivované moduly
+- subscription plán
+- billing status
+- payment provider
+- datum potvrzení platby
 - hlavní sklad
-- stav firmy: `active`, `paused`, `archived`
+- stav firmy: `draft`, `trial`, `pending_payment`, `active`, `paused`, `blocked`, `archived`
 
-Firma je základní hranice datové izolace. Všechna zákaznická provozní data v GSS musí být vázaná na konkrétní firmu.
+Firma je základní hranice datové izolace. Všechna zákaznická provozní data v GSS musí být vázaná na konkrétní firmu. Osoby a kontakty budou později samostatná entita `users` / `contacts`; v MVP stačí základní kontaktní údaje přímo na firmě.
 
 ## 2. Uživatelé Firmy
 
@@ -48,6 +201,8 @@ Uživatel obsahuje:
 - vazbu na firmu
 
 Uživatel nevidí data jiné firmy. Přístup k operacím se řídí rolí.
+
+Zodpovědná osoba firmy je hlavní kontaktní osoba tenant účtu. V budoucí produkční vrstvě zakládá nebo schvaluje další uživatele firmy. Přihlášení uživatele je budoucí auth vrstva, ne `localStorage` demo.
 
 ## 3. MVP Role
 
@@ -93,7 +248,7 @@ Oprávnění:
 
 ## 4. Hlavní Sklad Zákazníka
 
-V MVP má každá firma jeden hlavní sklad.
+V GSS MVP má firma s aktivním modulem `GSS` jeden hlavní sklad.
 
 Rozsah MVP:
 

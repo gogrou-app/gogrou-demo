@@ -1,500 +1,530 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import tools from "../gpc/data.js";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 // ===========================
-// Helpers – PREFIX
+// Helpers
 // ===========================
-const generatePrefix = (companyName, existing = []) => {
-  const clean = companyName
+const generatePrefix = (name, existing) => {
+  const base = name
     .toUpperCase()
     .replace(/[^A-Z]/g, "")
     .padEnd(2, "X")
     .slice(0, 2);
 
   for (let i = 1; i <= 99; i++) {
-    const num = String(i).padStart(2, "0");
-    const prefix = `${clean}${num}`;
-    if (!existing.includes(prefix)) return prefix;
+    const p = `${base}${String(i).padStart(2, "0")}`;
+    if (!existing.includes(p)) return p;
   }
-
-  return `${clean}99`;
+  return `${base}99`;
 };
 
-const hasValue = (v) => !(v === null || v === undefined || v === "");
+const MVP_ROLES = ["ADMIN", "POWER_USER", "USER"];
+const COMPANY_TYPES = [
+  "manufacturing_company",
+  "tool_manufacturer",
+  "tool_supplier",
+  "coating_service",
+  "heat_treatment_service",
+  "grinding_service",
+  "consulting",
+  "trading_company",
+  "other",
+];
+const COMPANY_TYPE_LABELS = {
+  manufacturing_company: "Výrobní firma",
+  tool_manufacturer: "Výrobce nástrojů",
+  tool_supplier: "Dodavatel nástrojů",
+  coating_service: "Povlakovna",
+  heat_treatment_service: "Kalírna / tepelné zpracování",
+  grinding_service: "Brusírna",
+  consulting: "Poradenství",
+  trading_company: "Obchodní firma",
+  other: "Ostatní",
+};
+const AVAILABLE_MODULES = [
+  "GSS",
+  "GPC supplier data channel",
+  "Toolshop",
+  "Services",
+  "Promitea/RFQ",
+];
+const MODULE_LABELS = {
+  GSS: "GSS",
+  "GPC supplier data channel": "Datový kanál GPC",
+  Toolshop: "Toolshop",
+  Services: "Služby",
+  "Promitea/RFQ": "Promitea / poptávky",
+};
+const SUBSCRIPTION_PLAN_LABELS = {
+  trial_mvp: "MVP zkušební režim",
+};
+const BILLING_STATUS_LABELS = {
+  trial: "Zkušební režim",
+  active: "Aktivní",
+  past_due: "Po splatnosti",
+  cancelled: "Zrušeno",
+};
+const COMPANY_STATUS_LABELS = {
+  draft: "Rozpracovaná",
+  trial: "Zkušební režim",
+  pending_payment: "Čeká na platbu",
+  active: "Aktivní",
+  paused: "Pozastavená",
+  blocked: "Blokovaná",
+  archived: "Archivovaná",
+};
+const COMPANY_STATUS_OPTIONS = [
+  { value: "trial", label: "Zkušební režim" },
+  { value: "pending_payment", label: "Čeká na platbu" },
+  { value: "active", label: "Aktivní" },
+  { value: "paused", label: "Pozastavená" },
+  { value: "blocked", label: "Blokovaná" },
+  { value: "archived", label: "Archivovaná" },
+];
+const LANGUAGE_OPTIONS = [
+  { value: "cs", label: "Čeština" },
+  { value: "en", label: "English" },
+  { value: "de", label: "Deutsch" },
+  { value: "it", label: "Italiano" },
+  { value: "pl", label: "Polski" },
+];
+const LANGUAGE_LABELS = Object.fromEntries(
+  LANGUAGE_OPTIONS.map((option) => [option.value, option.label])
+);
 
-const fmt = (v, unit = "") => {
-  if (!hasValue(v)) return "–";
-  const s = typeof v === "boolean" ? (v ? "Ano" : "Ne") : String(v);
-  return unit ? `${s} ${unit}` : s;
+const createSubscription = (selectedModules) => ({
+  selectedModules,
+  subscriptionPlan: "trial_mvp",
+  billingStatus: "trial",
+  paymentProvider: "",
+  paymentConfirmedAt: null,
+  activatedModules: selectedModules,
+});
+
+const labelFromMap = (labels, value) => labels[value] || value;
+
+const formatLabels = (labels, values) => values.map((value) => labelFromMap(labels, value)).join(", ");
+
+const formatDate = (value) => {
+  if (!value) return "neuvedeno";
+  return new Intl.DateTimeFormat("cs-CZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+};
+
+const createMainWarehouse = () => ({
+  id: "MAIN",
+  name: "Hlavní sklad",
+  type: "MAIN",
+});
+
+const createAdminUser = (companyId) => ({
+  id: crypto.randomUUID(),
+  name: "Administrátor",
+  email: "",
+  phone: "",
+  role: "ADMIN",
+  active: true,
+  companyId,
+});
+
+const normalizeCompany = (company) => {
+  const companyId = company.companyId || company.id;
+  const billingStatus = company.billingStatus || "trial";
+  const selectedModules = Array.isArray(company.selectedModules) && company.selectedModules.length > 0
+    ? company.selectedModules
+    : Array.isArray(company.activeModules) && company.activeModules.length > 0
+      ? company.activeModules
+      : ["GSS"];
+  const storedActivatedModules = Array.isArray(company.activatedModules) && company.activatedModules.length > 0
+    ? company.activatedModules
+    : Array.isArray(company.activeModules) && company.activeModules.length > 0
+      ? company.activeModules
+      : selectedModules;
+  const activatedModules = billingStatus === "trial" || billingStatus === "active"
+    ? storedActivatedModules
+    : [];
+  const users = Array.isArray(company.users) && company.users.length > 0
+    ? company.users.map((user) => ({
+        ...user,
+        companyId: user.companyId || companyId,
+        role: MVP_ROLES.includes(user.role) ? user.role : "USER",
+        active: user.active !== false,
+      }))
+    : [createAdminUser(companyId)];
+
+  return {
+    ...company,
+    companyId,
+    status: company.status || "active",
+    ico: company.ico || "",
+    dic: company.dic || "",
+    address: company.address || "",
+    country: company.country || "CZ",
+    language: company.language || "cs",
+    companyEmail: company.companyEmail || company.contactEmail || "",
+    companyPhone: company.companyPhone || "",
+    website: company.website || "",
+    responsiblePerson: company.responsiblePerson || "",
+    responsibleEmail: company.responsibleEmail || "",
+    responsiblePhone: company.responsiblePhone || company.contactPhone || "",
+    companyTypes: Array.isArray(company.companyTypes) && company.companyTypes.length > 0
+      ? company.companyTypes
+      : ["manufacturing_company"],
+    selectedModules,
+    subscriptionPlan: company.subscriptionPlan || "trial_mvp",
+    billingStatus,
+    paymentProvider: company.paymentProvider || "",
+    paymentConfirmedAt: company.paymentConfirmedAt || null,
+    activatedModules,
+    createdAt: company.createdAt || new Date().toISOString(),
+    users,
+    warehouses: Array.isArray(company.warehouses) && company.warehouses.length > 0
+      ? company.warehouses
+      : [createMainWarehouse()],
+  };
 };
 
 // ===========================
 // Page
 // ===========================
 export default function GSSPage() {
-  // DEMO – obsazené prefixy (později z DB)
-  const usedPrefixes = ["MT01", "AA01"];
+  const router = useRouter();
 
-  const [company, setCompany] = useState(null);
-  const [name, setName] = useState("");
+  const [companies, setCompanies] = useState([]);
+  const [companySearch, setCompanySearch] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    ico: "",
+    dic: "",
+    address: "",
+    country: "CZ",
+    language: "cs",
+    companyEmail: "",
+    companyPhone: "",
+    website: "",
+    responsiblePerson: "",
+    responsibleEmail: "",
+    responsiblePhone: "",
+    companyTypes: ["manufacturing_company"],
+    selectedModules: ["GSS"],
+  });
 
-  // režimy práce se stavovým řádkem
-  const [mode, setMode] = useState("GSS"); // GSS | GPC
-  const [query, setQuery] = useState("");
+  // ===== LOAD =====
+  useEffect(() => {
+    const stored = localStorage.getItem("gss_companies");
+    if (stored) {
+      setCompanies(JSON.parse(stored).map(normalizeCompany));
+    }
+  }, []);
 
-  // DEMO: položky v GSS (jen gpc_id list)
-  const [gssItems, setGssItems] = useState([]); // [{ gpc_id, min, max, warning, sharpen, sharpen_count, dm_mode }]
+  // ===== SAVE =====
+  useEffect(() => {
+    localStorage.setItem("gss_companies", JSON.stringify(companies));
+  }, [companies]);
 
+  // ===== CREATE COMPANY =====
   const createCompany = () => {
-    if (!name.trim()) return;
-    const prefix = generatePrefix(name, usedPrefixes);
+    if (!form.name.trim()) return;
 
-    setCompany({
-      name: name.trim(),
+    const prefixes = companies.map((c) => c.prefix);
+    const prefix = generatePrefix(form.name, prefixes);
+    const companyId = crypto.randomUUID();
+
+    const company = {
+      id: companyId,
+      companyId,
+      name: form.name.trim(),
       prefix,
-      warehouses: [
-        {
-          id: "MAIN",
-          name: "Hlavní sklad",
-        },
-      ],
+      ico: form.ico.trim(),
+      dic: form.dic.trim(),
+      address: form.address.trim(),
+      country: form.country.trim() || "CZ",
+      language: form.language.trim() || "cs",
+      companyEmail: form.companyEmail.trim(),
+      companyPhone: form.companyPhone.trim(),
+      website: form.website.trim(),
+      responsiblePerson: form.responsiblePerson.trim(),
+      responsibleEmail: form.responsibleEmail.trim(),
+      responsiblePhone: form.responsiblePhone.trim(),
+      companyTypes: form.companyTypes,
+      ...createSubscription(form.selectedModules),
+      status: "trial",
+      createdAt: new Date().toISOString(),
+      users: [createAdminUser(companyId)],
+      warehouses: [createMainWarehouse()],
+    };
+
+    setCompanies((prev) => [...prev, company]);
+    localStorage.setItem(`gss_wh_${companyId}_MAIN`, JSON.stringify([]));
+    setForm({
+      name: "",
+      ico: "",
+      dic: "",
+      address: "",
+      country: "CZ",
+      language: "cs",
+      companyEmail: "",
+      companyPhone: "",
+      website: "",
+      responsiblePerson: "",
+      responsibleEmail: "",
+      responsiblePhone: "",
+      companyTypes: ["manufacturing_company"],
+      selectedModules: ["GSS"],
     });
   };
 
-  const norm = (s) => String(s || "").toLowerCase().trim();
-
-  const isInGss = (gpc_id) => gssItems.some((x) => String(x.gpc_id) === String(gpc_id));
-
-  const gssResults = useMemo(() => {
-    if (!company) return [];
-    const q = norm(query);
-    if (!q) return [];
-
-    // v demu hledáme v názvu + gpc_id + gtin jen nad položkami, které už jsou v GSS
-    const ids = new Set(gssItems.map((x) => String(x.gpc_id)));
-    const list = tools.filter((t) => ids.has(String(t.gpc_id)));
-
-    return list.filter((t) => {
-      const hay = [
-        t.name,
-        t.gpc_id,
-        t.gtin,
-        t.manufacturer,
-        t.type,
-      ]
-        .filter(Boolean)
-        .map((x) => norm(x))
-        .join(" | ");
-      return hay.includes(q);
-    });
-  }, [company, query, gssItems]);
-
-  const gpcResults = useMemo(() => {
-    if (!company) return [];
-    const q = norm(query);
-    if (!q) return [];
-
-    // hledání v GPC: název, gpc_id, gtin (demo)
-    return tools
-      .filter((t) => {
-        const hay = [t.name, t.gpc_id, t.gtin, t.manufacturer, t.type]
-          .filter(Boolean)
-          .map((x) => norm(x))
-          .join(" | ");
-        return hay.includes(q);
-      })
-      .slice(0, 20);
-  }, [company, query]);
-
-  const addToGss = (tool) => {
-    const id = String(tool.gpc_id);
-    if (isInGss(id)) return;
-
-    setGssItems((prev) => [
-      ...prev,
-      {
-        gpc_id: id,
-        min: "",
-        max: "",
-        warning: "",
-        sharpen: false,
-        sharpen_count: "",
-        dm_mode: false,
-        note: "",
-      },
-    ]);
+  const updateForm = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  // ===========================
-  // STAV A – firma neexistuje
-  // ===========================
-  if (!company) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#000",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            width: 420,
-            padding: 32,
-            borderRadius: 16,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 12 }}>
-            Založení firmy
-          </h1>
+  const toggleArrayValue = (field, value) => {
+    setForm((prev) => {
+      const current = prev[field];
+      const next = current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value];
 
-          <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 24 }}>
-            Založením firmy vznikne automaticky Hlavní sklad
-          </div>
+      return {
+        ...prev,
+        [field]: field === "selectedModules" && next.length === 0 ? ["GSS"] : next,
+      };
+    });
+  };
 
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Název firmy"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.15)",
-              background: "#000",
-              color: "#fff",
-              marginBottom: 16,
-            }}
-          />
+  const estimatedFeeLabel = form.selectedModules.length > 0
+    ? "Orientační měsíční poplatek bude dopočten podle zvolených modulů."
+    : "Vyberte modul pro orientační měsíční poplatek.";
 
-          <button
-            onClick={createCompany}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 12,
-              background: "#2563eb",
-              color: "#fff",
-              fontWeight: 800,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            Založit firmu
-          </button>
-        </div>
-      </div>
+  const updateCompanyStatus = (companyId, status) => {
+    setCompanies((prev) =>
+      prev.map((company) =>
+        company.companyId === companyId || company.id === companyId
+          ? { ...company, status }
+          : company
+      )
     );
-  }
+  };
+
+  const normalizedCompanySearch = companySearch.trim().toLowerCase();
+  const filteredCompanies = normalizedCompanySearch
+    ? companies.filter((company) =>
+        [company.name, company.prefix, company.ico]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedCompanySearch))
+      )
+    : companies;
 
   // ===========================
-  // STAV B – firma existuje
+  // UI
   // ===========================
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#000",
-        color: "#fff",
-        padding: "32px 40px",
-        maxWidth: 1600,
-        margin: "0 auto",
-      }}
-    >
-      {/* KONTEKST */}
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 14, opacity: 0.6 }}>Firma</div>
-        <div style={{ fontSize: 22, fontWeight: 900 }}>
-          {company.name} ({company.prefix})
-        </div>
-        <div style={{ fontSize: 14, opacity: 0.6, marginTop: 6 }}>
-          Sklad: Hlavní sklad
-          <span style={{ marginLeft: 10, opacity: 0.35 }}>(přepínač skladu později)</span>
-        </div>
+    <div style={wrap}>
+      <h1 style={title}>Interní správa firem Gogrou</h1>
+      <div style={lead}>
+        Tento pohled je dočasný MVP prototyp tenant registrace a GSS flow. Finální registrace firmy bude mimo GSS a zákaznický portál bude oddělený.
       </div>
 
-      {/* STAVOVÝ ŘÁDEK */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 18,
-        }}
-      >
+      {/* CREATE */}
+      <div style={box}>
+        <h2 style={subtitle}>Dočasná registrace firmy pro MVP</h2>
+        <div style={note}>
+          Cílově vzniká firma přes obecnou registraci Gogrou. GSS je pouze jeden z modulů, který se firmě aktivuje podle trialu nebo předplatného.
+        </div>
         <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            mode === "GSS"
-              ? "Hledat v GSS (název, GPC ID, GTIN, DM)"
-              : "Hledat v GPC (název, GPC ID, GTIN)"
-          }
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 10,
-            border:
-              mode === "GPC"
-                ? "2px solid #7c3aed"
-                : "1px solid rgba(255,255,255,0.15)",
-            background:
-              mode === "GPC"
-                ? "rgba(124,58,237,0.10)"
-                : "rgba(255,255,255,0.04)",
-            color: "#fff",
-            fontSize: 15,
-          }}
+          value={form.name}
+          onChange={(e) => updateForm("name", e.target.value)}
+          placeholder="Název firmy"
+          style={input}
+        />
+        <div style={grid}>
+          <input
+            value={form.ico}
+            onChange={(e) => updateForm("ico", e.target.value)}
+            placeholder="IČO"
+            style={input}
+          />
+          <input
+            value={form.dic}
+            onChange={(e) => updateForm("dic", e.target.value)}
+            placeholder="DIČ"
+            style={input}
+          />
+          <input
+            value={form.address}
+            onChange={(e) => updateForm("address", e.target.value)}
+            placeholder="Adresa"
+            style={input}
+          />
+          <input
+            value={form.country}
+            onChange={(e) => updateForm("country", e.target.value)}
+            placeholder="Země"
+            style={input}
+          />
+          <input
+            value={form.companyEmail}
+            onChange={(e) => updateForm("companyEmail", e.target.value)}
+            placeholder="Firemní e-mail"
+            style={input}
+          />
+          <input
+            value={form.companyPhone}
+            onChange={(e) => updateForm("companyPhone", e.target.value)}
+            placeholder="Firemní telefon"
+            style={input}
+          />
+          <select
+            value={form.language}
+            onChange={(e) => updateForm("language", e.target.value)}
+            style={input}
+          >
+            {LANGUAGE_OPTIONS.map((language) => (
+              <option key={language.value} value={language.value}>
+                {language.label}
+              </option>
+            ))}
+          </select>
+          <input
+            value={form.website}
+            onChange={(e) => updateForm("website", e.target.value)}
+            placeholder="Web"
+            style={input}
+          />
+          <input
+            value={form.responsiblePerson}
+            onChange={(e) => updateForm("responsiblePerson", e.target.value)}
+            placeholder="Zodpovědná osoba"
+            style={input}
+          />
+          <input
+            value={form.responsibleEmail}
+            onChange={(e) => updateForm("responsibleEmail", e.target.value)}
+            placeholder="E-mail zodpovědné osoby"
+            style={input}
+          />
+          <input
+            value={form.responsiblePhone}
+            onChange={(e) => updateForm("responsiblePhone", e.target.value)}
+            placeholder="Telefon zodpovědné osoby"
+            style={input}
+          />
+        </div>
+        <div style={sectionLabel}>Typy firmy</div>
+        <div style={checkboxGrid}>
+          {COMPANY_TYPES.map((type) => (
+            <label key={type} style={checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={form.companyTypes.includes(type)}
+                onChange={() => toggleArrayValue("companyTypes", type)}
+              />
+              {labelFromMap(COMPANY_TYPE_LABELS, type)}
+            </label>
+          ))}
+        </div>
+        <div style={sectionLabel}>Vybrané moduly</div>
+        <div style={checkboxGrid}>
+          {AVAILABLE_MODULES.map((module) => (
+            <label key={module} style={checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={form.selectedModules.includes(module)}
+                onChange={() => toggleArrayValue("selectedModules", module)}
+              />
+              {labelFromMap(MODULE_LABELS, module)}
+            </label>
+          ))}
+        </div>
+        <div style={billingBox}>
+          <b>Předplatné</b>
+          <div style={meta}>
+            Plán: {SUBSCRIPTION_PLAN_LABELS.trial_mvp} · Stav předplatného: {BILLING_STATUS_LABELS.trial} · Platební brána bude doplněna
+          </div>
+          <div style={meta}>{estimatedFeeLabel}</div>
+        </div>
+        <button onClick={createCompany} style={btnPrimary}>
+          Založit firmu
+        </button>
+      </div>
+
+      {/* LIST */}
+      <div style={box}>
+        <h2 style={subtitle}>Firmy</h2>
+        <input
+          value={companySearch}
+          onChange={(e) => setCompanySearch(e.target.value)}
+          placeholder="Hledat podle názvu firmy, prefixu nebo IČO"
+          style={input}
         />
 
-        {mode === "GSS" ? (
-          <button
-            onClick={() => {
-              setMode("GPC");
-              setQuery("");
-            }}
-            style={btnSecondary}
-          >
-            Hledat v GPC
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              setMode("GSS");
-              setQuery("");
-            }}
-            style={btnSecondary}
-          >
-            Zpět do GSS
-          </button>
-        )}
-
-        {mode === "GPC" ? (
-          <span
-            style={{
-              padding: "8px 10px",
-              borderRadius: 999,
-              background: "rgba(124,58,237,0.18)",
-              border: "1px solid rgba(124,58,237,0.35)",
-              color: "#c4b5fd",
-              fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: 0.3,
-            }}
-          >
-            GPC režim
-          </span>
-        ) : null}
-      </div>
-
-      {/* VÝSLEDKY HLEDÁNÍ */}
-      {query.trim() ? (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 13, opacity: 0.65, marginBottom: 10 }}>
-            Výsledky ({mode === "GSS" ? "GSS" : "GPC"})
+        {companies.length === 0 ? (
+          <div style={{ opacity: 0.6 }}>
+            Zatím není založena žádná firma
           </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            {(mode === "GSS" ? gssResults : gpcResults).map((t) => {
-              const inGss = isInGss(t.gpc_id);
-              return (
-                <div
-                  key={String(t.gpc_id)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 14,
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 900 }}>
-                      {t.name}
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.7, marginTop: 2 }}>
-                      GPC ID: <b>{fmt(t.gpc_id)}</b>
-                      {hasValue(t.gtin) ? (
-                        <>
-                          <span style={{ margin: "0 8px", opacity: 0.4 }}>•</span>
-                          GTIN: <b>{fmt(t.gtin)}</b>
-                        </>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>
-                      {hasValue(t.manufacturer) ? `Výrobce: ${t.manufacturer}` : "—"}
-                      <span style={{ margin: "0 8px", opacity: 0.35 }}>•</span>
-                      {hasValue(t.type) ? `Typ: ${t.type}` : "—"}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {mode === "GPC" ? (
-                      inGss ? (
-                        <span
-                          style={{
-                            padding: "8px 10px",
-                            borderRadius: 999,
-                            background: "rgba(34,197,94,0.12)",
-                            border: "1px solid rgba(34,197,94,0.30)",
-                            color: "rgba(187,247,208,0.95)",
-                            fontSize: 12,
-                            fontWeight: 900,
-                          }}
-                        >
-                          Už v GSS
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => addToGss(t)}
-                          style={btnPrimary}
-                        >
-                          Převzít do GSS
-                        </button>
-                      )
-                    ) : (
-                      <a
-                        href={`/gpc/${t.gpc_id}`}
-                        style={{
-                          ...btnGhost,
-                          textDecoration: "none",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        Otevřít kartu
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {(mode === "GSS" ? gssResults : gpcResults).length === 0 ? (
-              <div style={{ opacity: 0.6, padding: "10px 4px" }}>Nic nenalezeno</div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {/* HLAVNÍ SKLAD – PŘEHLED */}
-      <div
-        style={{
-          padding: 24,
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 900 }}>Hlavní sklad</div>
-            <div style={{ fontSize: 13, opacity: 0.6, marginTop: 4 }}>
-              Položky evidované v GSS: <b>{gssItems.length}</b>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              setMode("GPC");
-              setQuery("");
-            }}
-            style={btnSecondary}
-          >
-            ➕ Přidat položku z GPC
-          </button>
-        </div>
-
-        <div style={{ height: 1, background: "rgba(255,255,255,0.10)", margin: "18px 0" }} />
-
-        {gssItems.length === 0 ? (
-          <div
-            style={{
-              padding: 26,
-              borderRadius: 14,
-              border: "1px dashed rgba(255,255,255,0.18)",
-              textAlign: "center",
-              opacity: 0.7,
-            }}
-          >
-            <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 6 }}>
-              Hlavní sklad je prázdný
-            </div>
-            <div style={{ fontSize: 13 }}>
-              Klikni na <b>„➕ Přidat položku z GPC“</b> nebo přepni režim <b>Hledat v GPC</b>
-            </div>
+        ) : filteredCompanies.length === 0 ? (
+          <div style={{ opacity: 0.6 }}>
+            Nebyla nalezena žádná firma.
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {gssItems.map((it) => {
-              const t = tools.find((x) => String(x.gpc_id) === String(it.gpc_id));
-              return (
-                <div
-                  key={String(it.gpc_id)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 12,
-                    padding: "12px 14px",
-                    borderRadius: 14,
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
+          filteredCompanies.map((c) => (
+            <div
+              key={c.id}
+              style={item}
+              onClick={() => router.push(`/gss/company/${c.id}`)}
+            >
+              <b>{c.name}</b>{" "}
+              <span style={{ opacity: 0.6 }}>({c.prefix})</span>
+              <div style={meta}>
+                {c.ico ? `IČO ${c.ico} · ` : ""}
+                {c.country || "CZ"} · {labelFromMap(LANGUAGE_LABELS, c.language || "cs")}
+              </div>
+              <div style={meta}>
+                Typy firmy: {formatLabels(COMPANY_TYPE_LABELS, c.companyTypes || ["manufacturing_company"])}
+              </div>
+              <div style={meta}>
+                Stav firmy: {labelFromMap(COMPANY_STATUS_LABELS, c.status || "active")} · Stav předplatného: {labelFromMap(BILLING_STATUS_LABELS, c.billingStatus || "trial")}
+              </div>
+              <div style={meta}>
+                Aktivní moduly: {formatLabels(MODULE_LABELS, c.activatedModules || c.selectedModules || ["GSS"])}
+              </div>
+              <div style={meta}>
+                Datum vytvoření: {formatDate(c.createdAt)}
+              </div>
+              <div style={meta}>
+                Zodpovědná osoba: {c.responsiblePerson || "nedoplněna"}
+                {c.responsibleEmail ? ` · ${c.responsibleEmail}` : ""}
+              </div>
+              <div style={statusRow} onClick={(e) => e.stopPropagation()}>
+                <label style={statusLabel}>
+                  Změnit stav firmy
+                  <select
+                    value={c.status || "active"}
+                    onChange={(e) => updateCompanyStatus(c.companyId || c.id, e.target.value)}
+                    style={statusSelect}
+                  >
+                    {COMPANY_STATUS_OPTIONS.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/gss/company/${c.id}`)}
+                  style={btnSecondary}
                 >
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 900 }}>
-                      {t?.name || `Položka ${it.gpc_id}`}
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.7, marginTop: 2 }}>
-                      GPC ID: <b>{it.gpc_id}</b>
-                      {t?.gtin ? (
-                        <>
-                          <span style={{ margin: "0 8px", opacity: 0.4 }}>•</span>
-                          GTIN: <b>{t.gtin}</b>
-                        </>
-                      ) : null}
-                      <span style={{ margin: "0 8px", opacity: 0.4 }}>•</span>
-                      Stav: <b>0 ks</b>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <a
-                      href={`/gpc/${it.gpc_id}`}
-                      style={{
-                        ...btnGhost,
-                        textDecoration: "none",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      Karta GPC
-                    </a>
-
-                    <button
-                      onClick={() =>
-                        setGssItems((prev) => prev.filter((x) => String(x.gpc_id) !== String(it.gpc_id)))
-                      }
-                      style={btnDanger}
-                    >
-                      Odebrat
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  Otevřít detail firmy
+                </button>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
@@ -504,42 +534,144 @@ export default function GSSPage() {
 // ===========================
 // Styles
 // ===========================
+const wrap = {
+  minHeight: "100vh",
+  background: "#000",
+  color: "#fff",
+  padding: 32,
+};
+
+const title = {
+  fontSize: 26,
+  fontWeight: 900,
+  marginBottom: 8,
+};
+
+const lead = {
+  maxWidth: 820,
+  fontSize: 14,
+  lineHeight: 1.5,
+  opacity: 0.7,
+  marginBottom: 24,
+};
+
+const note = {
+  fontSize: 13,
+  lineHeight: 1.45,
+  opacity: 0.65,
+  marginBottom: 14,
+};
+
+const subtitle = {
+  fontSize: 18,
+  fontWeight: 800,
+  marginBottom: 12,
+};
+
+const box = {
+  border: "1px solid rgba(255,255,255,0.15)",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+};
+
+const input = {
+  width: "100%",
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "#000",
+  color: "#fff",
+  marginBottom: 10,
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const checkboxGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 8,
+  marginBottom: 14,
+};
+
+const checkboxLabel = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  fontSize: 13,
+  opacity: 0.85,
+};
+
+const sectionLabel = {
+  margin: "10px 0 8px",
+  fontSize: 13,
+  fontWeight: 800,
+  opacity: 0.75,
+};
+
+const billingBox = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  padding: 10,
+  marginBottom: 14,
+};
+
 const btnPrimary = {
   padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(124,58,237,0.45)",
-  background: "rgba(124,58,237,0.20)",
-  color: "#c4b5fd",
+  borderRadius: 8,
+  background: "rgba(124,58,237,0.35)",
+  border: "1px solid rgba(124,58,237,0.6)",
+  color: "#fff",
   fontWeight: 900,
   cursor: "pointer",
 };
 
 const btnSecondary = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.15)",
+  padding: "8px 12px",
+  borderRadius: 8,
   background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.18)",
   color: "#fff",
   fontWeight: 800,
   cursor: "pointer",
 };
 
-const btnGhost = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.15)",
-  background: "transparent",
-  color: "#fff",
-  fontWeight: 800,
+const item = {
+  padding: 12,
+  borderBottom: "1px solid rgba(255,255,255,0.1)",
   cursor: "pointer",
 };
 
-const btnDanger = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(239,68,68,0.35)",
-  background: "rgba(239,68,68,0.12)",
-  color: "rgba(254,202,202,0.95)",
-  fontWeight: 900,
-  cursor: "pointer",
+const meta = {
+  marginTop: 4,
+  fontSize: 12,
+  opacity: 0.6,
+};
+
+const statusRow = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "end",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const statusLabel = {
+  display: "inline-flex",
+  flexDirection: "column",
+  gap: 6,
+  fontSize: 12,
+  opacity: 0.85,
+};
+
+const statusSelect = {
+  minWidth: 220,
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "#000",
+  color: "#fff",
 };
