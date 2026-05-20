@@ -2,15 +2,19 @@
 
 ## Co je GPC
 
-GPC je interní master databanka Gogrou pro produktové karty, technické parametry, identifikátory, assety a katalogový stav položek.
+GPC je interní validovaná master databanka Gogrou pro produktové karty, technické parametry, identifikátory, assety a katalogový stav položek.
 
 GPC slouží jako zdroj pravdy pro položky, které lze následně natáhnout do zákaznického GSS.
+
+GPC obsahuje pouze validované master položky.
 
 ## Co GPC není
 
 GPC není zákaznické prostředí.
 
 Zákazník v GPC nepracuje a GPC položky neupravuje. Zákazník pracuje v GSS.
+
+GPC není prostor pro zákaznické nevalidované položky.
 
 GPC neřeší:
 
@@ -47,6 +51,22 @@ GSS drží zákaznický provozní kontext:
 - provozní lifecycle konkrétního kusu
 
 Zákazník si z GPC natáhne položku do GSS. Od té chvíle se zákaznický provoz řeší v GSS, ne v GPC.
+
+Pokud zákazník v GSS potřebuje položku, která v GPC není, může ji založit lokálně v GSS jako nevalidovanou zákaznickou položku. Taková položka zůstává v GSS a nesmí se automaticky stát GPC master položkou.
+
+Nevalidovaná zákaznická položka v GSS nemá dostupné pokročilé funkce, například:
+
+- normativy
+- AI doporučení
+- plnohodnotné alternativy
+- plnou technickou dokumentaci
+- automatické optimalizace
+
+Nevalidovaná položka v GSS může sloužit jako podnět pro doplnění do GPC. Gogrou může na základě těchto podnětů oslovit výrobce nebo dodavatele a získat data v rozsahu podobném ToolsUnited.
+
+Cílově budou mít výrobci a značky bezpečný řízený kanál pro dodávání a aktualizaci dat do GPC. Novinky, změny, ukončené položky a aktualizace parametrů budou předávány kontrolovanou cestou a Gogrou tým data ověří nebo schválí před zařazením do GPC.
+
+Ve druhé obchodní vrstvě mohou značky získat možnost nabídnout Gogrou komunitě výhodné podmínky.
 
 ## Architektura
 
