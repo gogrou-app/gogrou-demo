@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 // ===========================
 // Helpers
 // ===========================
+const ORGANIZATIONS_STORAGE_KEY = "gogrou_organizations";
+
 const generatePrefix = (name, existing) => {
   const base = name
     .toUpperCase()
@@ -133,7 +135,7 @@ const createAdminUser = (companyId) => ({
 });
 
 const normalizeCompany = (company) => {
-  const companyId = company.companyId || company.id;
+  const companyId = company.companyId || company.organizationId || company.id;
   const billingStatus = company.billingStatus || "trial";
   const selectedModules = Array.isArray(company.selectedModules) && company.selectedModules.length > 0
     ? company.selectedModules
@@ -160,6 +162,7 @@ const normalizeCompany = (company) => {
   return {
     ...company,
     companyId,
+    organizationId: company.organizationId || companyId,
     status: company.status || "active",
     ico: company.ico || "",
     dic: company.dic || "",
@@ -169,8 +172,8 @@ const normalizeCompany = (company) => {
     companyEmail: company.companyEmail || company.contactEmail || "",
     companyPhone: company.companyPhone || "",
     website: company.website || "",
-    responsiblePerson: company.responsiblePerson || "",
-    responsibleEmail: company.responsibleEmail || "",
+    responsiblePerson: company.responsiblePerson || company.contactName || "",
+    responsibleEmail: company.responsibleEmail || company.contactEmail || "",
     responsiblePhone: company.responsiblePhone || company.contactPhone || "",
     companyTypes: Array.isArray(company.companyTypes) && company.companyTypes.length > 0
       ? company.companyTypes
@@ -216,7 +219,7 @@ export default function GSSPage() {
 
   // ===== LOAD =====
   useEffect(() => {
-    const stored = localStorage.getItem("gss_companies");
+    const stored = localStorage.getItem(ORGANIZATIONS_STORAGE_KEY);
     if (stored) {
       setCompanies(JSON.parse(stored).map(normalizeCompany));
     }
@@ -224,7 +227,7 @@ export default function GSSPage() {
 
   // ===== SAVE =====
   useEffect(() => {
-    localStorage.setItem("gss_companies", JSON.stringify(companies));
+    localStorage.setItem(ORGANIZATIONS_STORAGE_KEY, JSON.stringify(companies));
   }, [companies]);
 
   // ===== CREATE COMPANY =====
@@ -238,6 +241,7 @@ export default function GSSPage() {
     const company = {
       id: companyId,
       companyId,
+      organizationId: companyId,
       name: form.name.trim(),
       prefix,
       ico: form.ico.trim(),
@@ -251,6 +255,9 @@ export default function GSSPage() {
       responsiblePerson: form.responsiblePerson.trim(),
       responsibleEmail: form.responsibleEmail.trim(),
       responsiblePhone: form.responsiblePhone.trim(),
+      contactName: form.responsiblePerson.trim(),
+      contactEmail: form.responsibleEmail.trim(),
+      contactPhone: form.responsiblePhone.trim(),
       companyTypes: form.companyTypes,
       ...createSubscription(form.selectedModules),
       status: "trial",
@@ -325,16 +332,16 @@ export default function GSSPage() {
   // ===========================
   return (
     <div style={wrap}>
-      <h1 style={title}>Interní správa firem Gogrou</h1>
+      <h1 style={title}>GSS MVP prototyp</h1>
       <div style={lead}>
-        Tento pohled je dočasný MVP prototyp tenant registrace a GSS flow. Finální registrace firmy bude mimo GSS a zákaznický portál bude oddělený.
+        Tento pohled je dočasný GSS prototyp. Registrace a interní správa organizací jsou nad GSS a patří do `/register` a `/admin/organizations`.
       </div>
 
       {/* CREATE */}
       <div style={box}>
-        <h2 style={subtitle}>Dočasná registrace firmy pro MVP</h2>
+        <h2 style={subtitle}>Dočasné GSS založení organizace</h2>
         <div style={note}>
-          Cílově vzniká firma přes obecnou registraci Gogrou. GSS je pouze jeden z modulů, který se firmě aktivuje podle trialu nebo předplatného.
+          Tento formulář zůstává jen pro GSS MVP prototyp. Nové organizace se ukládají do společného klíče `gogrou_organizations`; primární správa je v `/admin/organizations`.
         </div>
         <input
           value={form.name}

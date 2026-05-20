@@ -14,8 +14,13 @@ Základní rozhodnutí: GSS není vstupní brána do Gogrou. GSS je pouze jeden 
 - `/app/toolshop`: obchodní, nabídky a nákupní modul
 - `/app/services`: služby, například broušení, povlakování, kalírna nebo poradenství
 - `/admin`: interní Gogrou správa
+- `/admin/organizations`: interní Gogrou správa firem / organizací
 
 Route `/admin` se zatím neprecizuje. V MVP může existovat dočasný interní prototyp v jiné route, ale finální interní správa bude oddělená od zákaznického portálu.
+
+V MVP používá registrace, budoucí zákaznický portál a interní Gogrou správa jeden společný localStorage klíč:
+
+- `gogrou_organizations`
 
 ## Firma / Organizace / Tenant
 
@@ -24,6 +29,8 @@ Firma / organizace je obecný Gogrou tenant. Registruje se do Gogrou mimo GSS.
 Firma si při registraci nebo později v administraci vybírá aktivní moduly. Dostupné moduly se po přihlášení zobrazují podle aktivace, trialu nebo zaplaceného předplatného.
 
 Firma může existovat bez GSS.
+
+Firmu může založit zákazník sám přes `/register`, nebo ji může předem založit Gogrou tým pro trial/demo. Gogrou tým může v interní správě firmu ručně aktivovat, pozastavit nebo blokovat. Později bude aktivace navázána na platební bránu a subscription workflow.
 
 Příklady:
 
@@ -50,3 +57,18 @@ Portál zobrazí pouze moduly dostupné pro jeho firmu:
 
 Pokud firma nemá aktivní GSS, neuvidí `/app/gss` jako dostupný modul.
 
+Zákazník po přihlášení uvidí pouze svůj tenant a svoje aktivované moduly. Neuvidí seznam všech firem / organizací.
+
+## Interní Správa Organizací
+
+Interní Gogrou správa organizací patří nad jednotlivé moduly. V MVP ji reprezentuje route `/admin/organizations`.
+
+Gogrou tým zde může:
+
+- vidět všechny organizace
+- změnit stav organizace
+- změnit billing status
+- ručně aktivovat trial/demo organizaci
+- pozastavit nebo zablokovat organizaci
+
+GSS zůstává pouze modul. Registrace firmy a správa firmy jsou nad GSS.

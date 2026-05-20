@@ -35,6 +35,7 @@ Cílová struktura aplikace:
 - `/app/toolshop`: obchodní / nabídky / nákupní modul
 - `/app/services`: služby, například broušení, povlakování, kalírna nebo poradenství
 - `/admin`: interní Gogrou správa, zatím neprecizovaná
+- `/admin/organizations`: interní Gogrou správa firem / organizací
 
 Příklady firem bez GSS:
 
@@ -64,11 +65,13 @@ Aktivní moduly:
 
 Současné MVP flow v `/gss` je dočasný prototyp tenant registrace a GSS flow. Finální registrace firmy bude mimo GSS.
 
-V MVP jsou firmy uložené lokálně v `localStorage` jako demo tenant model. Produkční verze bude ukládat firmy / organizace v databázi a bude mít samostatnou auth vrstvu pro přihlášení uživatelů.
+V MVP jsou firmy uložené lokálně v `localStorage` jako demo tenant model. Společný klíč pro registraci, budoucí zákaznický portál a interní Gogrou správu je `gogrou_organizations`. Produkční verze bude ukládat firmy / organizace v databázi a bude mít samostatnou auth vrstvu pro přihlášení uživatelů.
+
+Firmu může založit zákazník sám přes `/register`, nebo ji může předem založit Gogrou tým pro trial/demo. Gogrou může firmu ručně aktivovat, pozastavit nebo blokovat. Později bude aktivace navázána na platební bránu a subscription workflow.
 
 ### Interní Gogrou Správa Firem
 
-Route `/gss` je v MVP interní Gogrou administrační pohled na firmy / organizace. Gogrou tým zde vidí všechny založené firmy a může je provozně spravovat.
+Route `/admin/organizations` je v MVP interní Gogrou administrační pohled na firmy / organizace. Gogrou tým zde vidí všechny založené firmy a může je provozně spravovat.
 
 Gogrou tým může:
 
@@ -81,9 +84,11 @@ Gogrou tým může:
 - ručně pozastavit firmu
 - ručně blokovat firmu
 
-Zákazník v budoucnu neuvidí seznam všech firem. Zákazník bude vstupovat pouze do svého tenant prostoru. Budoucí zákaznický vstup bude oddělený od interní Gogrou administrace.
+Zákazník v budoucnu neuvidí seznam všech firem. Po přihlášení uvidí pouze svůj tenant, svoje aktivované moduly a svoje data. Budoucí zákaznický vstup bude oddělený od interní Gogrou administrace.
 
 Gogrou admin pohled není finální zákaznický portál. Jde o interní operační / administrační vrstvu Gogrou. Zákaznický tenant portál bude oddělený.
+
+Registrace firmy a správa firmy jsou nad GSS. GSS je pouze modul, který může být pro organizaci aktivní.
 
 Firma může mít více aktivních modulů, různé billing stavy a více typů organizace současně.
 
