@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "gpc:check": "node scripts/gpc/read_gpc_files.js",
+    "gpc:bootstrap": "node scripts/setup/bootstrap-gpc.js"
   },
   "dependencies": {
     "next": "14.1.0",
