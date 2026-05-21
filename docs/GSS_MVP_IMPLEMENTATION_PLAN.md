@@ -323,11 +323,15 @@ Rozsah:
 - DM tracking ano/ne
 - brousitelnost ano/ne
 - max počet přebroušení
+- poznámka k broušení
 - poznámky
 - blokace položky
+- důvod blokace
 - blokace konkrétního kusu
 
-Tato nastavení jsou tenantová. Stejná GPC položka může mít pro různé zákazníky rozdílná GSS pravidla.
+Tato nastavení jsou tenantová. Jde o lokální provozní pravidla firmy v GSS, ne o GPC master data. Stejná GPC položka může mít pro různé zákazníky rozdílná GSS pravidla, například jiné min/max hranice, DM tracking, pravidla broušení, blokace nebo interní poznámky.
+
+Uložení tenant settings musí aktualizovat pouze zákaznickou skladovou položku v hlavním skladu dané organizace. Nesmí měnit GPC katalog, GPC technická data ani katalogový lifecycle status.
 
 ## Etapa 4: DM Kusy a Skladové Operace
 

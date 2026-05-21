@@ -86,7 +86,11 @@ const createTenantGssItem = (tool) => ({
     sharpen: {
       enabled: false,
       cycles: "",
+      note: "",
     },
+    blocked: false,
+    blockReason: "",
+    localNote: "",
   },
   stockSummary: {
     total: 0,
@@ -168,7 +172,11 @@ const createLocalTenantGssItem = (form) => ({
     sharpen: {
       enabled: form.sharpenEnabled,
       cycles: "",
+      note: "",
     },
+    blocked: false,
+    blockReason: "",
+    localNote: "",
   },
   stockSummary: {
     total: 0,
@@ -180,6 +188,21 @@ const createLocalTenantGssItem = (form) => ({
   createdAt: new Date().toISOString(),
 });
 
+const createSettingsForm = (item) => ({
+  min: item.tenantSettings?.min || "",
+  max: item.tenantSettings?.max || "",
+  warning: item.tenantSettings?.warning || "",
+  dmEnabled: Boolean(item.tenantSettings?.dmEnabled),
+  sharpenEnabled: Boolean(item.tenantSettings?.sharpen?.enabled),
+  sharpenCycles: item.tenantSettings?.sharpen?.cycles || "",
+  sharpenNote: item.tenantSettings?.sharpen?.note || "",
+  blocked: Boolean(item.tenantSettings?.blocked),
+  blockReason: item.tenantSettings?.blockReason || "",
+  localNote: item.tenantSettings?.localNote || "",
+});
+
+const getItemKey = (item) => item.id || item.gpc_id || item.name;
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -190,6 +213,9 @@ export default function AppGssPage() {
   const [showLocalItemForm, setShowLocalItemForm] = useState(false);
   const [localItemForm, setLocalItemForm] = useState(defaultLocalItemForm);
   const [localItemMessage, setLocalItemMessage] = useState("");
+  const [settingsItemKey, setSettingsItemKey] = useState("");
+  const [settingsForm, setSettingsForm] = useState(null);
+  const [settingsMessage, setSettingsMessage] = useState("");
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -296,6 +322,55 @@ export default function AppGssPage() {
     setLocalItemMessage("Lokální nevalidovaná položka byla založena v tenant skladu.");
     setShowLocalItemForm(false);
     openWarehouseSection();
+  };
+
+  const openItemSettings = (item) => {
+    setSettingsItemKey(getItemKey(item));
+    setSettingsForm(createSettingsForm(item));
+    setSettingsMessage("");
+  };
+
+  const updateSettingsForm = (field, value) => {
+    setSettingsForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setSettingsMessage("");
+  };
+
+  const saveItemSettings = (event) => {
+    event.preventDefault();
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== settingsItemKey) {
+        return item;
+      }
+
+      return {
+        ...item,
+        tenantSettings: {
+          ...item.tenantSettings,
+          min: settingsForm.min,
+          max: settingsForm.max,
+          warning: settingsForm.warning,
+          dmEnabled: settingsForm.dmEnabled,
+          sharpen: {
+            ...item.tenantSettings?.sharpen,
+            enabled: settingsForm.sharpenEnabled,
+            cycles: settingsForm.sharpenCycles,
+            note: settingsForm.sharpenNote,
+          },
+          blocked: settingsForm.blocked,
+          blockReason: settingsForm.blockReason,
+          localNote: settingsForm.localNote,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setSettingsMessage("Nastavení položky bylo uloženo.");
   };
 
   return (
@@ -451,13 +526,142 @@ export default function AppGssPage() {
                         Zásoba: celkem {item.stockSummary?.total ?? 0} · dostupné {item.stockSummary?.available ?? 0} · rezervace {item.stockSummary?.reserved ?? 0} · výroba {item.stockSummary?.production ?? 0} · broušení {item.stockSummary?.sharpening ?? 0}
                       </div>
                       <div style={meta}>
-                        DM tracking: {item.tenantSettings?.dmEnabled ? "zapnuto" : "vypnuto"} · Broušení: {item.tenantSettings?.sharpen?.enabled ? "zapnuto" : "vypnuto"}
+                        Min: {item.tenantSettings?.min || "nenastaveno"} · Max: {item.tenantSettings?.max || "nenastaveno"} · Warning: {item.tenantSettings?.warning || "nenastaveno"}
+                      </div>
+                      <div style={meta}>
+                        DM tracking: {item.tenantSettings?.dmEnabled ? "zapnuto" : "vypnuto"} · Broušení: {item.tenantSettings?.sharpen?.enabled ? "zapnuto" : "vypnuto"} · Stav: {item.tenantSettings?.blocked ? "blokovaná" : "aktivní"}
                       </div>
                       <div style={itemActions}>
-                        <button type="button" style={btnSecondary}>Nastavení položky</button>
+                        <button type="button" onClick={() => openItemSettings(item)} style={btnSecondary}>Nastavení položky</button>
                         <button type="button" style={btnSecondary}>Naskladnit</button>
                         <button type="button" style={btnSecondary}>Otevřít detail</button>
                       </div>
+                      {settingsItemKey === getItemKey(item) && settingsForm ? (
+                        <form onSubmit={saveItemSettings} style={settingsPanel}>
+                          <div style={settingsTitle}>Tenant nastavení položky</div>
+                          <div style={muted}>
+                            Tato nastavení patří do GSS a nemění GPC master data.
+                          </div>
+
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Minimální zásoba
+                              <input
+                                type="number"
+                                min="0"
+                                value={settingsForm.min}
+                                onChange={(event) => updateSettingsForm("min", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Maximální zásoba
+                              <input
+                                type="number"
+                                min="0"
+                                value={settingsForm.max}
+                                onChange={(event) => updateSettingsForm("max", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Warning hranice
+                              <input
+                                type="number"
+                                min="0"
+                                value={settingsForm.warning}
+                                onChange={(event) => updateSettingsForm("warning", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Max počet přebroušení
+                              <input
+                                type="number"
+                                min="0"
+                                value={settingsForm.sharpenCycles}
+                                onChange={(event) => updateSettingsForm("sharpenCycles", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                          </div>
+
+                          <div style={checkRow}>
+                            <label style={checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={settingsForm.dmEnabled}
+                                onChange={(event) => updateSettingsForm("dmEnabled", event.target.checked)}
+                              />
+                              DM tracking zapnuto
+                            </label>
+                            <label style={checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={settingsForm.sharpenEnabled}
+                                onChange={(event) => updateSettingsForm("sharpenEnabled", event.target.checked)}
+                              />
+                              Brousitelná
+                            </label>
+                            <label style={checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={settingsForm.blocked}
+                                onChange={(event) => updateSettingsForm("blocked", event.target.checked)}
+                              />
+                              Položka blokovaná
+                            </label>
+                          </div>
+
+                          <div style={offerInfo}>
+                            Při zapnutém DM trackingu se budou sledovat jednotlivé kusy.
+                          </div>
+
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Poznámka k broušení
+                              <textarea
+                                value={settingsForm.sharpenNote}
+                                onChange={(event) => updateSettingsForm("sharpenNote", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Důvod blokace
+                              <textarea
+                                value={settingsForm.blockReason}
+                                onChange={(event) => updateSettingsForm("blockReason", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Lokální poznámka zákazníka
+                              <textarea
+                                value={settingsForm.localNote}
+                                onChange={(event) => updateSettingsForm("localNote", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                          </div>
+
+                          {settingsMessage ? <div style={message}>{settingsMessage}</div> : null}
+
+                          <div style={actions}>
+                            <button type="submit" style={btnImport}>Uložit nastavení</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSettingsItemKey("");
+                                setSettingsForm(null);
+                                setSettingsMessage("");
+                              }}
+                              style={btnSecondary}
+                            >
+                              Zavřít
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
                     </div>
                     <div style={stockSummary}>
                       <div>Celkem: {item.stockSummary?.total ?? 0}</div>
@@ -722,6 +926,12 @@ const input = {
   marginTop: 12,
 };
 
+const textarea = {
+  ...input,
+  minHeight: 72,
+  resize: "vertical",
+};
+
 const meta = {
   marginTop: 4,
   fontSize: 12,
@@ -788,6 +998,18 @@ const formBox = {
   borderRadius: 8,
   padding: 12,
   marginTop: 14,
+};
+
+const settingsPanel = {
+  ...formBox,
+  border: "1px solid rgba(59,130,246,0.28)",
+  background: "rgba(59,130,246,0.06)",
+};
+
+const settingsTitle = {
+  fontSize: 14,
+  fontWeight: 900,
+  marginBottom: 8,
 };
 
 const formGrid = {

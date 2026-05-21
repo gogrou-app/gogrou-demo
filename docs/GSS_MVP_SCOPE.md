@@ -395,6 +395,8 @@ Detailní parametrické šablony podle typu položky se budou řešit později.
 
 Lokální nastavení položky patří do GSS, ne do GPC.
 
+GSS tenant settings jsou lokální provozní pravidla konkrétní firmy. Nemění GPC master data, technické parametry ani katalogový status. Stejná GPC položka může mít u různých zákazníků jiné min/max hranice, DM tracking, pravidla broušení, blokace i interní poznámky.
+
 MVP nastavení:
 
 - `min`
@@ -403,8 +405,10 @@ MVP nastavení:
 - DM tracking ano/ne
 - brousitelnost ano/ne
 - max počet přebroušení
+- poznámka k broušení
 - zákaznické poznámky
 - blokace položky
+- důvod blokace
 - blokace konkrétního kusu
 
 Tato nastavení mohou být různá pro každého zákazníka, i když všichni používají stejnou GPC master položku.
