@@ -301,11 +301,66 @@ Rozsah:
 
 Pohyby musí být auditované a vázané na firmu, hlavní sklad, položku a případně konkrétní DM kus.
 
+## Etapa 5: Nadnormativní Zásoby
+
+Nadnormativní zásoba vzniká v GSS, ne v GPC. Jde o lokální obchodní / provozní vrstvu zákazníka nad jeho vlastním hlavním skladem.
+
+Firma může u skladové položky označit část zásoby jako nadnormativní. Tato nadnormativní zásoba může být:
+
+- interně evidovaná
+- nabídnutá ostatním firmám v Gogrou komunitě
+- později napojená na obchodní / Toolshop vrstvu
+
+Nadnormativní nabídka nesmí měnit master data GPC. Nabídka je lokální zákaznická vrstva a pozdější viditelnost v komunitě Gogrou bude řízena pravidly a oprávněními.
+
+### Datový Základ Nabídky
+
+U nadnormativní nabídky se eviduje:
+
+- položka v GSS
+- počet kusů k nabídnutí
+- cena za kus
+- měna
+- stav nabídky: `draft`, `active`, `paused`, `sold`, `cancelled`
+- poznámka
+- datum vytvoření
+- vazba na firmu / tenant
+- audit změn
+
+Kusy označené k nabídce musí být blokované proti běžnému výdeji.
+
+### Rezervace Bez DM Trackingu
+
+U položky bez DM trackingu se rezervuje pouze množství.
+
+Příklad:
+
+- celková zásoba: 20 ks
+- rezervováno pro nabídku: 5 ks
+- dostupné pro běžný výdej: 15 ks
+
+Rezervované množství se odečítá z dostupného množství pro běžný výdej.
+
+### Rezervace S DM Trackingem
+
+U položky s DM trackingem se rezervují konkrétní DM kusy.
+
+Každý rezervovaný kus může mít stav:
+
+- `available_for_offer`
+- `reserved_for_offer`
+- `offered`
+- `sold`
+- `cancelled`
+
+Rezervovaný DM kus nelze běžně vydat do výroby. Systém musí jasně ukázat, které kusy jsou blokované pro nabídku. Historie rezervace se zapisuje do pohybů / auditu.
+
+Detailní pravidla DM stavů, lifecycle přechodů a výdeje se budou řešit v samostatné části GSS DM lifecycle. V aktuální technické etapě stačí dokumentace a placeholder UI v tenant GSS.
+
 ## Další Etapy po MVP Základu
 
 Po etapách 1-4 mohou navazovat:
 
-- nadnormativní položky
 - poptávky / Promitea XLS export
 - ceníky / Toolshop logika
 - datové můstky ERP / automat

@@ -462,31 +462,74 @@ GSS musí mapovat zákaznická ID na GSS položky. Pokud položka není jednozna
 
 ## 10. Nadnormativní Položky
 
-Nadnormativní položka je položka nebo kus, který zákazník nepotřebuje držet ve skladu v běžném množství a může ho nabídnout.
+Nadnormativní zásoba vzniká v GSS, ne v GPC. Jde o lokální obchodní / provozní vrstvu zákazníka nad jeho vlastním skladem.
+
+Firma může u skladové položky označit část zásoby jako nadnormativní. Nadnormativní položka nebo kus je položka, kterou zákazník nepotřebuje držet ve skladu v běžném množství a může ji nabídnout.
+
+Nadnormativní položka může být:
+
+- interně evidovaná
+- nabídnutá ostatním firmám v Gogrou komunitě
+- později napojená na obchodní / Toolshop vrstvu
+
+Nadnormativní nabídka nesmí měnit master data GPC. GPC zůstává validovaný master katalog. Nabídka je lokální zákaznická vrstva v GSS a později může být viditelná komunitě Gogrou podle pravidel a oprávnění.
 
 MVP rozsah:
 
 - označení položky jako nadnormativní
 - počet kusů k nabídnutí/prodeji
-- cena
+- cena za kus
+- měna
 - stav nabídky
 - interní / externí nabídka
 - vazba na Gogrou komunitu
 - vazba na zákazníka
 - blokace kusů určených k nabídce
 - historie nabídky
+- poznámka
+- datum vytvoření
 
 Stavy nabídky:
 
 - `draft`
-- `internal`
-- `external`
-- `offered`
-- `reserved`
+- `active`
+- `paused`
 - `sold`
 - `cancelled`
 
 Kusy určené k nabídce musí být blokované proti běžnému výdeji, aby se neprodaly a zároveň nevydaly do výroby.
+
+### Rezervace Nadnormativních Zásob
+
+GSS musí rozlišit dva režimy rezervace podle toho, zda má položka zapnutý DM tracking.
+
+#### A) Položka bez DM trackingu
+
+U položky bez DM trackingu se rezervuje pouze množství.
+
+Příklad:
+
+- celková zásoba: 20 ks
+- nadnormativní nabídka: 5 ks
+- dostupné množství pro běžný výdej: 15 ks
+
+Rezervované množství se odečte z dostupného množství pro běžný výdej. Systém musí jasně zobrazit, kolik kusů je dostupných a kolik kusů je rezervovaných pro nabídku.
+
+#### B) Položka s DM trackingem
+
+U položky s DM trackingem se rezervují konkrétní DM kusy.
+
+Každý rezervovaný kus může mít stav:
+
+- `available_for_offer`
+- `reserved_for_offer`
+- `offered`
+- `sold`
+- `cancelled`
+
+Rezervovaný DM kus nelze běžně vydat do výroby. Systém musí jasně ukázat, které kusy jsou blokované pro nabídku. Historie rezervace se zapisuje do pohybů / auditu.
+
+Detailní DM lifecycle, včetně přesných stavů kusu, přechodů a pravidel výdeje, bude řešen v samostatné části GSS DM lifecycle.
 
 ## 11. Poptávka / Promitea
 

@@ -158,6 +158,24 @@ export default function AppGssPage() {
           </div>
 
           <div style={box}>
+            <h2 style={subtitle}>Nadnormativní zásoby</h2>
+            <div style={muted}>
+              Zde bude možné označit skladové položky jako nadnormativní a nabídnout je ostatním firmám.
+            </div>
+            <div style={offerInfo}>
+              Rezervované kusy nebudou dostupné pro běžný výdej.
+            </div>
+            {dmItemCount > 0 ? (
+              <div style={offerInfo}>
+                V budoucnu bude možné rezervovat konkrétní DM kusy.
+              </div>
+            ) : null}
+            <div style={actions}>
+              <button type="button" style={btnSecondary}>Připravit nabídku</button>
+            </div>
+          </div>
+
+          <div style={box}>
             <h2 style={subtitle}>Doporučené další kroky</h2>
             <div style={steps}>
               <div>Převzít první položku z GPC</div>
@@ -263,6 +281,12 @@ const steps = {
   gap: 8,
   fontSize: 14,
   opacity: 0.78,
+};
+
+const offerInfo = {
+  marginTop: 8,
+  fontSize: 13,
+  opacity: 0.68,
 };
 
 const muted = {
