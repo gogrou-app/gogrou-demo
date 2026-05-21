@@ -2,54 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import tools from "../../gpc/data.js";
-
-const ORGANIZATIONS_STORAGE_KEY = "gogrou_organizations";
-const DEFAULT_GRINDER = "M-technologies";
-const DEFAULT_INTAKE_OPERATOR = "MVP uživatel";
-const MAIN_WAREHOUSE_ID = "MAIN";
-
-const MODULE_LABELS = {
-  GSS: "GSS",
-  Toolshop: "Toolshop",
-  Services: "Services",
-  "GPC supplier data channel": "GPC datový kanál",
-  "Promitea/RFQ": "Promitea RFQ",
-};
-
-const ORGANIZATION_STATUS_LABELS = {
-  trial: "Zkušební režim",
-  pending_payment: "Čeká na platbu",
-  active: "Aktivní",
-  paused: "Pozastavená",
-  blocked: "Blokovaná",
-  archived: "Archivovaná",
-};
-
-const readOrganizations = () => {
-  try {
-    const stored = localStorage.getItem(ORGANIZATIONS_STORAGE_KEY);
-    const parsed = stored ? JSON.parse(stored) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.warn("Nepodařilo se načíst gogrou_organizations.", error);
-    return [];
-  }
-};
-
-const readWarehouse = (organizationId) => {
-  try {
-    const stored = localStorage.getItem(`gss_wh_${organizationId}_MAIN`);
-    const parsed = stored ? JSON.parse(stored) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.warn("Nepodařilo se načíst tenant warehouse.", error);
-    return [];
-  }
-};
-
-const writeWarehouse = (organizationId, items) => {
-  localStorage.setItem(`gss_wh_${organizationId}_MAIN`, JSON.stringify(items));
-};
+import {
+  DEFAULT_GRINDER,
+  DEFAULT_INTAKE_OPERATOR,
+  DOCUMENT_TYPE_LABELS,
+  ISSUE_STATE_LABELS,
+  MODULE_LABELS,
+  MOVEMENT_TYPE_LABELS,
+  ORGANIZATION_STATUS_LABELS,
+  RETURN_DECISION_LABELS,
+  STOCK_CONDITION_LABELS,
+} from "../../../lib/gss/constants.js";
+import {
+  appendMovement,
+  collectMovementHistory,
+  createMovementRecord,
+  formatMovementDate,
+  getMovementStateLabel,
+} from "../../../lib/gss/movements.js";
+import { getOrganizations as readOrganizations, getTenantWarehouse as readWarehouse, saveTenantWarehouse as writeWarehouse } from "../../../lib/gss/storage.js";
+import { createEmptyStockSummary, getPrimaryStockState, normalizeStockSummary } from "../../../lib/gss/stock.js";
 
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
@@ -72,24 +44,6 @@ const formatBasicParameters = (tool) => {
 
   return params.join(" · ") || "základní parametry nejsou doplněné";
 };
-
-const createEmptyStockSummary = () => ({
-  total: 0,
-  available: 0,
-  reserved: 0,
-  production: 0,
-  sharpening: 0,
-  states: {
-    new: 0,
-    resharpened_new: 0,
-    used: 0,
-    sharpening: 0,
-  },
-  sharpeningBreakdown: {
-    in_company: 0,
-    at_grinder: 0,
-  },
-});
 
 const createTenantGssItem = (tool) => ({
   id: crypto.randomUUID(),
@@ -227,100 +181,6 @@ const createStockForm = () => ({
   intakeNote: "",
 });
 
-const normalizeStockSummary = (stockSummary) => ({
-  ...createEmptyStockSummary(),
-  ...(stockSummary || {}),
-  states: {
-    ...createEmptyStockSummary().states,
-    ...(stockSummary?.states || {}),
-  },
-  sharpeningBreakdown: {
-    ...createEmptyStockSummary().sharpeningBreakdown,
-    ...(stockSummary?.sharpeningBreakdown || {}),
-  },
-});
-
-const STOCK_CONDITION_LABELS = {
-  new: "Nový",
-  resharpened_new: "Nový přebroušený",
-  used: "Použitý",
-  sharpening: "Na broušení",
-};
-
-const ISSUE_STATE_LABELS = {
-  used: "Použitý",
-  resharpened_new: "Nový přebroušený",
-  new: "Nový",
-};
-
-const DOCUMENT_TYPE_LABELS = {
-  supplier_delivery_note: "Dodací list dodavatele",
-  supplier_invoice: "Faktura dodavatele",
-  internal_receipt: "Interní příjemka",
-  service_delivery_note_after_sharpening: "Servisní dodací list po broušení",
-  production_return: "Návrat z výroby",
-  manual_correction_inventory: "Ruční korekce / inventura",
-};
-
-const MOVEMENT_TYPE_LABELS = {
-  intake: "Příjem",
-  issue_to_production: "Výdej do výroby",
-  return_from_production: "Návrat z výroby",
-  send_to_sharpening: "Odesláno na broušení",
-  stock_difference_report: "Ohlášen rozdíl skladu",
-  block: "Blokace položky",
-  unblock: "Odblokace položky",
-};
-
-const formatMovementDate = (value) => {
-  if (!value) {
-    return "datum neuvedeno";
-  }
-
-  try {
-    return new Date(value).toLocaleString("cs-CZ");
-  } catch (error) {
-    return value;
-  }
-};
-
-const getMovementStateLabel = (state) => STOCK_CONDITION_LABELS[state] || ISSUE_STATE_LABELS[state] || state || "neuvedeno";
-
-const getPrimaryStockState = (item) => {
-  const states = normalizeStockSummary(item.stockSummary).states;
-  return ["used", "resharpened_new", "new", "sharpening"].find((state) => states[state] > 0) || "new";
-};
-
-const createMovementRecord = ({ organizationId, item, type, quantity, state, performedBy, note, metadata = {} }) => ({
-  id: crypto.randomUUID(),
-  createdAt: new Date().toISOString(),
-  type,
-  organizationId,
-  warehouseId: MAIN_WAREHOUSE_ID,
-  itemId: getItemKey(item),
-  itemName: item.name || item.gpc_id || "Položka",
-  gpc_id: item.gpc_id || "",
-  origin: item.origin || "LOCAL",
-  quantity,
-  state,
-  performedBy: performedBy || DEFAULT_INTAKE_OPERATOR,
-  note: note || "",
-  metadata,
-});
-
-const appendMovement = (item, movement) => ({
-  ...item,
-  movementHistory: [movement, ...(item.movementHistory || [])].slice(0, 100),
-});
-
-const collectMovementHistory = (items) =>
-  items
-    .flatMap((item) => (item.movementHistory || []).map((movement) => ({
-      ...movement,
-      itemName: movement.itemName || item.name || item.gpc_id || "Položka",
-    })))
-    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-
 const createIssueForm = () => ({
   quantity: "",
   preferredState: "used",
@@ -345,14 +205,6 @@ const createReturnForm = () => ({
   redirectInstruction: "",
   blockReason: "",
 });
-
-const RETURN_DECISION_LABELS = {
-  return_used: "Zpět na sklad jako Použitý",
-  send_sharpening: "Poslat na broušení",
-  scrap_carbide: "Vyřadit / odkup tvrdokovu",
-  redirect_instruction: "Přesměrovat podle instrukce / jiná řezná hrana",
-  temporary_block: "Dočasně zablokovat",
-};
 
 const itemMatchesIssueQuery = (item, query) => {
   const stock = normalizeStockSummary(item.stockSummary);
