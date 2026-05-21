@@ -6,6 +6,7 @@ import tools from "../../gpc/data.js";
 const ORGANIZATIONS_STORAGE_KEY = "gogrou_organizations";
 const DEFAULT_GRINDER = "M-technologies";
 const DEFAULT_INTAKE_OPERATOR = "MVP uživatel";
+const MAIN_WAREHOUSE_ID = "MAIN";
 
 const MODULE_LABELS = {
   GSS: "GSS",
@@ -261,6 +262,65 @@ const DOCUMENT_TYPE_LABELS = {
   manual_correction_inventory: "Ruční korekce / inventura",
 };
 
+const MOVEMENT_TYPE_LABELS = {
+  intake: "Příjem",
+  issue_to_production: "Výdej do výroby",
+  return_from_production: "Návrat z výroby",
+  send_to_sharpening: "Odesláno na broušení",
+  stock_difference_report: "Ohlášen rozdíl skladu",
+  block: "Blokace položky",
+  unblock: "Odblokace položky",
+};
+
+const formatMovementDate = (value) => {
+  if (!value) {
+    return "datum neuvedeno";
+  }
+
+  try {
+    return new Date(value).toLocaleString("cs-CZ");
+  } catch (error) {
+    return value;
+  }
+};
+
+const getMovementStateLabel = (state) => STOCK_CONDITION_LABELS[state] || ISSUE_STATE_LABELS[state] || state || "neuvedeno";
+
+const getPrimaryStockState = (item) => {
+  const states = normalizeStockSummary(item.stockSummary).states;
+  return ["used", "resharpened_new", "new", "sharpening"].find((state) => states[state] > 0) || "new";
+};
+
+const createMovementRecord = ({ organizationId, item, type, quantity, state, performedBy, note, metadata = {} }) => ({
+  id: crypto.randomUUID(),
+  createdAt: new Date().toISOString(),
+  type,
+  organizationId,
+  warehouseId: MAIN_WAREHOUSE_ID,
+  itemId: getItemKey(item),
+  itemName: item.name || item.gpc_id || "Položka",
+  gpc_id: item.gpc_id || "",
+  origin: item.origin || "LOCAL",
+  quantity,
+  state,
+  performedBy: performedBy || DEFAULT_INTAKE_OPERATOR,
+  note: note || "",
+  metadata,
+});
+
+const appendMovement = (item, movement) => ({
+  ...item,
+  movementHistory: [movement, ...(item.movementHistory || [])].slice(0, 100),
+});
+
+const collectMovementHistory = (items) =>
+  items
+    .flatMap((item) => (item.movementHistory || []).map((movement) => ({
+      ...movement,
+      itemName: movement.itemName || item.name || item.gpc_id || "Položka",
+    })))
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
 const createIssueForm = () => ({
   quantity: "",
   preferredState: "used",
@@ -407,6 +467,7 @@ export default function AppGssPage() {
     ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
     : [];
   const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
+  const movementHistory = collectMovementHistory(warehouseItems);
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -498,7 +559,9 @@ export default function AppGssPage() {
         return item;
       }
 
-      return {
+      const wasBlocked = Boolean(item.tenantSettings?.blocked);
+      const willBeBlocked = Boolean(settingsForm.blocked);
+      const nextItem = {
         ...item,
         tenantSettings: {
           ...item.tenantSettings,
@@ -518,6 +581,26 @@ export default function AppGssPage() {
         },
         updatedAt: new Date().toISOString(),
       };
+
+      if (wasBlocked === willBeBlocked) {
+        return nextItem;
+      }
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: willBeBlocked ? "block" : "unblock",
+        quantity: 0,
+        state: getPrimaryStockState(item),
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: settingsForm.blockReason.trim() || settingsForm.localNote.trim(),
+        metadata: {
+          blockReason: settingsForm.blockReason.trim(),
+          localNote: settingsForm.localNote.trim(),
+          changedFrom: wasBlocked ? "blocked" : "active",
+          changedTo: willBeBlocked ? "blocked" : "active",
+        },
+      }));
     });
 
     setWarehouseItems(nextItems);
@@ -555,6 +638,8 @@ export default function AppGssPage() {
 
       const currentStock = normalizeStockSummary(item.stockSummary);
       const isSharpening = stockForm.condition === "sharpening";
+      const performedBy = stockForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR;
+      const movementNote = stockForm.intakeNote.trim() || stockForm.note.trim();
       const nextStock = {
         ...currentStock,
         total: currentStock.total + quantity,
@@ -582,16 +667,37 @@ export default function AppGssPage() {
           documentNumber: stockForm.documentNumber.trim(),
           source: stockForm.source.trim(),
           receivedAt: stockForm.receivedAt || getTodayDate(),
-          performedBy: stockForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+          performedBy,
           note: stockForm.intakeNote.trim(),
         },
       };
 
-      return {
+      const nextItem = {
         ...item,
         stockSummary: nextStock,
         updatedAt: new Date().toISOString(),
       };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: "intake",
+        quantity,
+        state: stockForm.condition,
+        performedBy,
+        note: movementNote,
+        metadata: {
+          condition: stockForm.condition,
+          conditionLabel: STOCK_CONDITION_LABELS[stockForm.condition],
+          documentType: stockForm.documentType,
+          documentTypeLabel: DOCUMENT_TYPE_LABELS[stockForm.documentType],
+          documentNumber: stockForm.documentNumber.trim(),
+          source: stockForm.source.trim(),
+          receivedAt: stockForm.receivedAt || getTodayDate(),
+          grinder: isSharpening ? stockForm.grinder.trim() || DEFAULT_GRINDER : "",
+          stockNote: stockForm.note.trim(),
+        },
+      }));
     });
 
     setWarehouseItems(nextItems);
@@ -644,7 +750,7 @@ export default function AppGssPage() {
       }
 
       const stock = normalizeStockSummary(item.stockSummary);
-      return {
+      const nextItem = {
         ...item,
         stockSummary: {
           ...stock,
@@ -669,11 +775,67 @@ export default function AppGssPage() {
         },
         updatedAt: new Date().toISOString(),
       };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: "issue_to_production",
+        quantity,
+        state: issueForm.preferredState,
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: issueForm.note.trim(),
+        metadata: {
+          preferredState: issueForm.preferredState,
+          preferredStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
+          costCenter: issueForm.costCenter.trim(),
+          machine: issueForm.machine.trim(),
+          job: issueForm.job.trim(),
+          issuedAt: new Date().toISOString(),
+        },
+      }));
     });
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
     setIssueMessage("Položka byla vydána do výroby.");
+  };
+
+  const reportStockDifference = () => {
+    if (!selectedIssueItem) {
+      setIssueMessage("Vyberte položku pro ohlášení rozdílu ve skladu.");
+      return;
+    }
+
+    const stock = normalizeStockSummary(selectedIssueItem.stockSummary);
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== issueItemKey) {
+        return item;
+      }
+
+      return appendMovement({
+        ...item,
+        updatedAt: new Date().toISOString(),
+      }, createMovementRecord({
+        organizationId,
+        item,
+        type: "stock_difference_report",
+        quantity: 0,
+        state: issueForm.preferredState,
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: "Pracovník ohlásil rozdíl ve fyzické zásobě.",
+        metadata: {
+          expectedAvailable: stock.available,
+          expectedStateQuantity: stock.states[issueForm.preferredState],
+          selectedState: issueForm.preferredState,
+          selectedStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
+          issueQuery: issueQuery.trim(),
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setIssueMessage("Rozdíl ve skladu byl ohlášen zodpovědné osobě. Detailní audit workflow bude doplněn později.");
   };
 
   const selectReturnItem = (item) => {
@@ -750,11 +912,36 @@ export default function AppGssPage() {
         nextStock.sharpeningBreakdown.in_company += quantity;
       }
 
-      return {
+      const nextItem = {
         ...item,
         stockSummary: nextStock,
         updatedAt: new Date().toISOString(),
       };
+      const movementType = returnForm.decision === "send_sharpening" ? "send_to_sharpening" : "return_from_production";
+      const movementState = returnForm.decision === "send_sharpening" ? "sharpening" : "used";
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: movementType,
+        quantity,
+        state: movementState,
+        performedBy: returnForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+        note: returnForm.note.trim() || returnForm.serviceInstruction.trim() || returnForm.discardReason.trim() || returnForm.redirectInstruction.trim() || returnForm.blockReason.trim(),
+        metadata: {
+          decision: returnForm.decision,
+          decisionLabel: RETURN_DECISION_LABELS[returnForm.decision],
+          returnedAt: returnForm.returnedAt || getTodayDate(),
+          costCenter: returnForm.costCenter.trim(),
+          machine: returnForm.machine.trim(),
+          job: returnForm.job.trim(),
+          grinder: returnForm.grinder.trim(),
+          serviceInstruction: returnForm.serviceInstruction.trim(),
+          discardReason: returnForm.discardReason.trim(),
+          redirectInstruction: returnForm.redirectInstruction.trim(),
+          blockReason: returnForm.blockReason.trim(),
+        },
+      }));
     });
 
     setWarehouseItems(nextItems);
@@ -984,7 +1171,7 @@ export default function AppGssPage() {
                     <button type="submit" style={btnImport}>Vydat do výroby</button>
                     <button
                       type="button"
-                      onClick={() => setIssueMessage("Rozdíl ve skladu byl ohlášen zodpovědné osobě. Detailní audit workflow bude doplněn později.")}
+                      onClick={reportStockDifference}
                       style={btnSecondary}
                     >
                       Ohlásit rozdíl ve skladu
@@ -1628,6 +1815,26 @@ export default function AppGssPage() {
                           </div>
                         </form>
                       ) : null}
+                      <div style={historyPanel}>
+                        <div style={settingsTitle}>Historie pohybů</div>
+                        {item.movementHistory?.length ? (
+                          <div style={historyList}>
+                            {item.movementHistory.slice(0, 10).map((movement) => (
+                              <div key={movement.id} style={historyItem}>
+                                <div style={historyTitle}>
+                                  {labelFromMap(MOVEMENT_TYPE_LABELS, movement.type)} · {movement.quantity} ks · {getMovementStateLabel(movement.state)}
+                                </div>
+                                <div style={meta}>
+                                  {formatMovementDate(movement.createdAt)} · provedl {movement.performedBy || "neuvedeno"}
+                                </div>
+                                {movement.note ? <div style={meta}>{movement.note}</div> : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={muted}>Zatím bez skladových pohybů.</div>
+                        )}
+                      </div>
                     </div>
                     <div style={stockSummary}>
                       <div>Celkem: {normalizeStockSummary(item.stockSummary).total}</div>
@@ -1641,6 +1848,26 @@ export default function AppGssPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div style={box}>
+            <h2 style={subtitle}>Poslední skladové pohyby</h2>
+            {movementHistory.length > 0 ? (
+              <div style={historyList}>
+                {movementHistory.slice(0, 20).map((movement) => (
+                  <div key={movement.id} style={historyItem}>
+                    <div style={historyTitle}>
+                      {labelFromMap(MOVEMENT_TYPE_LABELS, movement.type)} · {movement.itemName || "Položka"} · {movement.quantity} ks
+                    </div>
+                    <div style={meta}>
+                      Stav: {getMovementStateLabel(movement.state)} · {formatMovementDate(movement.createdAt)} · provedl {movement.performedBy || "neuvedeno"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={muted}>Zatím nejsou evidované žádné skladové pohyby.</div>
             )}
           </div>
 
@@ -1993,6 +2220,30 @@ const settingsTitle = {
   fontSize: 14,
   fontWeight: 900,
   marginBottom: 8,
+};
+
+const historyPanel = {
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 8,
+  padding: 10,
+  marginTop: 12,
+};
+
+const historyList = {
+  display: "grid",
+  gap: 8,
+};
+
+const historyItem = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 8,
+  padding: 9,
+  background: "rgba(255,255,255,0.03)",
+};
+
+const historyTitle = {
+  fontSize: 13,
+  fontWeight: 900,
 };
 
 const formGrid = {

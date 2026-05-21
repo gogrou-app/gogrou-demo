@@ -525,6 +525,66 @@ Smysl:
 
 Pracovník tím chrání sebe před odpovědností za předchozí chybu. Audit log umožní dohledat předchozí pohyby a určit, kde rozdíl vznikl. Detailní workflow se bude řešit později.
 
+### Základní Historie Pohybů
+
+Tenant GSS MVP ukládá jednoduchou provozní historii pohybů jako `movementHistory`. Záznam může být uložen u tenant skladové položky a z těchto položek se skládá globální historie hlavního skladu.
+
+Datový tvar záznamu:
+
+- `id`
+- `createdAt`
+- `type`
+- `organizationId`
+- `warehouseId`, v MVP `MAIN`
+- `itemId`
+- `itemName`
+- `gpc_id`, pokud existuje
+- `origin`: `GPC` nebo `LOCAL`
+- `quantity`
+- `state`: `new`, `resharpened_new`, `used`, `sharpening`
+- `performedBy`
+- `note`
+- `metadata`
+
+Podporované typy:
+
+- `intake`
+- `issue_to_production`
+- `return_from_production`
+- `send_to_sharpening`
+- `stock_difference_report`
+- `block`
+- `unblock`
+
+Automatický zápis vzniká při:
+
+- příjmu
+- výdeji do výroby
+- návratu z výroby
+- rozhodnutí poslat na broušení
+- ohlášení rozdílu ve skladu
+- blokaci nebo odblokaci položky
+
+UI v MVP zobrazuje:
+
+- u položky posledních 10 pohybů
+- na úrovni skladu posledních 20 pohybů napříč položkami
+
+Movement history není plný audit log. Slouží pro provozní přehled, rychlou orientaci a základní dohledatelnost posledních skladových událostí.
+
+Budoucí audit log bude samostatná hlubší vrstva. Bude obsahovat například:
+
+- IP adresu
+- zařízení
+- terminál
+- konkrétní DM kus
+- ERP zdroj
+- výdejní automat
+- autorizaci
+- workflow a schvalovací stav
+
+Movement history má být čitelná pro běžný provoz. Audit log bude určený pro kontrolu, odpovědnost, integrace a řešení konfliktů.
+
 ### Budoucí Výdejní Terminál
 
 Výdejní terminál je budoucí směr mimo MVP.
@@ -670,7 +730,7 @@ Cílově může štítek nést pouze DM / transakční kód a detaily transakce 
 
 ### Intake Metadata a Budoucí Doklady
 
-V MVP se při naskladnění uloží poslední příjem / intake metadata k položce. Nejde ještě o plnou historii pohybů, ale připravuje se tím budoucí audit a napojení na doklady.
+V MVP se při naskladnění uloží poslední příjem / intake metadata k položce a současně vznikne provozní záznam v `movementHistory`. Intake metadata slouží pro rychlé zobrazení posledního dokladu, movement history pro přehled pohybů.
 
 Podporované důvody / doklady:
 

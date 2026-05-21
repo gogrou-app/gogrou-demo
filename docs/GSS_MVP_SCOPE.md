@@ -658,6 +658,52 @@ Příklad:
 
 Pracovník tím chrání sebe před odpovědností za předchozí chybu. Audit log později umožní dohledat předchozí pohyby a určit, kde rozdíl vznikl. Detailní workflow ohlášení, schválení a korekce zásoby bude řešeno později.
 
+### Základní Historie Pohybů
+
+GSS MVP vede jednoduchou `movementHistory` u tenant skladových položek. Nejde ještě o plný audit log, ale o provozní historii, aby zákazník viděl poslední důležité pohyby položky a skladu.
+
+Každý záznam obsahuje:
+
+- `id`
+- datum a čas vytvoření
+- typ pohybu
+- `organizationId`
+- `warehouseId`, v MVP `MAIN`
+- `itemId`
+- název položky
+- `gpc_id`, pokud existuje
+- `origin`: `GPC` nebo `LOCAL`
+- množství
+- provozní stav, například `new`, `resharpened_new`, `used`, `sharpening`
+- kdo pohyb provedl
+- poznámku
+- `metadata` objekt s doplňkovými údaji podle typu pohybu
+
+V MVP se automaticky zapisují tyto typy pohybů:
+
+- `intake`: příjem
+- `issue_to_production`: výdej do výroby
+- `return_from_production`: návrat z výroby
+- `send_to_sharpening`: odesláno na broušení
+- `stock_difference_report`: ohlášen rozdíl skladu
+- `block`: blokace položky
+- `unblock`: odblokace položky
+
+U položky se zobrazuje posledních 10 pohybů. Na úrovni skladu se zobrazuje posledních 20 pohybů napříč položkami.
+
+Movement history slouží hlavně pro provozní přehled. Budoucí audit log bude detailnější a bude evidovat například:
+
+- IP adresu
+- zařízení
+- terminál
+- konkrétní DM kus
+- ERP zdroj
+- výdejní automat
+- autorizaci
+- workflow stav a schválení
+
+Movement history tedy odpovídá na otázku `co se s položkou stalo`. Audit log bude odpovídat i na otázku `kdo, odkud, čím a s jakým oprávněním změnu provedl`.
+
 ### Budoucí Výdejní Terminál
 
 Budoucí výdejní terminál může mít režim pouze pro výdej.
@@ -857,7 +903,7 @@ Tisk štítků není součástí MVP.
 
 ### Dokladová Logika Příjmu
 
-Při naskladnění musí GSS připravit základ evidence, proč a na základě čeho se příjem děje. V MVP se zatím nevede plná historie pohybů, ale u položky se ukládá poslední příjem / intake metadata.
+Při naskladnění musí GSS připravit základ evidence, proč a na základě čeho se příjem děje. V MVP se kromě provozní `movementHistory` ukládá i poslední příjem / intake metadata pro rychlé zobrazení na položce.
 
 Typ dokladu nebo důvod příjmu:
 
