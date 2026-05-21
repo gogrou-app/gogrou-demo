@@ -742,6 +742,8 @@ V MVP se automaticky zapisují tyto typy pohybů:
 - `unblock`: odblokace položky
 - `reservation_created`: rezervace vytvořena
 - `reservation_cancelled`: rezervace zrušena
+- `overstock_offer_created`: nadnormativní nabídka vytvořena
+- `overstock_offer_updated`: nadnormativní nabídka upravena
 
 U položky se zobrazuje posledních 10 pohybů. Na úrovni skladu se zobrazuje posledních 20 pohybů napříč položkami.
 
@@ -1173,6 +1175,36 @@ MVP rozsah:
 - poznámka
 - datum vytvoření
 
+MVP pravidlo: nadnormativa se týká pouze volných kusů ve stavu `Nový`.
+
+Do nadnormativní nabídky se v MVP nesmí použít:
+
+- `Nový přebroušený`
+- `Použitý`
+- `Na broušení`
+- kusy ve výrobě
+- rezervované kusy
+
+Zákazník v MVP ručně zadá pevný počet a pevnou cenu. Systém kontroluje, že počet k nabídnutí není vyšší než počet volných nových kusů. Pokud není dost nových kusů, nabídka se neuloží.
+
+Nabídnuté kusy jsou blokované proti běžnému výdeji. Technicky se v MVP evidují jako rezervované / `overstockReserved`, aby nebyly dostupné pro běžné skladové operace.
+
+U tenant položky se ukládá `overstockOffer`:
+
+- `enabled`
+- `quantity`
+- `pricePerUnit`
+- `currency`
+- `note`
+- `status`
+- `createdAt`
+- `updatedAt`
+
+Při vytvoření nebo změně nabídky vzniká záznam v `movementHistory`:
+
+- `overstock_offer_created`
+- `overstock_offer_updated`
+
 Stavy nabídky:
 
 - `draft`
@@ -1214,6 +1246,24 @@ Každý rezervovaný kus může mít stav:
 Rezervovaný DM kus nelze běžně vydat do výroby. Systém musí jasně ukázat, které kusy jsou blokované pro nabídku. Historie rezervace se zapisuje do pohybů / auditu.
 
 Detailní DM lifecycle, včetně přesných stavů kusu, přechodů a pravidel výdeje, bude řešen v samostatné části GSS DM lifecycle.
+
+Budoucí automatická nadnormativa není součástí MVP. Později může systém nadnormativu počítat podle:
+
+- maximální zásoby
+- tolerance nad maximum
+- procenta nad max
+- poslední nákupní ceny
+- slevy z poslední nákupní ceny
+
+Příklad:
+
+- max zásoba = 100
+- tolerance nad max = 20 %
+- skutečná zásoba = 150
+- hranice = 120
+- nadnormativa = 150 - 120 = 30 ks
+
+Marketplace, platby a Toolshop integrace nejsou součástí MVP nadnormativy.
 
 ## 11. Poptávka / Promitea
 

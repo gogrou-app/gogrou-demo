@@ -605,6 +605,8 @@ Podporované typy:
 - `unblock`
 - `reservation_created`
 - `reservation_cancelled`
+- `overstock_offer_created`
+- `overstock_offer_updated`
 
 Automatický zápis vzniká při:
 
@@ -616,6 +618,7 @@ Automatický zápis vzniká při:
 - blokaci nebo odblokaci položky
 - vytvoření rezervace
 - budoucím zrušení rezervace
+- vytvoření nebo změně nadnormativní nabídky
 
 UI v MVP zobrazuje:
 
@@ -899,7 +902,58 @@ U nadnormativní nabídky se eviduje:
 - vazba na firmu / tenant
 - audit změn
 
+MVP pravidlo:
+
+- nadnormativa se týká pouze stavu `new`
+- nelze nabídnout `resharpened_new`
+- nelze nabídnout `used`
+- nelze nabídnout `sharpening`
+- nelze nabídnout kusy ve výrobě
+- nelze nabídnout kusy už rezervované pro zakázku
+
+MVP formulář ukládá `overstockOffer`:
+
+- `enabled`
+- `quantity`
+- `pricePerUnit`
+- `currency`
+- `note`
+- `status`: `draft`, `active`, `paused`, `sold`, `cancelled`
+- `createdAt`
+- `updatedAt`
+
+Kontrola dostupnosti:
+
+- nabízený počet nesmí být větší než počet volných kusů ve stavu `new`
+- volné nové kusy znamenají `stockSummary.states.new` očištěné o už blokované nabídky
+- pokud není dost kusů, UI zobrazí `Pro nadnormativní nabídku není dostatek volných nových kusů.`
+
 Kusy označené k nabídce musí být blokované proti běžnému výdeji.
+
+V MVP se blokace provede odečtením nabízených kusů ze `stockSummary.available` a ze `stockSummary.states.new` a navýšením `stockSummary.reserved`. Zároveň se může evidovat `overstockReserved`.
+
+Při vytvoření nebo změně nabídky vzniká `movementHistory`:
+
+- `overstock_offer_created`
+- `overstock_offer_updated`
+
+Automatická nadnormativa není součástí MVP. Budoucí výpočet může vycházet z:
+
+- maximální zásoby
+- procenta tolerance nad max
+- skutečné zásoby
+- poslední nákupní ceny
+- slevy z poslední nákupní ceny
+
+Příklad budoucího výpočtu:
+
+- max zásoba = 100
+- tolerance nad max = 20 %
+- skutečná zásoba = 150
+- hranice = 120
+- nadnormativa = 30 ks
+
+Marketplace, platby a Toolshop integrace nejsou součástí této MVP etapy.
 
 ### Rezervace Bez DM Trackingu
 

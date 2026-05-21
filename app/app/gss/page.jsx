@@ -191,6 +191,15 @@ const createReservationForm = () => ({
   validUntil: "",
 });
 
+const createOverstockOfferForm = (item = {}) => ({
+  enabled: Boolean(item.overstockOffer?.enabled),
+  quantity: item.overstockOffer?.quantity ? String(item.overstockOffer.quantity) : "",
+  pricePerUnit: item.overstockOffer?.pricePerUnit ? String(item.overstockOffer.pricePerUnit) : "",
+  currency: item.overstockOffer?.currency || "CZK",
+  note: item.overstockOffer?.note || "",
+  status: item.overstockOffer?.status || "draft",
+});
+
 const createIssueForm = () => ({
   quantity: "",
   preferredState: "used",
@@ -240,6 +249,8 @@ const itemMatchesWarehouseQuery = itemMatchesIssueQuery;
 
 const getActiveReservations = (item) => (item.reservations || []).filter((reservation) => reservation.status !== "cancelled");
 
+const isActiveOverstockOffer = (offer) => Boolean(offer?.enabled && !["sold", "cancelled"].includes(offer.status));
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -261,6 +272,9 @@ export default function AppGssPage() {
   const [reservationItemKey, setReservationItemKey] = useState("");
   const [reservationForm, setReservationForm] = useState(createReservationForm());
   const [reservationMessage, setReservationMessage] = useState("");
+  const [overstockItemKey, setOverstockItemKey] = useState("");
+  const [overstockForm, setOverstockForm] = useState(createOverstockOfferForm());
+  const [overstockMessage, setOverstockMessage] = useState("");
   const [showIssuePanel, setShowIssuePanel] = useState(false);
   const [issueQuery, setIssueQuery] = useState("");
   const [issueItemKey, setIssueItemKey] = useState("");
@@ -503,6 +517,20 @@ export default function AppGssPage() {
     setReservationMessage("");
   };
 
+  const openOverstockForm = (item) => {
+    setOverstockItemKey(getItemKey(item));
+    setOverstockForm(createOverstockOfferForm(item));
+    setOverstockMessage("");
+  };
+
+  const updateOverstockForm = (field, value) => {
+    setOverstockForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setOverstockMessage("");
+  };
+
   const reserveStock = (event) => {
     event.preventDefault();
 
@@ -591,6 +619,101 @@ export default function AppGssPage() {
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
     setReservationMessage("Rezervace byla vytvořena.");
+  };
+
+  const saveOverstockOffer = (event) => {
+    event.preventDefault();
+
+    const selectedItem = warehouseItems.find((item) => getItemKey(item) === overstockItemKey);
+    if (!selectedItem) {
+      setOverstockMessage("Vyberte položku pro nadnormativní nabídku.");
+      return;
+    }
+
+    const currentStock = normalizeStockSummary(selectedItem.stockSummary);
+    const previousOffer = selectedItem.overstockOffer;
+    const previousReserved = isActiveOverstockOffer(previousOffer) ? Number(previousOffer.quantity) || 0 : 0;
+    const quantity = overstockForm.enabled ? Number(overstockForm.quantity) : 0;
+    const pricePerUnit = overstockForm.enabled ? Number(overstockForm.pricePerUnit) : 0;
+
+    if (overstockForm.enabled && (!overstockForm.quantity.trim() || !Number.isFinite(quantity) || quantity <= 0)) {
+      setOverstockMessage("Zadejte kladný počet kusů k nabídnutí.");
+      return;
+    }
+
+    if (overstockForm.enabled && (!overstockForm.pricePerUnit.trim() || !Number.isFinite(pricePerUnit) || pricePerUnit < 0)) {
+      setOverstockMessage("Zadejte platnou cenu za kus.");
+      return;
+    }
+
+    const availableNewForOffer = currentStock.states.new + previousReserved;
+    const offerBlocksStock = overstockForm.enabled && !["sold", "cancelled"].includes(overstockForm.status);
+
+    if (offerBlocksStock && quantity > availableNewForOffer) {
+      setOverstockMessage("Pro nadnormativní nabídku není dostatek volných nových kusů.");
+      return;
+    }
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== overstockItemKey) {
+        return item;
+      }
+
+      const stock = normalizeStockSummary(item.stockSummary);
+      const previousItemOffer = item.overstockOffer;
+      const previousItemReserved = isActiveOverstockOffer(previousItemOffer) ? Number(previousItemOffer.quantity) || 0 : 0;
+      const nextReserved = offerBlocksStock ? quantity : 0;
+      const reservedDelta = nextReserved - previousItemReserved;
+      const now = new Date().toISOString();
+      const nextOffer = {
+        enabled: Boolean(overstockForm.enabled),
+        quantity,
+        pricePerUnit,
+        currency: overstockForm.currency.trim() || "CZK",
+        note: overstockForm.note.trim(),
+        status: overstockForm.status,
+        createdAt: previousItemOffer?.createdAt || now,
+        updatedAt: now,
+      };
+      const nextStock = {
+        ...stock,
+        available: stock.available - reservedDelta,
+        reserved: stock.reserved + reservedDelta,
+        states: {
+          ...stock.states,
+          new: stock.states.new - reservedDelta,
+        },
+      };
+      const nextItem = {
+        ...item,
+        overstockOffer: nextOffer,
+        overstockReserved: nextReserved,
+        stockSummary: nextStock,
+        updatedAt: now,
+      };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: previousItemOffer ? "overstock_offer_updated" : "overstock_offer_created",
+        quantity,
+        state: "new",
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: nextOffer.note,
+        metadata: {
+          enabled: nextOffer.enabled,
+          pricePerUnit: nextOffer.pricePerUnit,
+          currency: nextOffer.currency,
+          status: nextOffer.status,
+          previousQuantity: previousItemOffer?.quantity || 0,
+          reservedDelta,
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setOverstockMessage("Nadnormativní nabídka byla uložena.");
   };
 
   const receiveStock = (event) => {
@@ -1505,6 +1628,13 @@ export default function AppGssPage() {
                           ))}
                         </div>
                       ) : null}
+                      <div style={historyPanel}>
+                        <div style={settingsTitle}>Nadnormativa</div>
+                        <div style={meta}>
+                          Nadnormativa {item.overstockOffer?.enabled ? "aktivní" : "neaktivní"} · počet {item.overstockOffer?.quantity || 0} ks · cena {item.overstockOffer?.pricePerUnit || "nenastaveno"} {item.overstockOffer?.currency || ""}
+                        </div>
+                        <div style={meta}>Stav nabídky: {item.overstockOffer?.status || "draft"}</div>
+                      </div>
                       {item.stockSummary?.lastIntakeMetadata ? (
                         <div style={meta}>
                           Poslední příjem: {item.stockSummary.lastIntakeMetadata.documentTypeLabel || "doklad neuveden"} · {item.stockSummary.lastIntakeMetadata.receivedAt || "datum neuvedeno"} · provedl {item.stockSummary.lastIntakeMetadata.performedBy || "neuvedeno"}
@@ -1528,6 +1658,7 @@ export default function AppGssPage() {
                         <button type="button" onClick={() => openItemSettings(item)} style={btnSecondary}>Nastavení položky</button>
                         <button type="button" onClick={() => openStockForm(item)} style={btnSecondary}>Naskladnit</button>
                         <button type="button" onClick={() => openReservationForm(item)} style={btnSecondary}>Rezervovat</button>
+                        <button type="button" onClick={() => openOverstockForm(item)} style={btnSecondary}>Nadnormativa</button>
                         <button type="button" style={btnSecondary}>Otevřít detail</button>
                       </div>
                       {stockItemKey === getItemKey(item) ? (
@@ -1780,6 +1911,101 @@ export default function AppGssPage() {
                                 setReservationItemKey("");
                                 setReservationForm(createReservationForm());
                                 setReservationMessage("");
+                              }}
+                              style={btnSecondary}
+                            >
+                              Zavřít
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
+                      {overstockItemKey === getItemKey(item) ? (
+                        <form onSubmit={saveOverstockOffer} style={settingsPanel}>
+                          <div style={settingsTitle}>Nadnormativa</div>
+                          <div style={muted}>
+                            MVP nadnormativa může pracovat pouze s volnými novými kusy. Nový přebroušený, Použitý, Na broušení, Ve výrobě a rezervované kusy nelze nabídnout.
+                          </div>
+                          <div style={checkRow}>
+                            <label style={checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={overstockForm.enabled}
+                                onChange={(event) => updateOverstockForm("enabled", event.target.checked)}
+                              />
+                              Nadnormativa aktivní
+                            </label>
+                          </div>
+                          {overstockForm.enabled ? (
+                            <>
+                              <div style={formGrid}>
+                                <label style={fieldLabel}>
+                                  Počet kusů k nabídnutí
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={overstockForm.quantity}
+                                    onChange={(event) => updateOverstockForm("quantity", event.target.value)}
+                                    style={input}
+                                  />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Pevná cena za kus
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={overstockForm.pricePerUnit}
+                                    onChange={(event) => updateOverstockForm("pricePerUnit", event.target.value)}
+                                    style={input}
+                                  />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Měna
+                                  <input
+                                    value={overstockForm.currency}
+                                    onChange={(event) => updateOverstockForm("currency", event.target.value)}
+                                    style={input}
+                                  />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Stav nabídky
+                                  <select
+                                    value={overstockForm.status}
+                                    onChange={(event) => updateOverstockForm("status", event.target.value)}
+                                    style={input}
+                                  >
+                                    <option value="draft">draft</option>
+                                    <option value="active">active</option>
+                                    <option value="paused">paused</option>
+                                    <option value="sold">sold</option>
+                                    <option value="cancelled">cancelled</option>
+                                  </select>
+                                </label>
+                              </div>
+                              <label style={fieldLabel}>
+                                Poznámka k nabídce
+                                <textarea
+                                  value={overstockForm.note}
+                                  onChange={(event) => updateOverstockForm("note", event.target.value)}
+                                  style={textarea}
+                                />
+                              </label>
+                              <div style={offerInfo}>
+                                Volné nové kusy: {normalizeStockSummary(item.stockSummary).states.new + (isActiveOverstockOffer(item.overstockOffer) ? Number(item.overstockOffer.quantity) || 0 : 0)} ks.
+                              </div>
+                            </>
+                          ) : null}
+
+                          {overstockMessage ? <div style={overstockMessage.includes("uložena") ? message : errorMessage}>{overstockMessage}</div> : null}
+
+                          <div style={actions}>
+                            <button type="submit" style={btnImport}>Uložit nadnormativu</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOverstockItemKey("");
+                                setOverstockForm(createOverstockOfferForm());
+                                setOverstockMessage("");
                               }}
                               style={btnSecondary}
                             >
