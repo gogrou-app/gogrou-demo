@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 // Helpers
 // ===========================
 const ORGANIZATIONS_STORAGE_KEY = "gogrou_organizations";
+const LEGACY_GSS_COMPANIES_STORAGE_KEY = "gss_companies";
 
 const generatePrefix = (name, existing) => {
   const base = name
@@ -134,6 +135,28 @@ const createAdminUser = (companyId) => ({
   companyId,
 });
 
+const safeParseArray = (value, label) => {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn(`Nepodařilo se načíst ${label}.`, error);
+    return [];
+  }
+};
+
+const readOrganizations = () => {
+  const storedOrganizations = localStorage.getItem(ORGANIZATIONS_STORAGE_KEY);
+  if (storedOrganizations) {
+    return safeParseArray(storedOrganizations, ORGANIZATIONS_STORAGE_KEY);
+  }
+
+  const legacyCompanies = localStorage.getItem(LEGACY_GSS_COMPANIES_STORAGE_KEY);
+  return safeParseArray(legacyCompanies, LEGACY_GSS_COMPANIES_STORAGE_KEY);
+};
+
 const normalizeCompany = (company) => {
   const companyId = company.companyId || company.organizationId || company.id;
   const billingStatus = company.billingStatus || "trial";
@@ -199,6 +222,8 @@ export default function GSSPage() {
   const router = useRouter();
 
   const [companies, setCompanies] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [companySearch, setCompanySearch] = useState("");
   const [form, setForm] = useState({
     name: "",
@@ -219,16 +244,16 @@ export default function GSSPage() {
 
   // ===== LOAD =====
   useEffect(() => {
-    const stored = localStorage.getItem(ORGANIZATIONS_STORAGE_KEY);
-    if (stored) {
-      setCompanies(JSON.parse(stored).map(normalizeCompany));
-    }
+    setCompanies(readOrganizations().map(normalizeCompany));
+    setLoaded(true);
   }, []);
 
   // ===== SAVE =====
   useEffect(() => {
+    if (!loaded || !dirty) return;
     localStorage.setItem(ORGANIZATIONS_STORAGE_KEY, JSON.stringify(companies));
-  }, [companies]);
+    setDirty(false);
+  }, [companies, loaded, dirty]);
 
   // ===== CREATE COMPANY =====
   const createCompany = () => {
@@ -267,6 +292,7 @@ export default function GSSPage() {
     };
 
     setCompanies((prev) => [...prev, company]);
+    setDirty(true);
     localStorage.setItem(`gss_wh_${companyId}_MAIN`, JSON.stringify([]));
     setForm({
       name: "",
@@ -316,6 +342,7 @@ export default function GSSPage() {
           : company
       )
     );
+    setDirty(true);
   };
 
   const normalizedCompanySearch = companySearch.trim().toLowerCase();

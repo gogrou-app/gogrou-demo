@@ -54,8 +54,14 @@ const formatDate = (value) => {
 };
 
 const readOrganizations = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn("Nepodařilo se načíst gogrou_organizations.", error);
+    return [];
+  }
 };
 
 const writeOrganizations = (organizations) => {
@@ -64,23 +70,23 @@ const writeOrganizations = (organizations) => {
 
 export default function OrganizationsAdminPage() {
   const [organizations, setOrganizations] = useState([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setOrganizations(readOrganizations());
+    setLoaded(true);
   }, []);
 
-  useEffect(() => {
-    writeOrganizations(organizations);
-  }, [organizations]);
-
   const updateOrganization = (organizationId, field, value) => {
-    setOrganizations((prev) =>
-      prev.map((organization) =>
+    setOrganizations((prev) => {
+      const nextOrganizations = prev.map((organization) =>
         organization.organizationId === organizationId || organization.id === organizationId
           ? { ...organization, [field]: value }
           : organization
-      )
-    );
+      );
+      writeOrganizations(nextOrganizations);
+      return nextOrganizations;
+    });
   };
 
   return (

@@ -113,8 +113,14 @@ const createTrialSubscription = (selectedModules) => ({
 });
 
 const readOrganizations = () => {
-  const stored = localStorage.getItem("gogrou_organizations");
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem("gogrou_organizations");
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn("Nepodařilo se načíst gogrou_organizations.", error);
+    return [];
+  }
 };
 
 const formatModules = (modules) =>
