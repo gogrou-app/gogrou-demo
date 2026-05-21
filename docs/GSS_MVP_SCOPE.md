@@ -402,6 +402,9 @@ MVP nastavení:
 - `min`
 - `max`
 - `warning`
+- `supplierPackQuantity`
+- `supplierName`
+- `supplierType`: `Gogrou partner`, `Standard supplier`, `Internal supplier`
 - DM tracking ano/ne
 - brousitelnost ano/ne
 - max počet přebroušení
@@ -497,6 +500,105 @@ Objednávková potřeba se bude do budoucna počítat jako součet potřeb:
 - budoucí výdejní místa / automaty
 
 V MVP je pouze hlavní sklad, ale logika musí být připravená na budoucí rozpad podle skladů a výdejních míst.
+
+### Objednávkový Návrh
+
+Objednávkový návrh je tenant provozní logika GSS. Nevzniká v GPC a nemění GPC master data.
+
+Objednávka vždy znamená nový nástroj. Nikdy nejde o:
+
+- použitý nástroj
+- nový přebroušený nástroj
+- nástroj na broušení
+- kus ve výrobě
+- rezervovaný kus
+
+GSS automaticky hledá položky, které mají nastavené `min` a `max` a jejich skutečně volné `available` je menší než `min`.
+
+Do dostupného množství se nesmí počítat:
+
+- `reserved`
+- `production`
+- `sharpening`
+- `overstockReserved`
+
+Návrh dopočítává objednávku do `max`.
+
+Příklad:
+
+- `min = 10`
+- `max = 30`
+- `available = 7`
+- návrh objednat = 23 ks
+
+Dodací násobek `supplierPackQuantity` určuje, po kolika kusech lze objednávat. Pokud není nastavený, používá se `1`.
+
+Příklad:
+
+- potřeba objednat = 23 ks
+- `supplierPackQuantity = 10`
+- výsledný návrh = 30 ks
+
+U položky se eviduje dodavatel:
+
+- `supplierName`
+- `supplierType`
+
+Primární filozofie Gogrou je, aby zákazník měl pokud možno výrobce nebo partnera napřímo. Proto je preferovaný typ `Gogrou partner`.
+
+Objednávkový balíček `purchaseProposal` obsahuje:
+
+- `id`
+- `createdAt`
+- `createdBy`
+- `organization`
+- `supplier`
+- `status`: `draft`, `exported`, `sent`, `completed`
+- `items`
+
+Položka návrhu obsahuje:
+
+- `itemId`
+- `itemName`
+- `gpc_id`
+- `gtin`
+- `manufacturer`
+- `supplierName`
+- `recommendedQuantity`
+- `editedQuantity`
+- `supplierPackQuantity`
+- `note`
+
+Uživatel může položku z návrhu vyřadit, změnit množství nebo doplnit poznámku.
+
+Generování objednávky je v MVP placeholder. Budoucí objednávka bude generovaná jako PDF a bude obsahovat:
+
+- údaje zákazníka
+- dodavatele
+- položky
+- množství
+- poznámky
+- datum
+
+Objednávku bude možné uložit, odeslat e-mailem, distribuovat Gogrou kanálem nebo exportovat.
+
+MVP placeholdery:
+
+- `Vygenerovat objednávku`
+- `Export XLS / Promitea`
+- `Odeslat objednávku`
+
+Při vytvoření návrhu vzniká `movementHistory` záznam `purchase_proposal_created`.
+
+Budoucí integrace:
+
+- Promitea
+- XLS
+- RFQ
+- AI doporučení
+- automatické objednávky
+
+Standardní provoz GSS objednává pouze do `max`. Automatická nadnormativa vzniká pouze ve specifických scénářích, například počáteční naplnění skladu, mimořádný nákup nebo bezpečnostní zásoba.
 
 ### Přehled a Rozpad Zásob
 
@@ -744,6 +846,7 @@ V MVP se automaticky zapisují tyto typy pohybů:
 - `reservation_cancelled`: rezervace zrušena
 - `overstock_offer_created`: nadnormativní nabídka vytvořena
 - `overstock_offer_updated`: nadnormativní nabídka upravena
+- `purchase_proposal_created`: objednávkový návrh vytvořen
 
 U položky se zobrazuje posledních 10 pohybů. Na úrovni skladu se zobrazuje posledních 20 pohybů napříč položkami.
 

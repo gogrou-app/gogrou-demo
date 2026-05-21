@@ -155,6 +155,9 @@ const createSettingsForm = (item) => ({
   min: item.tenantSettings?.min || "",
   max: item.tenantSettings?.max || "",
   warning: item.tenantSettings?.warning || "",
+  supplierPackQuantity: item.tenantSettings?.supplierPackQuantity || "",
+  supplierName: item.tenantSettings?.supplierName || "",
+  supplierType: item.tenantSettings?.supplierType || "Gogrou partner",
   dmEnabled: Boolean(item.tenantSettings?.dmEnabled),
   sharpenEnabled: Boolean(item.tenantSettings?.sharpen?.enabled),
   sharpenCycles: item.tenantSettings?.sharpen?.cycles || "",
@@ -251,6 +254,58 @@ const getActiveReservations = (item) => (item.reservations || []).filter((reserv
 
 const isActiveOverstockOffer = (offer) => Boolean(offer?.enabled && !["sold", "cancelled"].includes(offer.status));
 
+const parsePositiveNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const roundUpToPack = (quantity, packQuantity) => Math.ceil(quantity / packQuantity) * packQuantity;
+
+const getPurchaseStatus = (available, min) => {
+  if (available === 0) {
+    return "Kritický stav";
+  }
+
+  if (available < min) {
+    return "Pod minimem";
+  }
+
+  return "OK";
+};
+
+const createPurchaseProposalItem = (item) => {
+  const stock = normalizeStockSummary(item.stockSummary);
+  const min = parsePositiveNumber(item.tenantSettings?.min);
+  const max = parsePositiveNumber(item.tenantSettings?.max);
+
+  if (!min || !max || stock.available >= min) {
+    return null;
+  }
+
+  const supplierPackQuantity = parsePositiveNumber(item.tenantSettings?.supplierPackQuantity, 1);
+  const neededQuantity = Math.max(max - stock.available, 0);
+  const recommendedQuantity = roundUpToPack(neededQuantity, supplierPackQuantity);
+
+  return {
+    itemId: getItemKey(item),
+    itemName: item.name || item.gpc_id || "Položka",
+    gpc_id: item.gpc_id || "",
+    gtin: item.gtin || "",
+    manufacturer: item.manufacturer || "",
+    supplierName: item.tenantSettings?.supplierName || item.manufacturer || "Dodavatel neuveden",
+    supplierType: item.tenantSettings?.supplierType || "Gogrou partner",
+    available: stock.available,
+    min,
+    max,
+    supplierPackQuantity,
+    status: getPurchaseStatus(stock.available, min),
+    recommendedQuantity,
+    editedQuantity: recommendedQuantity,
+    excluded: false,
+    note: "",
+  };
+};
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -275,6 +330,8 @@ export default function AppGssPage() {
   const [overstockItemKey, setOverstockItemKey] = useState("");
   const [overstockForm, setOverstockForm] = useState(createOverstockOfferForm());
   const [overstockMessage, setOverstockMessage] = useState("");
+  const [purchaseProposal, setPurchaseProposal] = useState(null);
+  const [purchaseProposalMessage, setPurchaseProposalMessage] = useState("");
   const [showIssuePanel, setShowIssuePanel] = useState(false);
   const [issueQuery, setIssueQuery] = useState("");
   const [issueItemKey, setIssueItemKey] = useState("");
@@ -349,6 +406,7 @@ export default function AppGssPage() {
     : [];
   const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
   const movementHistory = collectMovementHistory(warehouseItems);
+  const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -449,6 +507,9 @@ export default function AppGssPage() {
           min: settingsForm.min,
           max: settingsForm.max,
           warning: settingsForm.warning,
+          supplierPackQuantity: settingsForm.supplierPackQuantity,
+          supplierName: settingsForm.supplierName,
+          supplierType: settingsForm.supplierType,
           dmEnabled: settingsForm.dmEnabled,
           sharpen: {
             ...item.tenantSettings?.sharpen,
@@ -714,6 +775,85 @@ export default function AppGssPage() {
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
     setOverstockMessage("Nadnormativní nabídka byla uložena.");
+  };
+
+  const createPurchaseProposal = () => {
+    if (purchaseCandidates.length === 0) {
+      setPurchaseProposal(null);
+      setPurchaseProposalMessage("Nejsou nalezené žádné položky pod minimem.");
+      return;
+    }
+
+    const proposal = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      createdBy: DEFAULT_INTAKE_OPERATOR,
+      organization: {
+        id: organizationId,
+        name: organization.name,
+        prefix: organization.prefix || "",
+      },
+      supplier: "mixed",
+      status: "draft",
+      items: purchaseCandidates,
+    };
+    const includedItemIds = new Set(proposal.items.map((item) => item.itemId));
+    const nextItems = warehouseItems.map((item) => {
+      if (!includedItemIds.has(getItemKey(item))) {
+        return item;
+      }
+
+      const proposalItem = proposal.items.find((candidate) => candidate.itemId === getItemKey(item));
+
+      return appendMovement({
+        ...item,
+        updatedAt: new Date().toISOString(),
+      }, createMovementRecord({
+        organizationId,
+        item,
+        type: "purchase_proposal_created",
+        quantity: proposalItem.recommendedQuantity,
+        state: "new",
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: `Objednávkový návrh do max zásoby pro nový nástroj.`,
+        metadata: {
+          purchaseProposalId: proposal.id,
+          available: proposalItem.available,
+          min: proposalItem.min,
+          max: proposalItem.max,
+          supplierPackQuantity: proposalItem.supplierPackQuantity,
+          supplierName: proposalItem.supplierName,
+          supplierType: proposalItem.supplierType,
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setPurchaseProposal(proposal);
+    setPurchaseProposalMessage("Objednávkový návrh byl vytvořen.");
+  };
+
+  const updatePurchaseProposalItem = (itemId, field, value) => {
+    setPurchaseProposal((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        items: current.items.map((item) => (
+          item.itemId === itemId
+            ? { ...item, [field]: field === "excluded" ? value : value }
+            : item
+        )),
+      };
+    });
+    setPurchaseProposalMessage("");
+  };
+
+  const showPurchasePlaceholder = (text) => {
+    setPurchaseProposalMessage(text);
   };
 
   const receiveStock = (event) => {
@@ -1108,6 +1248,100 @@ export default function AppGssPage() {
               <button type="button" onClick={openReturnPanel} style={btnPrimary}>Návrat z výroby</button>
               <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
               <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
+            </div>
+          </div>
+
+          <div style={box}>
+            <h2 style={subtitle}>Objednávkový návrh</h2>
+            <div style={hintBox}>
+              Objednávka v GSS vždy znamená požadavek na nový nástroj. Použité, přebroušené, výrobní, brousicí a rezervované kusy se neobjednávají.
+            </div>
+            <div style={muted}>
+              Návrh hledá položky s nastaveným min/max a skutečně volným dostupným množstvím pod minimem. Množství se dopočítává do max a zaokrouhluje na dodací násobek.
+            </div>
+
+            {purchaseCandidates.length > 0 ? (
+              <div style={resultList}>
+                {purchaseCandidates.map((item) => (
+                  <div key={item.itemId} style={resultItem}>
+                    <div>
+                      <div style={resultTitle}>{item.itemName}</div>
+                      <div style={meta}>
+                        {item.manufacturer || "Výrobce neuveden"} · Dodavatel: {item.supplierName} · {item.supplierType}
+                      </div>
+                      <div style={meta}>
+                        {item.gpc_id ? `GPC ID: ${item.gpc_id}` : "Bez GPC vazby"} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
+                      </div>
+                      <div style={stateBreakdown}>
+                        <span>Available: {item.available}</span>
+                        <span>Min: {item.min}</span>
+                        <span>Max: {item.max}</span>
+                        <span>Dodací násobek: {item.supplierPackQuantity}</span>
+                        <span>Doporučeno objednat: {item.recommendedQuantity}</span>
+                        <span>{item.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={muted}>Žádná položka není pod minimem nebo nemá nastavené min/max.</div>
+            )}
+
+            {purchaseProposal ? (
+              <div style={settingsPanel}>
+                <div style={settingsTitle}>Objednávkový balíček</div>
+                <div style={meta}>
+                  ID: {purchaseProposal.id} · stav: {purchaseProposal.status} · vytvořil {purchaseProposal.createdBy}
+                </div>
+                <div style={resultList}>
+                  {purchaseProposal.items.map((item) => (
+                    <div key={item.itemId} style={resultItem}>
+                      <div>
+                        <label style={checkLabel}>
+                          <input
+                            type="checkbox"
+                            checked={!item.excluded}
+                            onChange={(event) => updatePurchaseProposalItem(item.itemId, "excluded", !event.target.checked)}
+                          />
+                          Zahrnout do návrhu
+                        </label>
+                        <div style={resultTitle}>{item.itemName}</div>
+                        <div style={meta}>{item.supplierName} · {item.supplierType} · doporučeno {item.recommendedQuantity} ks</div>
+                        <div style={formGrid}>
+                          <label style={fieldLabel}>
+                            Upravené množství
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.editedQuantity}
+                              onChange={(event) => updatePurchaseProposalItem(item.itemId, "editedQuantity", event.target.value)}
+                              style={input}
+                            />
+                          </label>
+                          <label style={fieldLabel}>
+                            Poznámka
+                            <input
+                              value={item.note}
+                              onChange={(event) => updatePurchaseProposalItem(item.itemId, "note", event.target.value)}
+                              style={input}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {purchaseProposalMessage ? <div style={purchaseProposalMessage.includes("vytvořen") ? message : errorMessage}>{purchaseProposalMessage}</div> : null}
+
+            <div style={actions}>
+              <button type="button" onClick={createPurchaseProposal} style={btnPrimary}>Vytvořit objednávkový návrh</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Generování objednávky do PDF bude doplněno v další fázi.")} style={btnSecondary}>Vygenerovat objednávku</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Export XLS / Promitea bude doplněn v další fázi.")} style={btnSecondary}>Export XLS / Promitea</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Odeslání objednávky bude doplněno v další fázi.")} style={btnSecondary}>Odeslat objednávku</button>
             </div>
           </div>
 
@@ -1648,6 +1882,9 @@ export default function AppGssPage() {
                       <div style={meta}>
                         Min: {item.tenantSettings?.min || "nenastaveno"} · Max: {item.tenantSettings?.max || "nenastaveno"} · Warning: {item.tenantSettings?.warning || "nenastaveno"}
                       </div>
+                      <div style={meta}>
+                        Dodavatel: {item.tenantSettings?.supplierName || item.manufacturer || "nenastaveno"} · {item.tenantSettings?.supplierType || "Gogrou partner"} · Dodací násobek: {item.tenantSettings?.supplierPackQuantity || 1}
+                      </div>
                       <div style={offerInfo}>
                         Použitý nástroj může být stále použitelný pro méně náročné operace.
                       </div>
@@ -2053,6 +2290,16 @@ export default function AppGssPage() {
                               />
                             </label>
                             <label style={fieldLabel}>
+                              Dodací násobek
+                              <input
+                                type="number"
+                                min="1"
+                                value={settingsForm.supplierPackQuantity}
+                                onChange={(event) => updateSettingsForm("supplierPackQuantity", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
                               Max počet přebroušení
                               <input
                                 type="number"
@@ -2061,6 +2308,27 @@ export default function AppGssPage() {
                                 onChange={(event) => updateSettingsForm("sharpenCycles", event.target.value)}
                                 style={input}
                               />
+                            </label>
+                            <label style={fieldLabel}>
+                              Dodavatel položky
+                              <input
+                                value={settingsForm.supplierName}
+                                onChange={(event) => updateSettingsForm("supplierName", event.target.value)}
+                                placeholder="např. SANDVIK, WALTER, SECO, MTTM"
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Typ dodavatele
+                              <select
+                                value={settingsForm.supplierType}
+                                onChange={(event) => updateSettingsForm("supplierType", event.target.value)}
+                                style={input}
+                              >
+                                <option value="Gogrou partner">Gogrou partner</option>
+                                <option value="Standard supplier">Standard supplier</option>
+                                <option value="Internal supplier">Internal supplier</option>
+                              </select>
                             </label>
                           </div>
 

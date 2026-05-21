@@ -320,6 +320,9 @@ Rozsah:
 - `min`
 - `max`
 - `warning`
+- `supplierPackQuantity`
+- `supplierName`
+- `supplierType`
 - DM tracking ano/ne
 - brousitelnost ano/ne
 - max počet přebroušení
@@ -382,6 +385,93 @@ Objednávka nesmí znamenat:
 - nástroj vrácený z výroby
 
 Objednávková potřeba se bude do budoucna počítat jako součet potřeb hlavního skladu, dceřiných skladů a budoucích výdejních míst / automatů. V MVP je pouze hlavní sklad, ale datová a procesní logika musí být připravená na rozpad.
+
+### Objednávkový Návrh
+
+Objednávkový návrh je tenant provozní logika GSS. Objednávka vždy znamená nový nástroj.
+
+Objednávka nikdy neznamená:
+
+- `used`
+- `resharpened_new`
+- `sharpening`
+- kus ve výrobě
+- rezervovaný kus
+
+Výběr položek:
+
+- položka má nastavené `min`
+- položka má nastavené `max`
+- `stockSummary.available < min`
+
+Do `available` se nesmí přičítat `reserved`, `production`, `sharpening` ani `overstockReserved`. Jde pouze o skutečně volné dostupné množství.
+
+Výpočet:
+
+- potřeba = `max - available`
+- pokud je nastavený `supplierPackQuantity`, výsledek se zaokrouhlí nahoru na nejbližší násobek
+- pokud není nastavený, používá se `supplierPackQuantity = 1`
+
+Příklad:
+
+- `min = 10`
+- `max = 30`
+- `available = 7`
+- potřeba = 23
+- `supplierPackQuantity = 10`
+- doporučení = 30 ks
+
+Tenant nastavení dodavatele:
+
+- `supplierName`
+- `supplierType`: `Gogrou partner`, `Standard supplier`, `Internal supplier`
+
+Primární filozofie Gogrou je napojit zákazníka pokud možno přímo na výrobce nebo partnera. Preferovaný typ je proto `Gogrou partner`.
+
+`purchaseProposal`:
+
+- `id`
+- `createdAt`
+- `createdBy`
+- `organization`
+- `supplier`
+- `status`: `draft`, `exported`, `sent`, `completed`
+- `items`
+
+Položka návrhu:
+
+- `itemId`
+- `itemName`
+- `gpc_id`
+- `gtin`
+- `manufacturer`
+- `supplierName`
+- `recommendedQuantity`
+- `editedQuantity`
+- `supplierPackQuantity`
+- `note`
+
+Uživatel může upravit množství, vyřadit položku nebo doplnit poznámku.
+
+Při vytvoření návrhu vzniká `movementHistory` typ `purchase_proposal_created`.
+
+Placeholdery MVP:
+
+- `Vygenerovat objednávku`: budoucí PDF
+- `Export XLS / Promitea`: budoucí XLS nebo Promitea RFQ
+- `Odeslat objednávku`: budoucí e-mail nebo Gogrou kanál
+
+Budoucí objednávka bude obsahovat údaje zákazníka, dodavatele, položky, množství, poznámky a datum. Později půjde uložit, odeslat e-mailem, distribuovat Gogrou kanálem nebo exportovat.
+
+Budoucí integrace:
+
+- Promitea
+- XLS
+- RFQ
+- AI doporučení
+- automatické objednávky
+
+Standardní provoz GSS objednává pouze do `max`. Automatická nadnormativa vzniká jen ve specifických scénářích, například počáteční naplnění skladu, mimořádný nákup nebo bezpečnostní zásoba.
 
 ### Rozpad Zásob
 
@@ -607,6 +697,7 @@ Podporované typy:
 - `reservation_cancelled`
 - `overstock_offer_created`
 - `overstock_offer_updated`
+- `purchase_proposal_created`
 
 Automatický zápis vzniká při:
 
@@ -619,6 +710,7 @@ Automatický zápis vzniká při:
 - vytvoření rezervace
 - budoucím zrušení rezervace
 - vytvoření nebo změně nadnormativní nabídky
+- vytvoření objednávkového návrhu
 
 UI v MVP zobrazuje:
 
