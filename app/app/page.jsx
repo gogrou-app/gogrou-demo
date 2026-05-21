@@ -8,7 +8,7 @@ const MODULES = {
   GSS: {
     title: "GSS",
     description: "Sklad nástrojů, lokální položky, DM evidence a provozní pohyby.",
-    href: "/gss",
+    href: "/app/gss",
   },
   Toolshop: {
     title: "Toolshop",

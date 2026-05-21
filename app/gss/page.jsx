@@ -361,7 +361,7 @@ export default function GSSPage() {
     <div style={wrap}>
       <h1 style={title}>GSS MVP prototyp</h1>
       <div style={lead}>
-        Tento pohled je dočasný GSS prototyp. Registrace a interní správa organizací jsou nad GSS a patří do `/register` a `/admin/organizations`.
+        Tento pohled je dočasný GSS prototyp. Registrace a interní správa organizací jsou nad GSS a patří do `/register` a `/admin/organizations`. Produkční tenant vstup do GSS bude přes `/app/gss`.
       </div>
 
       {/* CREATE */}
