@@ -554,6 +554,150 @@ Stav `Na broušení` navyšuje `sharpening`, ale nezvyšuje `available`, protož
 
 Použitý nástroj může být stále použitelný pro méně náročné operace. GSS proto nesmí automaticky považovat každý použitý nástroj za nepoužitelný nebo určený na broušení.
 
+### Výdej Do Výroby
+
+Výdej je samostatná GSS služba. Výdej do výroby není přesun mezi sklady zákazníka. Přesun mezi sklady bude později samostatná služba.
+
+Skladový pohyb se vždy provádí z konkrétního skladu. V MVP je pouze hlavní sklad. Do budoucna bude možné stát na hlavním skladu nebo dceřiném skladu a tím definovat, odkud se výdej provádí. Oprávnění kdo může dělat pohyby na kterém skladu se bude řešit později.
+
+Výdej řeší vydání položky ze skladu do výroby. V MVP se položka hledá v tenant skladových položkách podle:
+
+- názvu
+- GPC ID
+- GTIN
+- interního kódu
+- výrobce
+- typu položky
+- průměru
+- počtu zubů, pokud je dostupný
+- dalších parametrů, pokud jsou dostupné
+- poznámky / rozměru
+
+Budoucí čtečka:
+
+- bude možné načíst DM kód
+- bude možné načíst kód z pracovního postupu
+- načtením DM kódu se automaticky najde konkrétní položka / kus
+- uživatel může najít položku ručně a potom načíst DM kus
+
+Při výběru položky musí GSS zobrazit:
+
+- název
+- výrobce
+- GPC ID nebo lokální ID
+- GTIN
+- dostupné množství
+- rozpad stavů: Nový, Nový přebroušený, Použitý, Na broušení
+- DM tracking ano/ne
+- brousitelnost ano/ne
+
+Výdejový formulář obsahuje:
+
+- preferovaný stav pro výdej:
+  - Použitý
+  - Nový přebroušený
+  - Nový
+- dostupnost ve vybraném stavu
+- počet kusů do výroby
+- středisko
+- stroj
+- zakázka
+- poznámka k výdeji
+
+Pravidla výdeje:
+
+- systém nesmí vydat víc kusů, než je `available`
+- systém nesmí vydat kusy ve stavu `Na broušení`
+- pokud není dost kusů ve zvoleném stavu, výdej se neuloží
+- výdej sníží `available`
+- výdej zvýší `production`
+- výdej sníží konkrétní stav: `used`, `resharpened_new` nebo `new`
+
+Metadata výdeje:
+
+- datum výdeje ze systému
+- provedl, v MVP `MVP uživatel`
+- později přihlášená osoba, výdejní automat, ERP nebo integrační zdroj
+
+Zákazník si bude moct definovat evidenční dimenze podle toho, co chce vyhodnocovat:
+
+- středisko
+- stroj
+- zakázka
+- další interní dimenze podle firmy
+
+Střediska, stroje, zakázky a další evidenční dimenze budou v budoucnu definované v administraci firmy. Při výdeji si uživatel nebude dlouhodobě psát volný text, ale vybírat z předdefinovaných hodnot. Zároveň musí existovat možnost hodnotu ručně zapsat, pokud ještě není v seznamu. Důvodem je, že zákazníci mají rozdílnou úroveň evidence a různě čistá data. Pro MVP mohou zůstat textová pole.
+
+Tato data jsou důležitá pro budoucí vyhodnocování a GINA analytiku, například:
+
+- `Kolik mě stála zakázka XY na nástrojích?`
+- `Které středisko má nejvyšší spotřebu?`
+- `Na kterém stroji nejčastěji odcházejí nástroje?`
+
+Kontrola segmentu zásoby musí být striktní:
+
+- pokud uživatel vybere `Použitý`, systém kontroluje segment `used`
+- pokud uživatel vybere `Nový přebroušený`, systém kontroluje segment `resharpened_new`
+- pokud uživatel vybere `Nový`, systém kontroluje segment `new`
+
+Nestačí kontrolovat pouze celkové `available`. Například pokud `available = 10`, `new = 10` a `resharpened_new = 0`, výdej 3 ks jako `Nový přebroušený` musí být odmítnut.
+
+Při DM trackingu bude výdej probíhat nad konkrétním DM kusem. Už nyní ale musí být správná agregovaná kontrola podle segmentu zásoby. Bez DM trackingu se v MVP pracuje s počtem kusů a zvoleným provozním stavem.
+
+### Ohlášení Rozdílu Ve Fyzické Zásobě
+
+GSS musí umožnit pracovníkovi ohlásit rozdíl ve skladu.
+
+Příklad:
+
+- systém ukazuje 10 ks
+- pracovník fyzicky vidí jen 8 ks
+- pracovník ohlásí validní množství / rozdíl
+- informace jde zodpovědné osobě
+- později se propojí s audit logem
+
+Pracovník tím chrání sebe před odpovědností za předchozí chybu. Audit log později umožní dohledat předchozí pohyby a určit, kde rozdíl vznikl. Detailní workflow ohlášení, schválení a korekce zásoby bude řešeno později.
+
+### Budoucí Výdejní Terminál
+
+Budoucí výdejní terminál může mít režim pouze pro výdej.
+
+Princip:
+
+- scanner-first / touch-first režim
+- podle aktivního pole se otevře numerická, textová nebo kombinovaná klávesnice
+- cílem je rychlý provoz ve výrobě
+- terminál minimalizuje zbytečné klikání a ruční psaní
+
+Tento režim není součástí MVP.
+
+### Budoucí Štítkový Výdej
+
+Štítkový výdej je budoucí nápad mimo MVP.
+
+Příklad:
+
+1. pracovník vyhledá položku, například rukavice
+2. zvolí variantu
+3. vytiskne se samolepka / lístek s požadavkem
+4. pracovník s lístkem dojde na výdejní místo
+5. výdej proběhne proti lístku
+
+### Budoucí Nárokové Položky
+
+GSS může v budoucnu hlídat, kdo má nárok na jaké položky za určité období. Typicky jde o OPP / ochranné pracovní pomůcky.
+
+Princip:
+
+- systém eviduje pracovníka
+- systém ví, na jaké položky má pracovník nárok
+- pokud pracovník žádá dříve, než má nárok, systém nevydá automaticky
+- vyšší role, například mistr, může výdej autorizovat
+- výdej se uloží s poznámkou a vazbou na pracovníka
+- bez OPP pracovník nemůže pracovat
+
+Toto workflow není součástí MVP.
+
 ### Dokladová Logika Příjmu
 
 Při naskladnění musí GSS připravit základ evidence, proč a na základě čeho se příjem děje. V MVP se zatím nevede plná historie pohybů, ale u položky se ukládá poslední příjem / intake metadata.

@@ -246,6 +246,12 @@ const STOCK_CONDITION_LABELS = {
   sharpening: "Na broušení",
 };
 
+const ISSUE_STATE_LABELS = {
+  used: "Použitý",
+  resharpened_new: "Nový přebroušený",
+  new: "Nový",
+};
+
 const DOCUMENT_TYPE_LABELS = {
   supplier_delivery_note: "Dodací list dodavatele",
   supplier_invoice: "Faktura dodavatele",
@@ -255,9 +261,39 @@ const DOCUMENT_TYPE_LABELS = {
   manual_correction_inventory: "Ruční korekce / inventura",
 };
 
+const createIssueForm = () => ({
+  quantity: "",
+  preferredState: "used",
+  costCenter: "",
+  machine: "",
+  job: "",
+  note: "",
+});
+
+const itemMatchesIssueQuery = (item, query) => {
+  const stock = normalizeStockSummary(item.stockSummary);
+  const haystack = [
+    item.name,
+    item.gpc_id,
+    item.gtin,
+    item.manufacturer,
+    item.type,
+    item.localFields?.internalCode,
+    item.localFields?.dimensionNote,
+    item.localFields?.diameter,
+    item.localFields?.material,
+    item.localFields?.insertShape,
+    stock.lastIntakeMetadata?.documentNumber,
+    stock.lastIntakeMetadata?.source,
+  ].map(normalizeSearch).join(" ");
+
+  return haystack.includes(query);
+};
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
+  const issueSectionRef = useRef(null);
   const [organization, setOrganization] = useState(null);
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [gpcQuery, setGpcQuery] = useState("");
@@ -271,6 +307,11 @@ export default function AppGssPage() {
   const [stockItemKey, setStockItemKey] = useState("");
   const [stockForm, setStockForm] = useState(createStockForm());
   const [stockMessage, setStockMessage] = useState("");
+  const [showIssuePanel, setShowIssuePanel] = useState(false);
+  const [issueQuery, setIssueQuery] = useState("");
+  const [issueItemKey, setIssueItemKey] = useState("");
+  const [issueForm, setIssueForm] = useState(createIssueForm());
+  const [issueMessage, setIssueMessage] = useState("");
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -324,6 +365,11 @@ export default function AppGssPage() {
         })
         .slice(0, 12)
     : [];
+  const normalizedIssueQuery = normalizeSearch(issueQuery);
+  const issueResults = normalizedIssueQuery
+    ? warehouseItems.filter((item) => itemMatchesIssueQuery(item, normalizedIssueQuery)).slice(0, 12)
+    : [];
+  const selectedIssueItem = warehouseItems.find((item) => getItemKey(item) === issueItemKey);
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -351,6 +397,13 @@ export default function AppGssPage() {
     setShowLocalItemForm(true);
     window.setTimeout(() => {
       localItemSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const openIssuePanel = () => {
+    setShowIssuePanel(true);
+    window.setTimeout(() => {
+      issueSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
 
@@ -502,6 +555,83 @@ export default function AppGssPage() {
     setStockMessage("Naskladnění bylo uloženo.");
   };
 
+  const selectIssueItem = (item) => {
+    setIssueItemKey(getItemKey(item));
+    setIssueForm(createIssueForm());
+    setIssueMessage("");
+  };
+
+  const updateIssueForm = (field, value) => {
+    setIssueForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setIssueMessage("");
+  };
+
+  const issueToProduction = (event) => {
+    event.preventDefault();
+
+    if (!selectedIssueItem) {
+      setIssueMessage("Vyberte položku k výdeji.");
+      return;
+    }
+
+    const quantity = Number(issueForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setIssueMessage("Zadejte kladný počet kusů pro výdej.");
+      return;
+    }
+
+    const currentStock = normalizeStockSummary(selectedIssueItem.stockSummary);
+    if (quantity > currentStock.available) {
+      setIssueMessage("Nelze vydat více kusů, než je dostupné množství.");
+      return;
+    }
+
+    if (quantity > currentStock.states[issueForm.preferredState]) {
+      setIssueMessage("Ve vybraném stavu není dostatek kusů k výdeji.");
+      return;
+    }
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== issueItemKey) {
+        return item;
+      }
+
+      const stock = normalizeStockSummary(item.stockSummary);
+      return {
+        ...item,
+        stockSummary: {
+          ...stock,
+          available: stock.available - quantity,
+          production: stock.production + quantity,
+          states: {
+            ...stock.states,
+            [issueForm.preferredState]: stock.states[issueForm.preferredState] - quantity,
+          },
+          lastIssueMetadata: {
+            type: "issue_to_production",
+            quantity,
+            preferredState: issueForm.preferredState,
+            preferredStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
+            costCenter: issueForm.costCenter.trim(),
+            machine: issueForm.machine.trim(),
+            job: issueForm.job.trim(),
+            note: issueForm.note.trim(),
+            issuedAt: new Date().toISOString(),
+            performedBy: DEFAULT_INTAKE_OPERATOR,
+          },
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setIssueMessage("Položka byla vydána do výroby.");
+  };
+
   return (
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
@@ -563,10 +693,187 @@ export default function AppGssPage() {
 
             <div style={actions}>
               <button type="button" onClick={openWarehouseSection} style={btnPrimary}>Otevřít sklad</button>
+              <button type="button" onClick={openIssuePanel} style={btnPrimary}>Výdej</button>
               <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
               <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
             </div>
           </div>
+
+          {showIssuePanel ? (
+            <div ref={issueSectionRef} style={box}>
+              <h2 style={subtitle}>Výdej do výroby</h2>
+              <div style={hintBox}>
+                Výdej do výroby je samostatná GSS služba. Nejde o přesun mezi sklady zákazníka.
+              </div>
+              <div style={muted}>
+                Pro MVP se hledá pouze v tenant skladových položkách. Později půjde načíst DM kód nebo kód z pracovního postupu.
+              </div>
+              <div style={offerInfo}>
+                Skladový kontext: Hlavní sklad. V MVP se všechny výdeje provádí z hlavního skladu organizace.
+              </div>
+
+              <input
+                value={issueQuery}
+                onChange={(event) => {
+                  setIssueQuery(event.target.value);
+                  setIssueMessage("");
+                }}
+                placeholder="Hledat podle názvu, GPC ID, GTIN, interního kódu, výrobce, typu nebo rozměru"
+                style={input}
+              />
+
+              {normalizedIssueQuery && issueResults.length === 0 ? (
+                <div style={muted}>Nebyla nalezena žádná tenant skladová položka.</div>
+              ) : null}
+
+              {issueResults.length > 0 ? (
+                <div style={resultList}>
+                  {issueResults.map((item) => {
+                    const stock = normalizeStockSummary(item.stockSummary);
+                    const selected = getItemKey(item) === issueItemKey;
+
+                    return (
+                      <div key={getItemKey(item)} style={selected ? highlightedResultItem : resultItem}>
+                        <div>
+                          <div style={resultTitle}>{item.name || item.gpc_id}</div>
+                          <div style={meta}>{item.manufacturer || "Výrobce neuveden"} · {item.type || "Typ neuveden"}</div>
+                          <div style={meta}>
+                            {item.origin === "LOCAL" ? `Lokální ID: ${item.localFields?.internalCode || getItemKey(item)}` : `GPC ID: ${item.gpc_id || "bez vazby"}`} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
+                          </div>
+                          <div style={meta}>
+                            Dostupné: {stock.available} · Celkem: {stock.total} · Ve výrobě: {stock.production} · Na broušení: {stock.sharpening}
+                          </div>
+                          <div style={stateBreakdown}>
+                            <span>Nový: {stock.states.new}</span>
+                            <span>Nový přebroušený: {stock.states.resharpened_new}</span>
+                            <span>Použitý: {stock.states.used}</span>
+                            <span>Na broušení: {stock.states.sharpening}</span>
+                          </div>
+                          <div style={meta}>
+                            DM tracking: {item.tenantSettings?.dmEnabled ? "ano" : "ne"} · Brousitelnost: {item.tenantSettings?.sharpen?.enabled ? "ano" : "ne"}
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => selectIssueItem(item)} style={selected ? btnImport : btnSecondary}>
+                          {selected ? "Vybráno" : "Vybrat k výdeji"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {selectedIssueItem ? (
+                <form onSubmit={issueToProduction} style={settingsPanel}>
+                  <div style={settingsTitle}>Vydat do výroby</div>
+                  <div style={meta}>
+                    {selectedIssueItem.name || selectedIssueItem.gpc_id} · dostupné {normalizeStockSummary(selectedIssueItem.stockSummary).available} ks
+                  </div>
+                  <div style={stateBreakdown}>
+                    <span>Dostupné celkem: {normalizeStockSummary(selectedIssueItem.stockSummary).available}</span>
+                    <span>Nový: {normalizeStockSummary(selectedIssueItem.stockSummary).states.new}</span>
+                    <span>Nový přebroušený: {normalizeStockSummary(selectedIssueItem.stockSummary).states.resharpened_new}</span>
+                    <span>Použitý: {normalizeStockSummary(selectedIssueItem.stockSummary).states.used}</span>
+                  </div>
+                  <div style={hintBox}>
+                    Vybraný stav: {ISSUE_STATE_LABELS[issueForm.preferredState]} · dostupné v tomto stavu: {normalizeStockSummary(selectedIssueItem.stockSummary).states[issueForm.preferredState]} ks
+                  </div>
+                  {selectedIssueItem.tenantSettings?.dmEnabled ? (
+                    <div style={offerInfo}>
+                      Načtěte DM kód vydávaného kusu. V MVP zatím není detailní DM výdej implementovaný.
+                    </div>
+                  ) : null}
+
+                  <div style={formGrid}>
+                    <label style={fieldLabel}>
+                      Preferovaný stav pro výdej
+                      <select
+                        value={issueForm.preferredState}
+                        onChange={(event) => updateIssueForm("preferredState", event.target.value)}
+                        style={input}
+                      >
+                        <option value="used">Použitý</option>
+                        <option value="resharpened_new">Nový přebroušený</option>
+                        <option value="new">Nový</option>
+                      </select>
+                    </label>
+                    <label style={fieldLabel}>
+                      Počet kusů do výroby
+                      <input
+                        type="number"
+                        min="1"
+                        value={issueForm.quantity}
+                        onChange={(event) => updateIssueForm("quantity", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Středisko
+                      <input
+                        value={issueForm.costCenter}
+                        onChange={(event) => updateIssueForm("costCenter", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Stroj
+                      <input
+                        value={issueForm.machine}
+                        onChange={(event) => updateIssueForm("machine", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Zakázka
+                      <input
+                        value={issueForm.job}
+                        onChange={(event) => updateIssueForm("job", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Poznámka k výdeji
+                      <textarea
+                        value={issueForm.note}
+                        onChange={(event) => updateIssueForm("note", event.target.value)}
+                        style={textarea}
+                      />
+                    </label>
+                  </div>
+
+                  <div style={offerInfo}>
+                    V MVP jsou dimenze textová pole. Později se budou vybírat z hodnot definovaných v administraci firmy.
+                  </div>
+                  <div style={offerInfo}>
+                    Výdej sníží dostupné množství, zvýší množství ve výrobě a nikdy nevydává kusy ve stavu Na broušení.
+                  </div>
+
+                  {issueMessage ? <div style={issueMessage.includes("vydána") || issueMessage.includes("ohlášen") ? message : errorMessage}>{issueMessage}</div> : null}
+
+                  <div style={actions}>
+                    <button type="submit" style={btnImport}>Vydat do výroby</button>
+                    <button
+                      type="button"
+                      onClick={() => setIssueMessage("Rozdíl ve skladu byl ohlášen zodpovědné osobě. Detailní audit workflow bude doplněn později.")}
+                      style={btnSecondary}
+                    >
+                      Ohlásit rozdíl ve skladu
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIssueItemKey("");
+                        setIssueForm(createIssueForm());
+                        setIssueMessage("");
+                      }}
+                      style={btnSecondary}
+                    >
+                      Zavřít výdej položky
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
 
           <div style={box}>
             <h2 style={subtitle}>Vyhledat v GPC</h2>
@@ -1270,6 +1577,12 @@ const resultItem = {
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 8,
   padding: 10,
+};
+
+const highlightedResultItem = {
+  ...resultItem,
+  border: "1px solid rgba(34,197,94,0.55)",
+  background: "rgba(34,197,94,0.08)",
 };
 
 const resultTitle = {
