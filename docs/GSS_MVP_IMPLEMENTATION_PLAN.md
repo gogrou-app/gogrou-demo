@@ -258,6 +258,7 @@ Rozsah:
 - převzetí položky do GSS firmy
 - vytvoření zákaznické GSS položky s vazbou na GPC
 - rozlišení validované GPC položky a lokální nevalidované položky
+- založení lokální nevalidované tenant položky, pokud položka v GPC neexistuje
 - uložení základní zákaznické identity položky v hlavním skladu
 
 Pravidlo:
@@ -266,6 +267,9 @@ Pravidlo:
 - zákaznické provozní nastavení vzniká až v GSS
 - GSS nekopíruje kompletní GPC data
 - GSS ukládá pouze `gpc_id`, `gtin` a případný malý snapshot pro rychlé zobrazení
+- lokální nevalidovaná položka má `origin = LOCAL`, `validationStatus = unvalidated` a `tenantOnly = true`
+- lokální nevalidovaná položka existuje pouze v dané organizaci a nemění GPC
+- lokální nevalidovaná položka může později sloužit jako podnět k validaci a propojení s GPC
 
 Technická data, obrázky, datasheety, 3D modely a odkazy zůstávají v GPC. GSS je načítá přes `gpc_id`.
 
@@ -279,6 +283,33 @@ GSS ukládá pouze tenant provozní data:
 - lokální poznámky
 - blokace
 - nadnormativní nabídky
+
+### Minimální Validace Lokální Nevalidované Položky
+
+Nejde o plnou GPC validaci ani o finální parametrické šablony. MVP musí pouze zabránit tomu, aby GSS přijalo provozně nepoužitelnou lokální položku.
+
+Společná povinná pole:
+
+- název položky
+- typ položky
+- výrobce nebo `neznámý`
+- alespoň jeden identifikační údaj: GTIN, interní kód zákazníka nebo stručný popis / rozměr
+
+Pro vrták / frézu se navíc vyžaduje:
+
+- průměr
+- délka nebo poznámka k rozměru
+- materiál nebo `neznámý`
+
+Pro břitovou destičku se navíc vyžaduje:
+
+- tvar / typ
+- rozměr nebo označení
+- materiál nebo `neznámý`
+
+Pokud povinná data chybí, položka se neuloží a uživatel vidí hlášku:
+
+`Pro založení lokální položky je nutné doplnit minimální povinné údaje.`
 
 ## Etapa 3: Lokální Nastavení Položky
 

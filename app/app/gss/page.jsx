@@ -54,7 +54,7 @@ const formatModules = (modules) =>
   (modules && modules.length > 0 ? modules : []).map((module) => labelFromMap(MODULE_LABELS, module)).join(", ") || "žádné";
 
 const countDmItems = (items) =>
-  items.filter((item) => item.dmTracking || item.dm_mode || item.dmPieces || item.dmCode).length;
+  items.filter((item) => item.tenantSettings?.dmEnabled || item.dmTracking || item.dm_mode || item.dmPieces || item.dmCode).length;
 
 const normalizeSearch = (value) => String(value || "").toLowerCase().trim();
 
@@ -98,12 +98,98 @@ const createTenantGssItem = (tool) => ({
   createdAt: new Date().toISOString(),
 });
 
+const defaultLocalItemForm = {
+  name: "",
+  manufacturer: "",
+  type: "",
+  gtin: "",
+  internalCode: "",
+  dimensionNote: "",
+  diameter: "",
+  length: "",
+  material: "",
+  insertShape: "",
+  dmEnabled: false,
+  sharpenEnabled: false,
+};
+
+const isDrillOrMill = (type) => {
+  const normalized = normalizeSearch(type);
+  return normalized.includes("vrtak") || normalized.includes("vrták") || normalized.includes("freza") || normalized.includes("fréza") || normalized.includes("drill") || normalized.includes("mill");
+};
+
+const isInsert = (type) => {
+  const normalized = normalizeSearch(type);
+  return normalized.includes("britova") || normalized.includes("břitová") || normalized.includes("desticka") || normalized.includes("destička") || normalized.includes("insert");
+};
+
+const validateLocalItemForm = (form) => {
+  const hasCommonRequired = form.name.trim() && form.type.trim();
+  const hasIdentifier = form.gtin.trim() || form.internalCode.trim() || form.dimensionNote.trim();
+
+  if (!hasCommonRequired || !hasIdentifier) {
+    return false;
+  }
+
+  if (isDrillOrMill(form.type)) {
+    return Boolean(form.diameter.trim() && (form.length.trim() || form.dimensionNote.trim()) && form.material.trim());
+  }
+
+  if (isInsert(form.type)) {
+    return Boolean(form.insertShape.trim() && form.dimensionNote.trim() && form.material.trim());
+  }
+
+  return true;
+};
+
+const createLocalTenantGssItem = (form) => ({
+  id: crypto.randomUUID(),
+  origin: "LOCAL",
+  validationStatus: "unvalidated",
+  tenantOnly: true,
+  gpc_id: "",
+  gtin: form.gtin.trim(),
+  name: form.name.trim(),
+  manufacturer: form.manufacturer.trim() || "neznámý",
+  type: form.type.trim(),
+  localFields: {
+    internalCode: form.internalCode.trim(),
+    dimensionNote: form.dimensionNote.trim(),
+    diameter: form.diameter.trim(),
+    length: form.length.trim(),
+    material: form.material.trim() || "neznámý",
+    insertShape: form.insertShape.trim(),
+  },
+  tenantSettings: {
+    min: "",
+    max: "",
+    warning: "",
+    dmEnabled: form.dmEnabled,
+    sharpen: {
+      enabled: form.sharpenEnabled,
+      cycles: "",
+    },
+  },
+  stockSummary: {
+    total: 0,
+    available: 0,
+    reserved: 0,
+    production: 0,
+    sharpening: 0,
+  },
+  createdAt: new Date().toISOString(),
+});
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
+  const localItemSectionRef = useRef(null);
   const [organization, setOrganization] = useState(null);
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [gpcQuery, setGpcQuery] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [showLocalItemForm, setShowLocalItemForm] = useState(false);
+  const [localItemForm, setLocalItemForm] = useState(defaultLocalItemForm);
+  const [localItemMessage, setLocalItemMessage] = useState("");
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -180,6 +266,38 @@ export default function AppGssPage() {
     }, 1800);
   };
 
+  const openLocalItemForm = () => {
+    setShowLocalItemForm(true);
+    window.setTimeout(() => {
+      localItemSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const updateLocalItemForm = (field, value) => {
+    setLocalItemForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setLocalItemMessage("");
+  };
+
+  const addLocalItemToGss = (event) => {
+    event.preventDefault();
+
+    if (!validateLocalItemForm(localItemForm)) {
+      setLocalItemMessage("Pro založení lokální položky je nutné doplnit minimální povinné údaje.");
+      return;
+    }
+
+    const nextItems = [...warehouseItems, createLocalTenantGssItem(localItemForm)];
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setLocalItemForm(defaultLocalItemForm);
+    setLocalItemMessage("Lokální nevalidovaná položka byla založena v tenant skladu.");
+    setShowLocalItemForm(false);
+    openWarehouseSection();
+  };
+
   return (
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
@@ -242,7 +360,7 @@ export default function AppGssPage() {
             <div style={actions}>
               <button type="button" onClick={openWarehouseSection} style={btnPrimary}>Otevřít sklad</button>
               <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
-              <button type="button" style={btnSecondary}>Přidat lokální položku</button>
+              <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
             </div>
           </div>
 
@@ -312,12 +430,23 @@ export default function AppGssPage() {
                   <div key={item.id || item.gpc_id} style={resultItem}>
                     <div>
                       <div style={resultTitle}>{item.name || item.gpc_id}</div>
+                      {item.origin === "LOCAL" ? (
+                        <div style={badgeWarning}>Lokální nevalidovaná položka</div>
+                      ) : null}
                       <div style={meta}>
                         {item.manufacturer || "Výrobce neuveden"} · {item.type || "Typ neuveden"}
                       </div>
                       <div style={meta}>
-                        GPC ID: {item.gpc_id || "bez vazby"} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
+                        {item.origin === "LOCAL" ? `Interní kód: ${item.localFields?.internalCode || "neuveden"}` : `GPC ID: ${item.gpc_id || "bez vazby"}`} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
                       </div>
+                      {item.origin === "LOCAL" ? (
+                        <div style={meta}>
+                          Rozměr / poznámka: {item.localFields?.dimensionNote || "neuvedeno"} · Materiál: {item.localFields?.material || "neznámý"}
+                        </div>
+                      ) : null}
+                      {item.validationStatus === "unvalidated" ? (
+                        <div style={meta}>Validation: unvalidated · tenantOnly: ano</div>
+                      ) : null}
                       <div style={meta}>
                         Zásoba: celkem {item.stockSummary?.total ?? 0} · dostupné {item.stockSummary?.available ?? 0} · rezervace {item.stockSummary?.reserved ?? 0} · výroba {item.stockSummary?.production ?? 0} · broušení {item.stockSummary?.sharpening ?? 0}
                       </div>
@@ -363,7 +492,147 @@ export default function AppGssPage() {
 
           <div style={box}>
             <h2 style={subtitle}>Lokální nevalidované položky</h2>
-            <div style={muted}>Lokální nevalidované položky budou doplněny v dalším kroku.</div>
+            <div style={hintBox}>
+              Lokální položky slouží pro rychlé zavedení položek, které ještě nejsou validované v GPC.
+            </div>
+            <div style={muted}>
+              Lokální položka existuje pouze v tenant GSS, nemění GPC a funguje okamžitě pro provoz firmy.
+            </div>
+            <div style={offerInfo}>
+              Později bude možné odeslat položku k validaci, propojit ji s GPC a doplnit technická data a výrobce.
+            </div>
+            <div style={actions}>
+              <button type="button" onClick={openLocalItemForm} style={btnPrimary}>Přidat lokální položku</button>
+            </div>
+
+            {showLocalItemForm ? (
+              <form ref={localItemSectionRef} onSubmit={addLocalItemToGss} style={formBox}>
+                <div style={formGrid}>
+                  <label style={fieldLabel}>
+                    Název položky
+                    <input
+                      value={localItemForm.name}
+                      onChange={(event) => updateLocalItemForm("name", event.target.value)}
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Výrobce
+                    <input
+                      value={localItemForm.manufacturer}
+                      onChange={(event) => updateLocalItemForm("manufacturer", event.target.value)}
+                      placeholder="neznámý, pokud není známý"
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Typ položky
+                    <select
+                      value={localItemForm.type}
+                      onChange={(event) => updateLocalItemForm("type", event.target.value)}
+                      style={input}
+                    >
+                      <option value="">Vyberte typ</option>
+                      <option value="Vrták">Vrták</option>
+                      <option value="Fréza">Fréza</option>
+                      <option value="Břitová destička">Břitová destička</option>
+                      <option value="Ostatní">Ostatní</option>
+                    </select>
+                  </label>
+                  <label style={fieldLabel}>
+                    GTIN volitelné
+                    <input
+                      value={localItemForm.gtin}
+                      onChange={(event) => updateLocalItemForm("gtin", event.target.value)}
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Interní kód zákazníka
+                    <input
+                      value={localItemForm.internalCode}
+                      onChange={(event) => updateLocalItemForm("internalCode", event.target.value)}
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Rozměr / poznámka
+                    <input
+                      value={localItemForm.dimensionNote}
+                      onChange={(event) => updateLocalItemForm("dimensionNote", event.target.value)}
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Průměr
+                    <input
+                      value={localItemForm.diameter}
+                      onChange={(event) => updateLocalItemForm("diameter", event.target.value)}
+                      placeholder="povinné pro vrták / frézu"
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Délka
+                    <input
+                      value={localItemForm.length}
+                      onChange={(event) => updateLocalItemForm("length", event.target.value)}
+                      placeholder="nebo poznámka k rozměru"
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Materiál
+                    <input
+                      value={localItemForm.material}
+                      onChange={(event) => updateLocalItemForm("material", event.target.value)}
+                      placeholder="neznámý, pokud není známý"
+                      style={input}
+                    />
+                  </label>
+                  <label style={fieldLabel}>
+                    Tvar / typ destičky
+                    <input
+                      value={localItemForm.insertShape}
+                      onChange={(event) => updateLocalItemForm("insertShape", event.target.value)}
+                      placeholder="povinné pro břitovou destičku"
+                      style={input}
+                    />
+                  </label>
+                </div>
+
+                <div style={checkRow}>
+                  <label style={checkLabel}>
+                    <input
+                      type="checkbox"
+                      checked={localItemForm.dmEnabled}
+                      onChange={(event) => updateLocalItemForm("dmEnabled", event.target.checked)}
+                    />
+                    DM tracking
+                  </label>
+                  <label style={checkLabel}>
+                    <input
+                      type="checkbox"
+                      checked={localItemForm.sharpenEnabled}
+                      onChange={(event) => updateLocalItemForm("sharpenEnabled", event.target.checked)}
+                    />
+                    Brousitelná
+                  </label>
+                </div>
+
+                <div style={muted}>
+                  Povinně: název, typ, výrobce nebo neznámý a alespoň jeden identifikátor: GTIN, interní kód nebo rozměr / poznámka.
+                </div>
+                {localItemMessage ? <div style={localItemMessage.includes("nutné") ? errorMessage : message}>{localItemMessage}</div> : null}
+
+                <div style={actions}>
+                  <button type="submit" style={btnImport}>Vytvořit lokální položku</button>
+                  <button type="button" onClick={() => setShowLocalItemForm(false)} style={btnSecondary}>Zavřít</button>
+                </div>
+              </form>
+            ) : localItemMessage ? (
+              <div style={message}>{localItemMessage}</div>
+            ) : null}
           </div>
 
           <div style={box}>
@@ -469,6 +738,16 @@ const message = {
   color: "#d1fae5",
 };
 
+const errorMessage = {
+  marginTop: 10,
+  fontSize: 13,
+  border: "1px solid rgba(239,68,68,0.45)",
+  borderRadius: 8,
+  padding: "9px 10px",
+  background: "rgba(239,68,68,0.12)",
+  color: "#fecaca",
+};
+
 const resultList = {
   display: "grid",
   gap: 10,
@@ -502,6 +781,43 @@ const itemActions = {
   flexWrap: "wrap",
   gap: 8,
   marginTop: 10,
+};
+
+const formBox = {
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 8,
+  padding: 12,
+  marginTop: 14,
+};
+
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const fieldLabel = {
+  display: "grid",
+  gap: 6,
+  fontSize: 12,
+  fontWeight: 800,
+  color: "rgba(255,255,255,0.82)",
+};
+
+const checkRow = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 14,
+  marginBottom: 12,
+};
+
+const checkLabel = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const actions = {
@@ -559,6 +875,18 @@ const btnDisabled = {
   cursor: "not-allowed",
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const badgeWarning = {
+  display: "inline-flex",
+  marginTop: 6,
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(245,158,11,0.45)",
+  background: "rgba(245,158,11,0.12)",
+  color: "#fde68a",
+  fontSize: 11,
+  fontWeight: 900,
 };
 
 const steps = {

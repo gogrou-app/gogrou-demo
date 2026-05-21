@@ -328,9 +328,16 @@ Pokud položka v GPC není, zákazník ji může založit lokálně v GSS.
 Lokální nevalidovaná položka:
 
 - existuje pouze v zákaznickém GSS
+- existuje pouze v konkrétní organizaci / tenantovi
+- má `origin = LOCAL`
+- má `validationStatus = unvalidated`
+- má `tenantOnly = true`
 - není validovaným master záznamem
 - nemá plnou GPC datovou kvalitu
+- nemění GPC a nevytváří master data
+- funguje okamžitě pro provoz firmy
 - může sloužit jako podnět pro doplnění do GPC
+- později může být validovaná a propojená s GPC
 
 ### Rozdíl Funkcí
 
@@ -351,6 +358,38 @@ Lokální nevalidovaná položka má v MVP hlavně provozní evidenci:
 - DM kusy, pokud si je zákazník zapne
 - poznámky
 - pohyby a historii
+
+### Povinná Data Pro Lokální Nevalidovanou Položku
+
+Lokální položka nesmí být založená úplně volně bez základních parametrů. Nejde o plnou GPC validaci, ale o minimální provozní kontrolu, aby GSS nepřijímalo nepoužitelná data.
+
+Společná povinná pole pro MVP:
+
+- název položky
+- typ položky
+- výrobce nebo hodnota `neznámý`
+- alespoň jeden identifikační údaj:
+  - GTIN
+  - interní kód zákazníka
+  - stručný popis / rozměr
+
+Pro nástroj typu vrták / fréza:
+
+- průměr
+- délka nebo poznámka k rozměru
+- materiál nebo hodnota `neznámý`
+
+Pro břitovou destičku:
+
+- tvar / typ
+- rozměr nebo označení
+- materiál nebo hodnota `neznámý`
+
+Pokud povinná data chybí, GSS položku neuloží a zobrazí hlášku:
+
+`Pro založení lokální položky je nutné doplnit minimální povinné údaje.`
+
+Detailní parametrické šablony podle typu položky se budou řešit později.
 
 ## 7. Lokální Nastavení Položky
 
