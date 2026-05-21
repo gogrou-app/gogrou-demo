@@ -511,6 +511,54 @@ Nestačí kontrolovat pouze `stockSummary.available`. Pokud například `availab
 
 Při DM trackingu bude výdej probíhat nad konkrétním DM kusem. V MVP je detailní DM výdej pouze placeholder, ale agregovaná kontrola podle segmentu zásoby musí být správná už nyní.
 
+### Rezervace Nástroje Pro Zakázku
+
+Rezervace je tenant provozní funkce GSS. Nemění GPC master data a nesmí zapisovat do GPC. Chrání dostupnost nástroje pro konkrétní zakázku, přípravu programu nebo výrobu.
+
+MVP formulář rezervace:
+
+- zakázka
+- počet kusů
+- stav rezervovaného nástroje: `new`, `resharpened_new`, `used`
+- důvod rezervace
+- rezervoval, defaultně `MVP uživatel`
+- datum rezervace
+- platnost rezervace do, volitelné
+
+Logika bez DM trackingu:
+
+- kontroluje se dostupnost ve zvoleném segmentu `stockSummary.states`
+- rezervace nesmí povolit více kusů, než existuje v daném segmentu
+- po uložení se sníží `stockSummary.available`
+- zvýší se `stockSummary.reserved`
+- sníží se segment `stockSummary.states[state]`
+- k položce se uloží aktivní rezervace
+- vznikne `movementHistory` záznam `reservation_created`
+
+Logika s DM trackingem:
+
+- v budoucnu se rezervuje konkrétní DM kus
+- DM kus ponese informaci o zakázce, autorovi rezervace, datu, důvodu a případně aktuálním rozměru po broušení
+- v aktuálním MVP je tato část pouze placeholder
+
+Výdej rezervovaného nástroje:
+
+- rezervovaný nástroj nelze běžně vydat
+- uživatel má jít přes tok `Rezervované nástroje`
+- vybere nebo zadá zakázku
+- systém zobrazí rezervované položky pro danou zakázku
+- výdej je povolen pouze na tuto zakázku
+
+Zrušení rezervace:
+
+- může provést autor rezervace nebo oprávněná osoba
+- kusy se vrátí do `available`
+- kusy se vrátí do původního segmentu zásoby
+- vznikne `movementHistory` záznam `reservation_cancelled`
+- v MVP je zrušení rezervace zatím placeholder bez plné implementace
+
+Rezervace je důležitá hlavně pro technologii, programování a práci s přebroušenými nástroji. Pokud má přebroušený nástroj aktuální průměr použitý v programu, systém musí zabránit tomu, aby jej někdo vydal na jinou práci.
+
 ### Ohlášení Rozdílu Ve Skladu
 
 MVP UI může obsahovat jednoduchou akci `Ohlásit rozdíl ve skladu`.
@@ -555,6 +603,8 @@ Podporované typy:
 - `stock_difference_report`
 - `block`
 - `unblock`
+- `reservation_created`
+- `reservation_cancelled`
 
 Automatický zápis vzniká při:
 
@@ -564,6 +614,8 @@ Automatický zápis vzniká při:
 - rozhodnutí poslat na broušení
 - ohlášení rozdílu ve skladu
 - blokaci nebo odblokaci položky
+- vytvoření rezervace
+- budoucím zrušení rezervace
 
 UI v MVP zobrazuje:
 

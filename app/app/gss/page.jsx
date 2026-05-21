@@ -181,6 +181,16 @@ const createStockForm = () => ({
   intakeNote: "",
 });
 
+const createReservationForm = () => ({
+  job: "",
+  quantity: "",
+  state: "resharpened_new",
+  reason: "",
+  reservedBy: DEFAULT_INTAKE_OPERATOR,
+  reservedAt: getTodayDate(),
+  validUntil: "",
+});
+
 const createIssueForm = () => ({
   quantity: "",
   preferredState: "used",
@@ -228,6 +238,8 @@ const itemMatchesIssueQuery = (item, query) => {
 
 const itemMatchesWarehouseQuery = itemMatchesIssueQuery;
 
+const getActiveReservations = (item) => (item.reservations || []).filter((reservation) => reservation.status !== "cancelled");
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -246,6 +258,9 @@ export default function AppGssPage() {
   const [stockItemKey, setStockItemKey] = useState("");
   const [stockForm, setStockForm] = useState(createStockForm());
   const [stockMessage, setStockMessage] = useState("");
+  const [reservationItemKey, setReservationItemKey] = useState("");
+  const [reservationForm, setReservationForm] = useState(createReservationForm());
+  const [reservationMessage, setReservationMessage] = useState("");
   const [showIssuePanel, setShowIssuePanel] = useState(false);
   const [issueQuery, setIssueQuery] = useState("");
   const [issueItemKey, setIssueItemKey] = useState("");
@@ -472,6 +487,110 @@ export default function AppGssPage() {
       [field]: value,
     }));
     setStockMessage("");
+  };
+
+  const openReservationForm = (item) => {
+    setReservationItemKey(getItemKey(item));
+    setReservationForm(createReservationForm());
+    setReservationMessage("");
+  };
+
+  const updateReservationForm = (field, value) => {
+    setReservationForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setReservationMessage("");
+  };
+
+  const reserveStock = (event) => {
+    event.preventDefault();
+
+    const selectedItem = warehouseItems.find((item) => getItemKey(item) === reservationItemKey);
+    if (!selectedItem) {
+      setReservationMessage("Vyberte položku pro rezervaci.");
+      return;
+    }
+
+    if (selectedItem.tenantSettings?.dmEnabled) {
+      setReservationMessage("Při DM trackingu bude možné rezervovat konkrétní kus.");
+      return;
+    }
+
+    if (!reservationForm.job.trim() || !reservationForm.reason.trim()) {
+      setReservationMessage("Pro rezervaci je nutné zadat zakázku a důvod rezervace.");
+      return;
+    }
+
+    const quantity = Number(reservationForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setReservationMessage("Zadejte kladný počet kusů pro rezervaci.");
+      return;
+    }
+
+    const selectedStock = normalizeStockSummary(selectedItem.stockSummary);
+    if (quantity > selectedStock.states[reservationForm.state]) {
+      setReservationMessage("Ve vybraném stavu není dostatek kusů k rezervaci.");
+      return;
+    }
+
+    const reservation = {
+      id: crypto.randomUUID(),
+      status: "active",
+      job: reservationForm.job.trim(),
+      quantity,
+      state: reservationForm.state,
+      stateLabel: ISSUE_STATE_LABELS[reservationForm.state],
+      reason: reservationForm.reason.trim(),
+      reservedBy: reservationForm.reservedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+      reservedAt: reservationForm.reservedAt || getTodayDate(),
+      validUntil: reservationForm.validUntil,
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== reservationItemKey) {
+        return item;
+      }
+
+      const stock = normalizeStockSummary(item.stockSummary);
+      const nextStock = {
+        ...stock,
+        available: stock.available - quantity,
+        reserved: stock.reserved + quantity,
+        states: {
+          ...stock.states,
+          [reservationForm.state]: stock.states[reservationForm.state] - quantity,
+        },
+      };
+      const nextItem = {
+        ...item,
+        reservations: [reservation, ...(item.reservations || [])],
+        stockSummary: nextStock,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: "reservation_created",
+        quantity,
+        state: reservationForm.state,
+        performedBy: reservation.reservedBy,
+        note: reservation.reason,
+        metadata: {
+          reservationId: reservation.id,
+          job: reservation.job,
+          stateLabel: reservation.stateLabel,
+          reservedAt: reservation.reservedAt,
+          validUntil: reservation.validUntil,
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setReservationMessage("Rezervace byla vytvořena.");
   };
 
   const receiveStock = (event) => {
@@ -913,6 +1032,9 @@ export default function AppGssPage() {
                           <div style={meta}>
                             Dostupné: {stock.available} · Celkem: {stock.total} · Ve výrobě: {stock.production} · Na broušení: {stock.sharpening}
                           </div>
+                          {stock.reserved > 0 ? (
+                            <div style={badgeWarning}>Některé kusy jsou rezervované.</div>
+                          ) : null}
                           <div style={stateBreakdown}>
                             <span>Nový: {stock.states.new}</span>
                             <span>Nový přebroušený: {stock.states.resharpened_new}</span>
@@ -1333,7 +1455,10 @@ export default function AppGssPage() {
               <div style={muted}>Tenant sklad zatím neobsahuje žádné položky převzaté z GPC.</div>
             ) : (
               <div style={resultList}>
-                {warehouseItems.map((item) => (
+                {warehouseItems.map((item) => {
+                  const activeReservations = getActiveReservations(item);
+
+                  return (
                   <div key={item.id || item.gpc_id} style={resultItem}>
                     <div>
                       <div style={resultTitle}>{item.name || item.gpc_id}</div>
@@ -1364,6 +1489,22 @@ export default function AppGssPage() {
                         <span>Na broušení: {normalizeStockSummary(item.stockSummary).states.sharpening}</span>
                         <span>Ve výrobě: {normalizeStockSummary(item.stockSummary).production}</span>
                       </div>
+                      {activeReservations.length > 0 ? (
+                        <div style={historyPanel}>
+                          <div style={settingsTitle}>Rezervace</div>
+                          {activeReservations.map((reservation) => (
+                            <div key={reservation.id} style={historyItem}>
+                              <div style={historyTitle}>
+                                Zakázka {reservation.job} · {reservation.quantity} ks · {ISSUE_STATE_LABELS[reservation.state] || reservation.state}
+                              </div>
+                              <div style={meta}>
+                                Rezervoval {reservation.reservedBy || "neuvedeno"} · platnost do {reservation.validUntil || "nenastaveno"}
+                              </div>
+                              {reservation.reason ? <div style={meta}>{reservation.reason}</div> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       {item.stockSummary?.lastIntakeMetadata ? (
                         <div style={meta}>
                           Poslední příjem: {item.stockSummary.lastIntakeMetadata.documentTypeLabel || "doklad neuveden"} · {item.stockSummary.lastIntakeMetadata.receivedAt || "datum neuvedeno"} · provedl {item.stockSummary.lastIntakeMetadata.performedBy || "neuvedeno"}
@@ -1386,6 +1527,7 @@ export default function AppGssPage() {
                       <div style={itemActions}>
                         <button type="button" onClick={() => openItemSettings(item)} style={btnSecondary}>Nastavení položky</button>
                         <button type="button" onClick={() => openStockForm(item)} style={btnSecondary}>Naskladnit</button>
+                        <button type="button" onClick={() => openReservationForm(item)} style={btnSecondary}>Rezervovat</button>
                         <button type="button" style={btnSecondary}>Otevřít detail</button>
                       </div>
                       {stockItemKey === getItemKey(item) ? (
@@ -1533,6 +1675,111 @@ export default function AppGssPage() {
                                 setStockItemKey("");
                                 setStockForm(createStockForm());
                                 setStockMessage("");
+                              }}
+                              style={btnSecondary}
+                            >
+                              Zavřít
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
+                      {reservationItemKey === getItemKey(item) ? (
+                        <form onSubmit={reserveStock} style={settingsPanel}>
+                          <div style={settingsTitle}>Rezervovat nástroj pro zakázku</div>
+                          <div style={muted}>
+                            Rezervace sníží dostupné množství a zablokuje kusy pro konkrétní zakázku.
+                          </div>
+                          {item.tenantSettings?.dmEnabled ? (
+                            <div style={offerInfo}>
+                              Při DM trackingu bude možné rezervovat konkrétní kus.
+                            </div>
+                          ) : null}
+
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Zakázka
+                              <input
+                                value={reservationForm.job}
+                                onChange={(event) => updateReservationForm("job", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Počet kusů
+                              <input
+                                type="number"
+                                min="1"
+                                value={reservationForm.quantity}
+                                onChange={(event) => updateReservationForm("quantity", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Stav rezervovaného nástroje
+                              <select
+                                value={reservationForm.state}
+                                onChange={(event) => updateReservationForm("state", event.target.value)}
+                                style={input}
+                              >
+                                <option value="new">Nový</option>
+                                <option value="resharpened_new">Nový přebroušený</option>
+                                <option value="used">Použitý</option>
+                              </select>
+                            </label>
+                            <label style={fieldLabel}>
+                              Rezervoval
+                              <input
+                                value={reservationForm.reservedBy}
+                                onChange={(event) => updateReservationForm("reservedBy", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Datum rezervace
+                              <input
+                                type="date"
+                                value={reservationForm.reservedAt}
+                                onChange={(event) => updateReservationForm("reservedAt", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Platnost rezervace do
+                              <input
+                                type="date"
+                                value={reservationForm.validUntil}
+                                onChange={(event) => updateReservationForm("validUntil", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                          </div>
+                          <label style={fieldLabel}>
+                            Důvod rezervace
+                            <textarea
+                              value={reservationForm.reason}
+                              onChange={(event) => updateReservationForm("reason", event.target.value)}
+                              style={textarea}
+                            />
+                          </label>
+
+                          <div style={offerInfo}>
+                            Rezervovaný nástroj nelze běžně vydat. Výdej rezervovaných nástrojů půjde později přes samostatný tok podle zakázky.
+                          </div>
+                          <div style={actions}>
+                            <button type="button" style={btnSecondary}>Rezervované nástroje</button>
+                            <button type="button" style={btnSecondary}>Zrušit rezervaci</button>
+                          </div>
+
+                          {reservationMessage ? <div style={reservationMessage.includes("vytvořena") ? message : errorMessage}>{reservationMessage}</div> : null}
+
+                          <div style={actions}>
+                            <button type="submit" style={btnImport}>Uložit rezervaci</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReservationItemKey("");
+                                setReservationForm(createReservationForm());
+                                setReservationMessage("");
                               }}
                               style={btnSecondary}
                             >
@@ -1698,7 +1945,8 @@ export default function AppGssPage() {
                       <div>V brusírně: {normalizeStockSummary(item.stockSummary).sharpeningBreakdown.at_grinder}</div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

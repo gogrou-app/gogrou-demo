@@ -644,6 +644,58 @@ Nestačí kontrolovat pouze celkové `available`. Například pokud `available =
 
 Při DM trackingu bude výdej probíhat nad konkrétním DM kusem. Už nyní ale musí být správná agregovaná kontrola podle segmentu zásoby. Bez DM trackingu se v MVP pracuje s počtem kusů a zvoleným provozním stavem.
 
+### Rezervace Nástroje Pro Zakázku
+
+Rezervace je provozní GSS vrstva. Nemění GPC data, GPC master položku ani technickou dokumentaci. Slouží k ochraně dostupnosti konkrétního nástroje pro konkrétní výrobu nebo zakázku.
+
+Typický případ:
+
+- nástroj se vrátí po broušení s konkrétním aktuálním průměrem
+- technolog nebo programátor podle tohoto průměru upraví program
+- nástroj musí být zablokovaný pro danou zakázku
+- běžný výdej nesmí tento nástroj použít pro jinou zakázku
+
+Bez DM trackingu se rezervuje agregované množství:
+
+- zakázka
+- počet kusů
+- stav rezervovaného nástroje:
+  - `new`
+  - `resharpened_new`
+  - `used`
+- důvod rezervace
+- kdo rezervoval
+- datum rezervace
+- volitelná platnost rezervace
+
+Logika rezervace bez DM:
+
+- rezervované kusy se odečtou z `stockSummary.available`
+- zvýší se `stockSummary.reserved`
+- sníží se příslušný segment v `stockSummary.states`
+- rezervace nesmí povolit více kusů, než je dostupné ve vybraném segmentu
+
+S DM trackingem bude cílově rezervován konkrétní DM kus. U DM kusu bude evidováno:
+
+- rezervováno pro zakázku
+- kdo rezervoval
+- datum rezervace
+- důvod
+- případně aktuální průměr a aktuální délka po broušení
+
+V MVP je DM rezervace pouze placeholder. Detailní práce s konkrétním DM kusem patří do samostatné DM lifecycle části.
+
+Rezervovaný nástroj nelze běžně vydat. Při výdeji rezervovaného nástroje bude uživatel muset přejít přes tok `Rezervované nástroje`, vybrat zakázku a vydat pouze položky rezervované pro danou zakázku.
+
+Zrušení rezervace:
+
+- může provést autor rezervace nebo oprávněná osoba
+- vrací kusy zpět do `available`
+- vrací kusy zpět do původního segmentu zásoby
+- zapisuje `reservation_cancelled` do historie pohybů
+
+V MVP je zrušení rezervace zatím placeholder bez plné implementace. Plná pravidla oprávnění, notifikace a automatická expirace nejsou součástí MVP.
+
 ### Ohlášení Rozdílu Ve Fyzické Zásobě
 
 GSS musí umožnit pracovníkovi ohlásit rozdíl ve skladu.
@@ -688,6 +740,8 @@ V MVP se automaticky zapisují tyto typy pohybů:
 - `stock_difference_report`: ohlášen rozdíl skladu
 - `block`: blokace položky
 - `unblock`: odblokace položky
+- `reservation_created`: rezervace vytvořena
+- `reservation_cancelled`: rezervace zrušena
 
 U položky se zobrazuje posledních 10 pohybů. Na úrovni skladu se zobrazuje posledních 20 pohybů napříč položkami.
 
