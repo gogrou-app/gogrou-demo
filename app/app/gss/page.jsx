@@ -270,6 +270,30 @@ const createIssueForm = () => ({
   note: "",
 });
 
+const createReturnForm = () => ({
+  quantity: "",
+  decision: "return_used",
+  returnedAt: getTodayDate(),
+  performedBy: DEFAULT_INTAKE_OPERATOR,
+  costCenter: "",
+  machine: "",
+  job: "",
+  note: "",
+  grinder: DEFAULT_GRINDER,
+  serviceInstruction: "",
+  discardReason: "",
+  redirectInstruction: "",
+  blockReason: "",
+});
+
+const RETURN_DECISION_LABELS = {
+  return_used: "Zpět na sklad jako Použitý",
+  send_sharpening: "Poslat na broušení",
+  scrap_carbide: "Vyřadit / odkup tvrdokovu",
+  redirect_instruction: "Přesměrovat podle instrukce / jiná řezná hrana",
+  temporary_block: "Dočasně zablokovat",
+};
+
 const itemMatchesIssueQuery = (item, query) => {
   const stock = normalizeStockSummary(item.stockSummary);
   const haystack = [
@@ -290,10 +314,13 @@ const itemMatchesIssueQuery = (item, query) => {
   return haystack.includes(query);
 };
 
+const itemMatchesWarehouseQuery = itemMatchesIssueQuery;
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
   const issueSectionRef = useRef(null);
+  const returnSectionRef = useRef(null);
   const [organization, setOrganization] = useState(null);
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [gpcQuery, setGpcQuery] = useState("");
@@ -312,6 +339,11 @@ export default function AppGssPage() {
   const [issueItemKey, setIssueItemKey] = useState("");
   const [issueForm, setIssueForm] = useState(createIssueForm());
   const [issueMessage, setIssueMessage] = useState("");
+  const [showReturnPanel, setShowReturnPanel] = useState(false);
+  const [returnQuery, setReturnQuery] = useState("");
+  const [returnItemKey, setReturnItemKey] = useState("");
+  const [returnForm, setReturnForm] = useState(createReturnForm());
+  const [returnMessage, setReturnMessage] = useState("");
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -370,6 +402,11 @@ export default function AppGssPage() {
     ? warehouseItems.filter((item) => itemMatchesIssueQuery(item, normalizedIssueQuery)).slice(0, 12)
     : [];
   const selectedIssueItem = warehouseItems.find((item) => getItemKey(item) === issueItemKey);
+  const normalizedReturnQuery = normalizeSearch(returnQuery);
+  const returnResults = normalizedReturnQuery
+    ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
+    : [];
+  const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -404,6 +441,13 @@ export default function AppGssPage() {
     setShowIssuePanel(true);
     window.setTimeout(() => {
       issueSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const openReturnPanel = () => {
+    setShowReturnPanel(true);
+    window.setTimeout(() => {
+      returnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
 
@@ -632,6 +676,92 @@ export default function AppGssPage() {
     setIssueMessage("Položka byla vydána do výroby.");
   };
 
+  const selectReturnItem = (item) => {
+    setReturnItemKey(getItemKey(item));
+    setReturnForm(createReturnForm());
+    setReturnMessage("");
+  };
+
+  const updateReturnForm = (field, value) => {
+    setReturnForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setReturnMessage("");
+  };
+
+  const returnFromProduction = (event) => {
+    event.preventDefault();
+
+    if (!selectedReturnItem) {
+      setReturnMessage("Vyberte položku pro návrat z výroby.");
+      return;
+    }
+
+    const quantity = Number(returnForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setReturnMessage("Zadejte kladný počet kusů pro návrat.");
+      return;
+    }
+
+    const currentStock = normalizeStockSummary(selectedReturnItem.stockSummary);
+    if (quantity > currentStock.production) {
+      setReturnMessage("Nelze vrátit více kusů, než je aktuálně ve výrobě.");
+      return;
+    }
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== returnItemKey) {
+        return item;
+      }
+
+      const stock = normalizeStockSummary(item.stockSummary);
+      const nextStock = {
+        ...stock,
+        production: stock.production - quantity,
+        lastReturnMetadata: {
+          type: "return_from_production",
+          quantity,
+          decision: returnForm.decision,
+          decisionLabel: RETURN_DECISION_LABELS[returnForm.decision],
+          returnedAt: returnForm.returnedAt || getTodayDate(),
+          performedBy: returnForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+          costCenter: returnForm.costCenter.trim(),
+          machine: returnForm.machine.trim(),
+          job: returnForm.job.trim(),
+          note: returnForm.note.trim(),
+          grinder: returnForm.grinder.trim(),
+          serviceInstruction: returnForm.serviceInstruction.trim(),
+          discardReason: returnForm.discardReason.trim(),
+          redirectInstruction: returnForm.redirectInstruction.trim(),
+          blockReason: returnForm.blockReason.trim(),
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      if (returnForm.decision === "return_used") {
+        nextStock.available += quantity;
+        nextStock.states.used += quantity;
+      }
+
+      if (returnForm.decision === "send_sharpening") {
+        nextStock.sharpening += quantity;
+        nextStock.states.sharpening += quantity;
+        nextStock.sharpeningBreakdown.in_company += quantity;
+      }
+
+      return {
+        ...item,
+        stockSummary: nextStock,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setReturnMessage("Položka byla vrácena z výroby.");
+  };
+
   return (
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
@@ -694,6 +824,7 @@ export default function AppGssPage() {
             <div style={actions}>
               <button type="button" onClick={openWarehouseSection} style={btnPrimary}>Otevřít sklad</button>
               <button type="button" onClick={openIssuePanel} style={btnPrimary}>Výdej</button>
+              <button type="button" onClick={openReturnPanel} style={btnPrimary}>Návrat z výroby</button>
               <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
               <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
             </div>
@@ -875,6 +1006,232 @@ export default function AppGssPage() {
             </div>
           ) : null}
 
+          {showReturnPanel ? (
+            <div ref={returnSectionRef} style={box}>
+              <h2 style={subtitle}>Návrat z výroby</h2>
+              <div style={hintBox}>
+                Návrat z výroby je samostatný GSS pohyb. Po návratu musí být vždy rozhodnuto, co se s položkou stane dál.
+              </div>
+              <div style={muted}>
+                V MVP se pracuje s agregovaným množstvím. Pokud má položka DM tracking, budoucí návrat proběhne nad konkrétním DM kusem.
+              </div>
+
+              <input
+                value={returnQuery}
+                onChange={(event) => {
+                  setReturnQuery(event.target.value);
+                  setReturnMessage("");
+                }}
+                placeholder="Hledat podle názvu, GPC ID, GTIN, interního kódu, výrobce, typu nebo rozměru"
+                style={input}
+              />
+
+              {normalizedReturnQuery && returnResults.length === 0 ? (
+                <div style={muted}>Nebyla nalezena žádná tenant skladová položka.</div>
+              ) : null}
+
+              {returnResults.length > 0 ? (
+                <div style={resultList}>
+                  {returnResults.map((item) => {
+                    const stock = normalizeStockSummary(item.stockSummary);
+                    const selected = getItemKey(item) === returnItemKey;
+
+                    return (
+                      <div key={getItemKey(item)} style={selected ? highlightedResultItem : resultItem}>
+                        <div>
+                          <div style={resultTitle}>{item.name || item.gpc_id}</div>
+                          <div style={meta}>{item.manufacturer || "Výrobce neuveden"} · {item.type || "Typ neuveden"}</div>
+                          <div style={meta}>
+                            {item.origin === "LOCAL" ? `Lokální ID: ${item.localFields?.internalCode || getItemKey(item)}` : `GPC ID: ${item.gpc_id || "bez vazby"}`} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
+                          </div>
+                          <div style={meta}>
+                            Ve výrobě: {stock.production} · Dostupné: {stock.available} · Na broušení: {stock.sharpening}
+                          </div>
+                          <div style={stateBreakdown}>
+                            <span>Nový: {stock.states.new}</span>
+                            <span>Nový přebroušený: {stock.states.resharpened_new}</span>
+                            <span>Použitý: {stock.states.used}</span>
+                            <span>Na broušení: {stock.states.sharpening}</span>
+                          </div>
+                          <div style={meta}>
+                            DM tracking: {item.tenantSettings?.dmEnabled ? "ano" : "ne"} · Brousitelná: {item.tenantSettings?.sharpen?.enabled ? "ano" : "ne"} · Max přebroušení: {item.tenantSettings?.sharpen?.cycles || "nenastaveno"}
+                          </div>
+                          {item.tenantSettings?.sharpen?.note ? (
+                            <div style={meta}>Servisní instrukce: {item.tenantSettings.sharpen.note}</div>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => selectReturnItem(item)}
+                          disabled={stock.production <= 0}
+                          style={stock.production <= 0 ? btnDisabled : selected ? btnImport : btnSecondary}
+                        >
+                          {stock.production <= 0 ? "Není ve výrobě" : selected ? "Vybráno" : "Vybrat k návratu"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {selectedReturnItem ? (
+                <form onSubmit={returnFromProduction} style={settingsPanel}>
+                  <div style={settingsTitle}>Vrátit z výroby</div>
+                  <div style={meta}>
+                    {selectedReturnItem.name || selectedReturnItem.gpc_id} · ve výrobě {normalizeStockSummary(selectedReturnItem.stockSummary).production} ks
+                  </div>
+                  {selectedReturnItem.tenantSettings?.dmEnabled ? (
+                    <div style={offerInfo}>
+                      Načtěte DM kód vraceného kusu. V MVP zatím není detailní DM návrat implementovaný.
+                    </div>
+                  ) : null}
+
+                  <div style={formGrid}>
+                    <label style={fieldLabel}>
+                      Počet kusů
+                      <input
+                        type="number"
+                        min="1"
+                        value={returnForm.quantity}
+                        onChange={(event) => updateReturnForm("quantity", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Datum návratu
+                      <input
+                        type="date"
+                        value={returnForm.returnedAt}
+                        onChange={(event) => updateReturnForm("returnedAt", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Provedl
+                      <input
+                        value={returnForm.performedBy}
+                        onChange={(event) => updateReturnForm("performedBy", event.target.value)}
+                        style={input}
+                      />
+                    </label>
+                    <label style={fieldLabel}>
+                      Středisko
+                      <input value={returnForm.costCenter} onChange={(event) => updateReturnForm("costCenter", event.target.value)} style={input} />
+                    </label>
+                    <label style={fieldLabel}>
+                      Stroj
+                      <input value={returnForm.machine} onChange={(event) => updateReturnForm("machine", event.target.value)} style={input} />
+                    </label>
+                    <label style={fieldLabel}>
+                      Zakázka
+                      <input value={returnForm.job} onChange={(event) => updateReturnForm("job", event.target.value)} style={input} />
+                    </label>
+                  </div>
+
+                  <label style={fieldLabel}>
+                    Poznámka k návratu
+                    <textarea value={returnForm.note} onChange={(event) => updateReturnForm("note", event.target.value)} style={textarea} />
+                  </label>
+
+                  <div style={settingsTitle}>Rozhodnutí po návratu</div>
+                  <div style={formGrid}>
+                    <label style={fieldLabel}>
+                      Co se s položkou stane dál
+                      <select
+                        value={returnForm.decision}
+                        onChange={(event) => updateReturnForm("decision", event.target.value)}
+                        style={input}
+                      >
+                        <option value="return_used">Zpět na sklad jako Použitý</option>
+                        <option value="send_sharpening">Poslat na broušení</option>
+                        <option value="scrap_carbide">Vyřadit / odkup tvrdokovu</option>
+                        <option value="redirect_instruction">Přesměrovat podle instrukce / jiná řezná hrana</option>
+                        <option value="temporary_block">Dočasně zablokovat</option>
+                      </select>
+                    </label>
+                    {returnForm.decision === "send_sharpening" ? (
+                      <>
+                        <label style={fieldLabel}>
+                          Brusič
+                          <input value={returnForm.grinder} onChange={(event) => updateReturnForm("grinder", event.target.value)} style={input} />
+                        </label>
+                        <label style={fieldLabel}>
+                          Provozní instrukce
+                          <input
+                            value={returnForm.serviceInstruction}
+                            onChange={(event) => updateReturnForm("serviceInstruction", event.target.value)}
+                            placeholder="Dát do červené krabice"
+                            style={input}
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {returnForm.decision === "scrap_carbide" ? (
+                      <label style={fieldLabel}>
+                        Důvod vyřazení / recyklace
+                        <input
+                          value={returnForm.discardReason}
+                          onChange={(event) => updateReturnForm("discardReason", event.target.value)}
+                          placeholder="Vložit do černé krabice na odkup tvrdokovu"
+                          style={input}
+                        />
+                      </label>
+                    ) : null}
+                    {returnForm.decision === "redirect_instruction" ? (
+                      <label style={fieldLabel}>
+                        Instrukce pro přesměrování
+                        <input
+                          value={returnForm.redirectInstruction}
+                          onChange={(event) => updateReturnForm("redirectInstruction", event.target.value)}
+                          placeholder="Vložit podle interní instrukce / jiná řezná hrana"
+                          style={input}
+                        />
+                      </label>
+                    ) : null}
+                    {returnForm.decision === "temporary_block" ? (
+                      <label style={fieldLabel}>
+                        Důvod blokace
+                        <input
+                          value={returnForm.blockReason}
+                          onChange={(event) => updateReturnForm("blockReason", event.target.value)}
+                          placeholder="Čeká na kontrolu mistra / technologa"
+                          style={input}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+
+                  {returnForm.decision === "return_used" ? (
+                    <div style={offerInfo}>Umístění není nastavené. Použitý nástroj může být stále použitelný pro méně náročné operace.</div>
+                  ) : null}
+                  {returnForm.decision === "send_sharpening" && !selectedReturnItem.tenantSettings?.sharpen?.enabled ? (
+                    <div style={errorMessage}>Položka není nastavena jako brousitelná.</div>
+                  ) : null}
+                  {returnForm.decision === "scrap_carbide" ? (
+                    <div style={offerInfo}>Vložit do černé bedýnky. U destiček / tvrdokovu vložit do černé krabice na odkup tvrdokovu.</div>
+                  ) : null}
+
+                  {returnMessage ? <div style={returnMessage.includes("vrácena") ? message : errorMessage}>{returnMessage}</div> : null}
+
+                  <div style={actions}>
+                    <button type="submit" style={btnImport}>Potvrdit návrat</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReturnItemKey("");
+                        setReturnForm(createReturnForm());
+                        setReturnMessage("");
+                      }}
+                      style={btnSecondary}
+                    >
+                      Zavřít návrat položky
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
+
           <div style={box}>
             <h2 style={subtitle}>Vyhledat v GPC</h2>
             <div style={hintBox}>
@@ -966,10 +1323,16 @@ export default function AppGssPage() {
                         <span>Nový přebroušený: {normalizeStockSummary(item.stockSummary).states.resharpened_new}</span>
                         <span>Použitý: {normalizeStockSummary(item.stockSummary).states.used}</span>
                         <span>Na broušení: {normalizeStockSummary(item.stockSummary).states.sharpening}</span>
+                        <span>Ve výrobě: {normalizeStockSummary(item.stockSummary).production}</span>
                       </div>
                       {item.stockSummary?.lastIntakeMetadata ? (
                         <div style={meta}>
                           Poslední příjem: {item.stockSummary.lastIntakeMetadata.documentTypeLabel || "doklad neuveden"} · {item.stockSummary.lastIntakeMetadata.receivedAt || "datum neuvedeno"} · provedl {item.stockSummary.lastIntakeMetadata.performedBy || "neuvedeno"}
+                        </div>
+                      ) : null}
+                      {item.stockSummary?.lastReturnMetadata ? (
+                        <div style={meta}>
+                          Poslední návrat: {item.stockSummary.lastReturnMetadata.decisionLabel || "rozhodnutí neuvedeno"} · {item.stockSummary.lastReturnMetadata.returnedAt || "datum neuvedeno"} · provedl {item.stockSummary.lastReturnMetadata.performedBy || "neuvedeno"}
                         </div>
                       ) : null}
                       <div style={meta}>

@@ -563,6 +563,111 @@ Princip:
 
 Toto workflow není součástí MVP.
 
+### Návrat Z Výroby
+
+Návrat z výroby je samostatná GSS služba a samostatný skladový pohyb. Po návratu musí být vždy rozhodnuto, co se s položkou stane dál.
+
+MVP hledá položku v tenant skladu podle:
+
+- názvu
+- GPC ID
+- GTIN
+- interního kódu
+- výrobce
+- typu
+- poznámky / rozměru
+
+Podmínka:
+
+- návrat lze provést pouze u položky s `stockSummary.production > 0`
+- nelze vrátit více kusů, než je aktuálně ve výrobě
+
+Formulář návratu:
+
+- počet kusů
+- datum návratu, default dnešní datum
+- provedl, default `MVP uživatel`
+- středisko
+- stroj
+- zakázka
+- poznámka k návratu
+
+Rozhodnutí po návratu:
+
+- `return_used`: zpět na sklad jako použitý
+- `send_sharpening`: poslat na broušení
+- `scrap_carbide`: vyřadit / odkup tvrdokovu
+- `redirect_instruction`: přesměrovat podle instrukce / jiná řezná hrana
+- `temporary_block`: dočasně zablokovat
+
+Logika `return_used`:
+
+- snížit `production`
+- zvýšit `available`
+- zvýšit `stockSummary.states.used`
+
+Logika `send_sharpening`:
+
+- snížit `production`
+- zvýšit `sharpening`
+- zvýšit `stockSummary.states.sharpening`
+- zvýšit rozpad `sharpeningBreakdown.in_company`
+- zobrazit brusiče, defaultně `M-technologies`
+- umožnit provozní instrukci, například `Dát do červené krabice`
+- pokud položka není brousitelná, zobrazit varování `Položka není nastavena jako brousitelná.`
+
+Logika `scrap_carbide`:
+
+- snížit `production`
+- nezvyšovat `available`
+- nezvyšovat `sharpening`
+- uložit placeholder informaci o vyřazení
+
+U tvrdokovu bude možné evidovat váhu, typ materiálu, aktuální cenu odkupu a odhad hodnoty. Detailní recyklační workflow není součást MVP.
+
+Logika `redirect_instruction`:
+
+- snížit `production`
+- zatím nevracet do `available`
+- uložit poznámku / placeholder instrukce
+
+Logika `temporary_block`:
+
+- snížit `production`
+- nezvyšovat `available`
+- uložit důvod blokace
+
+Tímto GSS získává data pro budoucí GINA analýzy. Servisní a recyklační workflow jsou budoucí navazující moduly.
+
+### DM Tracking a Návrat Z Výroby
+
+Pokud má položka DM tracking, návrat se bude v budoucnu řešit nad konkrétním DM kusem. Systém bude znát počet přebroušení konkrétního kusu.
+
+Pokud je kus na posledním povoleném použití / přebroušení, systém zobrazí upozornění:
+
+`Tento nástroj dosáhl limitu přebroušení. Doporučeno vyřadit.`
+
+Bez DM trackingu se pracuje s agregovaným počtem kusů a počet přebroušení se řeší pouze obecně / poznámkou.
+
+### Změna Parametrů Po Broušení
+
+Po broušení bude nutné u DM kusu evidovat:
+
+- aktuální průměr
+- aktuální délku
+- počet přebroušení
+- poznámku k servisu
+- případně typ povlaku
+- nový vizuální identifikátor / štítek
+
+Tyto změny nemění GPC master data. Jde pouze o tenant provozní data v GSS. Bez DM tracking se tyto změny zapisují agregovaně / poznámkou.
+
+### Štítek / Sáček / Transakční DM Kód
+
+Při vyřazení, recyklaci, přesměrování nebo servisní dávce může systém v budoucnu vytisknout štítek. Štítek může obsahovat počet kusů, typ, datum a pracovníka.
+
+Cílově může štítek nést pouze DM / transakční kód a detaily transakce budou uložené v systému. Díky tomu lze zpracovat i větší množství kusů, ne pouze jednotlivý kus. Tisk štítků není součástí MVP.
+
 ### Intake Metadata a Budoucí Doklady
 
 V MVP se při naskladnění uloží poslední příjem / intake metadata k položce. Nejde ještě o plnou historii pohybů, ale připravuje se tím budoucí audit a napojení na doklady.
