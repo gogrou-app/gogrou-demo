@@ -588,6 +588,10 @@ MVP placeholdery:
 - `Export XLS / Promitea`
 - `Odeslat objednávku`
 
+Placeholder tlačítka v MVP nesmí působit jako hotová funkce. UI je musí jasně označit textem `Připravuje se` nebo po kliknutí zobrazit hlášku `Tato funkce bude doplněna v další fázi.`
+
+Pokud už existuje rozpracovaný objednávkový návrh ve stavu `draft`, nové vytvoření návrhu nesmí potichu založit další návrh. MVP musí uživatele upozornit, že draft existuje, a vyžádat jednoduché potvrzení pro vytvoření nového návrhu a přepsání aktuálního draftu.
+
 Při vytvoření návrhu vzniká `movementHistory` záznam `purchase_proposal_created`.
 
 Budoucí integrace:
@@ -971,7 +975,7 @@ Logika:
 - zvýšit `sharpening`
 - zvýšit `stockBreakdown.sharpening`
 
-Pokud položka není označená jako brousitelná, GSS zobrazí varování `Položka není nastavena jako brousitelná.`
+Pokud položka není označená jako brousitelná, GSS zobrazí výrazné varování `Položka není nastavena jako brousitelná.` Odeslání na broušení se bez potvrzení výjimky nesmí uložit.
 
 U broušení se eviduje:
 
@@ -1290,7 +1294,17 @@ Do nadnormativní nabídky se v MVP nesmí použít:
 
 Zákazník v MVP ručně zadá pevný počet a pevnou cenu. Systém kontroluje, že počet k nabídnutí není vyšší než počet volných nových kusů. Pokud není dost nových kusů, nabídka se neuloží.
 
-Nabídnuté kusy jsou blokované proti běžnému výdeji. Technicky se v MVP evidují jako rezervované / `overstockReserved`, aby nebyly dostupné pro běžné skladové operace.
+Stavy nadnormativní nabídky:
+
+- `draft`: rozpracovaná nabídka
+- `active`: aktivní nabídka, blokuje kusy proti běžnému výdeji
+- `paused`: pozastavená nabídka
+- `sold`: prodaná nabídka
+- `cancelled`: zrušená nabídka
+
+Pouze aktivní nadnormativní nabídka (`active`) blokuje výdej. Ostatní stavy výdej neblokují a UI musí jasně ukazovat, zda aktuální stav blokuje výdej a kolik kusů je blokovaných jako nadnormativa.
+
+Blokované kusy se technicky v MVP evidují jako rezervované / `overstockReserved`, aby nebyly dostupné pro běžné skladové operace.
 
 U tenant položky se ukládá `overstockOffer`:
 

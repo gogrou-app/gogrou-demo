@@ -226,6 +226,7 @@ const createReturnForm = () => ({
   discardReason: "",
   redirectInstruction: "",
   blockReason: "",
+  confirmSharpeningOverride: false,
 });
 
 const itemMatchesIssueQuery = (item, query) => {
@@ -252,7 +253,21 @@ const itemMatchesWarehouseQuery = itemMatchesIssueQuery;
 
 const getActiveReservations = (item) => (item.reservations || []).filter((reservation) => reservation.status !== "cancelled");
 
-const isActiveOverstockOffer = (offer) => Boolean(offer?.enabled && !["sold", "cancelled"].includes(offer.status));
+const OVERSTOCK_STATUS_LABELS = {
+  draft: "rozpracovaná nabídka",
+  active: "aktivní nabídka",
+  paused: "pozastavená nabídka",
+  sold: "prodaná nabídka",
+  cancelled: "zrušená nabídka",
+};
+
+const OVERSTOCK_BLOCKING_STATUSES = ["active"];
+
+const isBlockingOverstockOffer = (offer) => Boolean(
+  offer?.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(offer.status)
+);
+
+const getOverstockStatusLabel = (status) => OVERSTOCK_STATUS_LABELS[status] || status || "rozpracovaná nabídka";
 
 const parsePositiveNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -332,6 +347,7 @@ export default function AppGssPage() {
   const [overstockMessage, setOverstockMessage] = useState("");
   const [purchaseProposal, setPurchaseProposal] = useState(null);
   const [purchaseProposalMessage, setPurchaseProposalMessage] = useState("");
+  const [placeholderMessage, setPlaceholderMessage] = useState("");
   const [showIssuePanel, setShowIssuePanel] = useState(false);
   const [issueQuery, setIssueQuery] = useState("");
   const [issueItemKey, setIssueItemKey] = useState("");
@@ -693,7 +709,7 @@ export default function AppGssPage() {
 
     const currentStock = normalizeStockSummary(selectedItem.stockSummary);
     const previousOffer = selectedItem.overstockOffer;
-    const previousReserved = isActiveOverstockOffer(previousOffer) ? Number(previousOffer.quantity) || 0 : 0;
+    const previousReserved = Number(selectedItem.overstockReserved) || 0;
     const quantity = overstockForm.enabled ? Number(overstockForm.quantity) : 0;
     const pricePerUnit = overstockForm.enabled ? Number(overstockForm.pricePerUnit) : 0;
 
@@ -708,7 +724,7 @@ export default function AppGssPage() {
     }
 
     const availableNewForOffer = currentStock.states.new + previousReserved;
-    const offerBlocksStock = overstockForm.enabled && !["sold", "cancelled"].includes(overstockForm.status);
+    const offerBlocksStock = overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status);
 
     if (offerBlocksStock && quantity > availableNewForOffer) {
       setOverstockMessage("Pro nadnormativní nabídku není dostatek volných nových kusů.");
@@ -722,7 +738,7 @@ export default function AppGssPage() {
 
       const stock = normalizeStockSummary(item.stockSummary);
       const previousItemOffer = item.overstockOffer;
-      const previousItemReserved = isActiveOverstockOffer(previousItemOffer) ? Number(previousItemOffer.quantity) || 0 : 0;
+      const previousItemReserved = Number(item.overstockReserved) || 0;
       const nextReserved = offerBlocksStock ? quantity : 0;
       const reservedDelta = nextReserved - previousItemReserved;
       const now = new Date().toISOString();
@@ -778,6 +794,15 @@ export default function AppGssPage() {
   };
 
   const createPurchaseProposal = () => {
+    if (purchaseProposal?.status === "draft") {
+      const shouldReplace = window.confirm("Už existuje rozpracovaný objednávkový návrh. Chcete vytvořit nový návrh a přepsat draft?");
+
+      if (!shouldReplace) {
+        setPurchaseProposalMessage("Už existuje rozpracovaný objednávkový návrh. Stávající draft zůstává beze změny.");
+        return;
+      }
+    }
+
     if (purchaseCandidates.length === 0) {
       setPurchaseProposal(null);
       setPurchaseProposalMessage("Nejsou nalezené žádné položky pod minimem.");
@@ -854,6 +879,10 @@ export default function AppGssPage() {
 
   const showPurchasePlaceholder = (text) => {
     setPurchaseProposalMessage(text);
+  };
+
+  const showPlaceholder = () => {
+    setPlaceholderMessage("Tato funkce bude doplněna v další fázi.");
   };
 
   const receiveStock = (event) => {
@@ -1082,6 +1111,7 @@ export default function AppGssPage() {
     setReturnForm((current) => ({
       ...current,
       [field]: value,
+      ...(field === "decision" && value !== "send_sharpening" ? { confirmSharpeningOverride: false } : {}),
     }));
     setReturnMessage("");
   };
@@ -1103,6 +1133,12 @@ export default function AppGssPage() {
     const currentStock = normalizeStockSummary(selectedReturnItem.stockSummary);
     if (quantity > currentStock.production) {
       setReturnMessage("Nelze vrátit více kusů, než je aktuálně ve výrobě.");
+      return;
+    }
+
+    const requiresSharpeningOverride = returnForm.decision === "send_sharpening" && !selectedReturnItem.tenantSettings?.sharpen?.enabled;
+    if (requiresSharpeningOverride && !returnForm.confirmSharpeningOverride) {
+      setReturnMessage("Položka není nastavena jako brousitelná. Potvrďte výjimku, jinak se návrat na broušení neuloží.");
       return;
     }
 
@@ -1249,6 +1285,7 @@ export default function AppGssPage() {
               <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
               <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
             </div>
+            {placeholderMessage ? <div style={errorMessage}>{placeholderMessage}</div> : null}
           </div>
 
           <div style={box}>
@@ -1339,9 +1376,9 @@ export default function AppGssPage() {
 
             <div style={actions}>
               <button type="button" onClick={createPurchaseProposal} style={btnPrimary}>Vytvořit objednávkový návrh</button>
-              <button type="button" onClick={() => showPurchasePlaceholder("Generování objednávky do PDF bude doplněno v další fázi.")} style={btnSecondary}>Vygenerovat objednávku</button>
-              <button type="button" onClick={() => showPurchasePlaceholder("Export XLS / Promitea bude doplněn v další fázi.")} style={btnSecondary}>Export XLS / Promitea</button>
-              <button type="button" onClick={() => showPurchasePlaceholder("Odeslání objednávky bude doplněno v další fázi.")} style={btnSecondary}>Odeslat objednávku</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: vygenerovat objednávku</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: Export XLS / Promitea</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: odeslat objednávku</button>
             </div>
           </div>
 
@@ -1723,7 +1760,17 @@ export default function AppGssPage() {
                     <div style={offerInfo}>Umístění není nastavené. Použitý nástroj může být stále použitelný pro méně náročné operace.</div>
                   ) : null}
                   {returnForm.decision === "send_sharpening" && !selectedReturnItem.tenantSettings?.sharpen?.enabled ? (
-                    <div style={errorMessage}>Položka není nastavena jako brousitelná.</div>
+                    <div style={errorMessage}>
+                      <div>Položka není nastavena jako brousitelná. Odeslání na broušení je výjimka a musí být potvrzené.</div>
+                      <label style={{ ...checkLabel, marginTop: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={returnForm.confirmSharpeningOverride}
+                          onChange={(event) => updateReturnForm("confirmSharpeningOverride", event.target.checked)}
+                        />
+                        Potvrzuji výjimku pro odeslání nebrousitelné položky na broušení
+                      </label>
+                    </div>
                   ) : null}
                   {returnForm.decision === "scrap_carbide" ? (
                     <div style={offerInfo}>Vložit do černé bedýnky. U destiček / tvrdokovu vložit do černé krabice na odkup tvrdokovu.</div>
@@ -1814,6 +1861,9 @@ export default function AppGssPage() {
               <div style={resultList}>
                 {warehouseItems.map((item) => {
                   const activeReservations = getActiveReservations(item);
+                  const overstockOffer = item.overstockOffer;
+                  const overstockBlocksIssue = isBlockingOverstockOffer(overstockOffer);
+                  const overstockBlockedQuantity = overstockBlocksIssue ? Number(item.overstockReserved) || 0 : 0;
 
                   return (
                   <div key={item.id || item.gpc_id} style={resultItem}>
@@ -1865,9 +1915,14 @@ export default function AppGssPage() {
                       <div style={historyPanel}>
                         <div style={settingsTitle}>Nadnormativa</div>
                         <div style={meta}>
-                          Nadnormativa {item.overstockOffer?.enabled ? "aktivní" : "neaktivní"} · počet {item.overstockOffer?.quantity || 0} ks · cena {item.overstockOffer?.pricePerUnit || "nenastaveno"} {item.overstockOffer?.currency || ""}
+                          Nadnormativa {overstockOffer?.enabled ? getOverstockStatusLabel(overstockOffer.status) : "neaktivní"} · počet {overstockOffer?.quantity || 0} ks · cena {overstockOffer?.pricePerUnit || "nenastaveno"} {overstockOffer?.currency || ""}
                         </div>
-                        <div style={meta}>Stav nabídky: {item.overstockOffer?.status || "draft"}</div>
+                        <div style={overstockBlocksIssue ? badgeWarning : meta}>
+                          {overstockBlocksIssue
+                            ? `Blokuje výdej: ano · blokováno ${overstockBlockedQuantity} ks jako nadnormativa`
+                            : "Blokuje výdej: ne · blokováno 0 ks jako nadnormativa"}
+                        </div>
+                        <div style={meta}>Stav nabídky: {getOverstockStatusLabel(overstockOffer?.status || "draft")}</div>
                       </div>
                       {item.stockSummary?.lastIntakeMetadata ? (
                         <div style={meta}>
@@ -1896,7 +1951,7 @@ export default function AppGssPage() {
                         <button type="button" onClick={() => openStockForm(item)} style={btnSecondary}>Naskladnit</button>
                         <button type="button" onClick={() => openReservationForm(item)} style={btnSecondary}>Rezervovat</button>
                         <button type="button" onClick={() => openOverstockForm(item)} style={btnSecondary}>Nadnormativa</button>
-                        <button type="button" style={btnSecondary}>Otevřít detail</button>
+                        <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: detail</button>
                       </div>
                       {stockItemKey === getItemKey(item) ? (
                         <form onSubmit={receiveStock} style={settingsPanel}>
@@ -2134,8 +2189,8 @@ export default function AppGssPage() {
                             Rezervovaný nástroj nelze běžně vydat. Výdej rezervovaných nástrojů půjde později přes samostatný tok podle zakázky.
                           </div>
                           <div style={actions}>
-                            <button type="button" style={btnSecondary}>Rezervované nástroje</button>
-                            <button type="button" style={btnSecondary}>Zrušit rezervaci</button>
+                            <button type="button" onClick={() => setReservationMessage("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: rezervované nástroje</button>
+                            <button type="button" onClick={() => setReservationMessage("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: zrušit rezervaci</button>
                           </div>
 
                           {reservationMessage ? <div style={reservationMessage.includes("vytvořena") ? message : errorMessage}>{reservationMessage}</div> : null}
@@ -2211,11 +2266,11 @@ export default function AppGssPage() {
                                     onChange={(event) => updateOverstockForm("status", event.target.value)}
                                     style={input}
                                   >
-                                    <option value="draft">draft</option>
-                                    <option value="active">active</option>
-                                    <option value="paused">paused</option>
-                                    <option value="sold">sold</option>
-                                    <option value="cancelled">cancelled</option>
+                                    <option value="draft">rozpracovaná nabídka</option>
+                                    <option value="active">aktivní nabídka</option>
+                                    <option value="paused">pozastavená nabídka</option>
+                                    <option value="sold">prodaná nabídka</option>
+                                    <option value="cancelled">zrušená nabídka</option>
                                   </select>
                                 </label>
                               </div>
@@ -2228,7 +2283,12 @@ export default function AppGssPage() {
                                 />
                               </label>
                               <div style={offerInfo}>
-                                Volné nové kusy: {normalizeStockSummary(item.stockSummary).states.new + (isActiveOverstockOffer(item.overstockOffer) ? Number(item.overstockOffer.quantity) || 0 : 0)} ks.
+                                Volné nové kusy: {normalizeStockSummary(item.stockSummary).states.new + (Number(item.overstockReserved) || 0)} ks.
+                              </div>
+                              <div style={overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status) ? badgeWarning : offerInfo}>
+                                {overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status)
+                                  ? "Tento stav blokuje výdej nabízených kusů."
+                                  : "Tento stav neblokuje výdej."}
                               </div>
                             </>
                           ) : null}

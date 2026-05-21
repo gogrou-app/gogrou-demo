@@ -461,6 +461,10 @@ Placeholdery MVP:
 - `Export XLS / Promitea`: budoucí XLS nebo Promitea RFQ
 - `Odeslat objednávku`: budoucí e-mail nebo Gogrou kanál
 
+Placeholder tlačítka musí být v UI jasně označená jako `Připravuje se` nebo po kliknutí zobrazit hlášku `Tato funkce bude doplněna v další fázi.` Nesmí působit jako hotová funkce.
+
+Pokud už existuje objednávkový návrh ve stavu `draft`, další vytvoření návrhu musí uživatele upozornit a vyžádat jednoduché potvrzení pro přepsání aktuálního draftu.
+
 Budoucí objednávka bude obsahovat údaje zákazníka, dodavatele, položky, množství, poznámky a datum. Později půjde uložit, odeslat e-mailem, distribuovat Gogrou kanálem nebo exportovat.
 
 Budoucí integrace:
@@ -821,7 +825,8 @@ Logika `send_sharpening`:
 - zvýšit rozpad `sharpeningBreakdown.in_company`
 - zobrazit brusiče, defaultně `M-technologies`
 - umožnit provozní instrukci, například `Dát do červené krabice`
-- pokud položka není brousitelná, zobrazit varování `Položka není nastavena jako brousitelná.`
+- pokud položka není brousitelná, zobrazit výrazné varování `Položka není nastavena jako brousitelná.`
+- u nebrousitelné položky vyžadovat potvrzení výjimky, jinak se návrat na broušení neuloží
 
 Logika `scrap_carbide`:
 
@@ -1022,7 +1027,17 @@ Kontrola dostupnosti:
 
 Kusy označené k nabídce musí být blokované proti běžnému výdeji.
 
-V MVP se blokace provede odečtením nabízených kusů ze `stockSummary.available` a ze `stockSummary.states.new` a navýšením `stockSummary.reserved`. Zároveň se může evidovat `overstockReserved`.
+Stavy nadnormativní nabídky:
+
+- `draft`: rozpracovaná nabídka
+- `active`: aktivní nabídka, blokuje kusy proti běžnému výdeji
+- `paused`: pozastavená nabídka
+- `sold`: prodaná nabídka
+- `cancelled`: zrušená nabídka
+
+Pouze stav `active` blokuje výdej. Ostatní stavy výdej neblokují a UI musí jasně zobrazit, zda aktuální nabídka výdej blokuje a kolik kusů je blokovaných jako nadnormativa.
+
+V MVP se blokace aktivní nabídky provede odečtením nabízených kusů ze `stockSummary.available` a ze `stockSummary.states.new` a navýšením `stockSummary.reserved`. Zároveň se může evidovat `overstockReserved`.
 
 Při vytvoření nebo změně nabídky vzniká `movementHistory`:
 
