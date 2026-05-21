@@ -439,6 +439,223 @@ Příklad stavů kusu:
 
 DM evidence je klíčová pro zákazníky, kteří potřebují sledovat reálný život nástroje, ne pouze agregované množství.
 
+### Provozní Stavy Nástroje v GSS
+
+Tyto stavy patří do GSS, ne do GPC.
+
+GPC říká:
+
+- co je produkt
+
+GSS říká:
+
+- kde je konkrétní kus
+- v jakém je provozním stavu
+- zda je použitelný
+- zda má jít na broušení
+- zda je dostupný k výdeji
+
+GSS rozlišuje tyto provozní stavy zásoby nástroje:
+
+#### Nový
+
+Úplně nový nástroj, který nikdy nebyl vydán do výroby. Nemohl být broušený a nemohl se vrátit z výroby.
+
+#### Nový Přebroušený
+
+Nástroj po ostření, který aktuálně ještě nebyl vydán do výroby po posledním broušení. V minulosti už ale jako nový vydán byl.
+
+#### Použitý
+
+Nástroj byl vydán do výroby a vrátil se. Je stále použitelný a může být vrácen do skladu jako použitý. Tento stav je důležitý například pro krátké operace, kdy nástroj udělal jen několik děr a není potřeba brát nový nástroj.
+
+#### Z Výroby / Na Broušení
+
+Nástroj se vrátil z výroby a už není použitelný. Pokud je položka označená jako brousitelná, systém upozorní, že má jít na broušení.
+
+U položky se eviduje:
+
+- kdo brousí
+- výchozí brusič: `M-technologies`
+- možnost editovat brusiče
+- provozní instrukce, například `dát do červené krabice`
+
+### Objednávková Logika
+
+Když GSS generuje objednávku, znamená to požadavek na nový nástroj.
+
+Objednávka nesmí znamenat:
+
+- použitý nástroj
+- nový přebroušený nástroj
+- nástroj vrácený z výroby
+
+Objednávková potřeba se bude do budoucna počítat jako součet potřeb:
+
+- hlavní sklad
+- dceřiné sklady
+- budoucí výdejní místa / automaty
+
+V MVP je pouze hlavní sklad, ale logika musí být připravená na budoucí rozpad podle skladů a výdejních míst.
+
+### Přehled a Rozpad Zásob
+
+GSS musí u položky zobrazovat celkový počet kusů a rozpad podle provozních stavů:
+
+- Nový
+- Nový přebroušený
+- Použitý
+- Na broušení
+
+První úroveň přehledu je celkový počet za firmu.
+
+Klik na celkový počet zobrazí rozpad podle skladů:
+
+- hlavní sklad
+- budoucí dceřiné sklady
+
+Klik na sklad zobrazí rozpad podle provozního stavu:
+
+- Nový
+- Nový přebroušený
+- Použitý
+- Na broušení
+
+Pokud je aktivní DM tracking, klik na stav zobrazí konkrétní DM kusy. DM kus je konec rozpadového řetězce.
+
+### První Skladový Pohyb v GSS
+
+První naskladnění tenant skladové položky je základní skladový pohyb v GSS. V MVP ještě nejde o plný audit, ERP pohyb ani detailní DM lifecycle, ale pohyb už musí určit:
+
+- položku v tenant skladu
+- počet kusů
+- provozní stav naskladnění
+- čas vytvoření pohybu
+- případnou provozní poznámku
+
+Při naskladnění se aktualizuje `stockSummary` položky:
+
+- `total`: celkový počet kusů evidovaných u položky
+- `available`: kusy dostupné pro běžný výdej
+- `reserved`: kusy rezervované pro jiný účel
+- `production`: kusy ve výrobě
+- `sharpening`: kusy určené na broušení
+
+Rozpad provozních stavů v `stockSummary.states`:
+
+- `new`
+- `resharpened_new`
+- `used`
+- `sharpening`
+
+Stavy `Nový`, `Nový přebroušený` a `Použitý` navyšují `available`, protože mohou být dostupné k výdeji.
+
+Stav `Na broušení` navyšuje `sharpening`, ale nezvyšuje `available`, protože kus není dostupný pro běžný výdej.
+
+Použitý nástroj může být stále použitelný pro méně náročné operace. GSS proto nesmí automaticky považovat každý použitý nástroj za nepoužitelný nebo určený na broušení.
+
+### Dokladová Logika Příjmu
+
+Při naskladnění musí GSS připravit základ evidence, proč a na základě čeho se příjem děje. V MVP se zatím nevede plná historie pohybů, ale u položky se ukládá poslední příjem / intake metadata.
+
+Typ dokladu nebo důvod příjmu:
+
+- dodací list dodavatele
+- faktura dodavatele
+- interní příjemka
+- servisní dodací list po broušení
+- návrat z výroby
+- ruční korekce / inventura
+
+Metadata příjmu:
+
+- číslo dokladu, volitelné pro MVP
+- dodavatel / zdroj
+- datum příjmu
+- provedl
+- poznámka k příjmu
+
+Pole `provedl` je v MVP textové. V produkční vrstvě to bude přihlášená osoba, výdejní automat, ERP nebo integrační zdroj.
+
+Do budoucna bude možné načítat kódy z dodacích listů, faktur nebo servisních dokladů. Doklad může být importován z ERP, výdejního automatu nebo přímo od dodavatele. Cílem je minimalizovat ruční zadávání a zároveň zachovat dohledatelnost příjmu.
+
+### Servisní Workflow Ostření / M-technologies
+
+GSS musí připravit budoucí workflow ostření mezi zákazníkem a M-technologies.
+
+Základní tok:
+
+1. zákazník v GSS shromažďuje nástroje k ostření
+2. systém ukazuje počet kusů na broušení
+3. zákazník klikne `Odeslat na ostření`
+4. tím se ukončí sběr aktuální dávky
+5. vznikne servisní doklad
+
+Servisní doklad může mít podobu:
+
+- objednávky ostření
+- dodacího listu pro předání nástrojů
+- požadavku na povlakování
+
+Doklad obsahuje:
+
+- zákazníka
+- položky
+- počty
+- DM kódy, pokud existují
+- poznámky zákazníka
+- požadavek na broušení
+- požadavek na povlak
+
+M-technologies si tento doklad otevře. Po provedení služby zapíše:
+
+- co bylo provedeno
+- nové rozměry po broušení
+- nový průměr
+- novou délku
+- počet přebroušení
+- poznámku
+- případně typ povlaku
+
+Zákazník si výsledek natáhne zpět do GSS jako příjemku / servisní dodací list. Tím vzniká integrační kanál mezi GSS zákazníka a M-technologies.
+
+### DM Parametrické Změny Po Broušení
+
+Pokud je nástroj sledovaný přes DM, změny rozměrů po broušení se zapisují ke konkrétnímu DM kusu.
+
+Bez DM trackingu se změny zapisují pouze agregovaně nebo jako poznámka k položce / příjmu.
+
+DM kus po broušení může mít:
+
+- nový aktuální průměr
+- novou délku
+- počet přebroušení
+- servisní historii
+- nový štítek / vizuální identifikátor
+
+Zákazník ani servis nesmí měnit GPC master data. Mění se pouze tenant provozní data v GSS.
+
+### Na Broušení
+
+GSS musí zobrazovat celkový počet kusů na broušení.
+
+Klik na počet kusů na broušení zobrazí rozpad:
+
+- ještě ve firmě
+- aktuálně v brusírně
+
+Pokud je aktivní DM tracking, u každého čísla lze zobrazit konkrétní DM kusy.
+
+### DM Tracking a Rozpad Zásob
+
+Bez DM trackingu systém pracuje s počtem kusů.
+
+S DM trackingem systém pracuje s konkrétními kusy:
+
+- každý kus má svůj DM kód
+- každý kus má vlastní provozní stav
+- rozpad zásoby může skončit na seznamu konkrétních DM kódů
+
 ## 9. Datové Můstky
 
 GSS musí být připravené na různé provozní modely zákazníků.

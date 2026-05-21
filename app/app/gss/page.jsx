@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import tools from "../../gpc/data.js";
 
 const ORGANIZATIONS_STORAGE_KEY = "gogrou_organizations";
+const DEFAULT_GRINDER = "M-technologies";
+const DEFAULT_INTAKE_OPERATOR = "MVP uživatel";
 
 const MODULE_LABELS = {
   GSS: "GSS",
@@ -70,6 +72,24 @@ const formatBasicParameters = (tool) => {
   return params.join(" · ") || "základní parametry nejsou doplněné";
 };
 
+const createEmptyStockSummary = () => ({
+  total: 0,
+  available: 0,
+  reserved: 0,
+  production: 0,
+  sharpening: 0,
+  states: {
+    new: 0,
+    resharpened_new: 0,
+    used: 0,
+    sharpening: 0,
+  },
+  sharpeningBreakdown: {
+    in_company: 0,
+    at_grinder: 0,
+  },
+});
+
 const createTenantGssItem = (tool) => ({
   id: crypto.randomUUID(),
   origin: "GPC",
@@ -92,13 +112,7 @@ const createTenantGssItem = (tool) => ({
     blockReason: "",
     localNote: "",
   },
-  stockSummary: {
-    total: 0,
-    available: 0,
-    reserved: 0,
-    production: 0,
-    sharpening: 0,
-  },
+  stockSummary: createEmptyStockSummary(),
   createdAt: new Date().toISOString(),
 });
 
@@ -178,13 +192,7 @@ const createLocalTenantGssItem = (form) => ({
     blockReason: "",
     localNote: "",
   },
-  stockSummary: {
-    total: 0,
-    available: 0,
-    reserved: 0,
-    production: 0,
-    sharpening: 0,
-  },
+  stockSummary: createEmptyStockSummary(),
   createdAt: new Date().toISOString(),
 });
 
@@ -203,6 +211,50 @@ const createSettingsForm = (item) => ({
 
 const getItemKey = (item) => item.id || item.gpc_id || item.name;
 
+const getTodayDate = () => new Date().toISOString().slice(0, 10);
+
+const createStockForm = () => ({
+  quantity: "",
+  condition: "new",
+  grinder: DEFAULT_GRINDER,
+  note: "",
+  documentType: "supplier_delivery_note",
+  documentNumber: "",
+  source: "",
+  receivedAt: getTodayDate(),
+  performedBy: DEFAULT_INTAKE_OPERATOR,
+  intakeNote: "",
+});
+
+const normalizeStockSummary = (stockSummary) => ({
+  ...createEmptyStockSummary(),
+  ...(stockSummary || {}),
+  states: {
+    ...createEmptyStockSummary().states,
+    ...(stockSummary?.states || {}),
+  },
+  sharpeningBreakdown: {
+    ...createEmptyStockSummary().sharpeningBreakdown,
+    ...(stockSummary?.sharpeningBreakdown || {}),
+  },
+});
+
+const STOCK_CONDITION_LABELS = {
+  new: "Nový",
+  resharpened_new: "Nový přebroušený",
+  used: "Použitý",
+  sharpening: "Na broušení",
+};
+
+const DOCUMENT_TYPE_LABELS = {
+  supplier_delivery_note: "Dodací list dodavatele",
+  supplier_invoice: "Faktura dodavatele",
+  internal_receipt: "Interní příjemka",
+  service_delivery_note_after_sharpening: "Servisní dodací list po broušení",
+  production_return: "Návrat z výroby",
+  manual_correction_inventory: "Ruční korekce / inventura",
+};
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -216,6 +268,9 @@ export default function AppGssPage() {
   const [settingsItemKey, setSettingsItemKey] = useState("");
   const [settingsForm, setSettingsForm] = useState(null);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [stockItemKey, setStockItemKey] = useState("");
+  const [stockForm, setStockForm] = useState(createStockForm());
+  const [stockMessage, setStockMessage] = useState("");
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -373,6 +428,80 @@ export default function AppGssPage() {
     setSettingsMessage("Nastavení položky bylo uloženo.");
   };
 
+  const openStockForm = (item) => {
+    setStockItemKey(getItemKey(item));
+    setStockForm(createStockForm());
+    setStockMessage("");
+  };
+
+  const updateStockForm = (field, value) => {
+    setStockForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setStockMessage("");
+  };
+
+  const receiveStock = (event) => {
+    event.preventDefault();
+
+    const quantity = Number(stockForm.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setStockMessage("Zadejte kladný počet kusů pro naskladnění.");
+      return;
+    }
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== stockItemKey) {
+        return item;
+      }
+
+      const currentStock = normalizeStockSummary(item.stockSummary);
+      const isSharpening = stockForm.condition === "sharpening";
+      const nextStock = {
+        ...currentStock,
+        total: currentStock.total + quantity,
+        available: isSharpening ? currentStock.available : currentStock.available + quantity,
+        sharpening: isSharpening ? currentStock.sharpening + quantity : currentStock.sharpening,
+        states: {
+          ...currentStock.states,
+          [stockForm.condition]: currentStock.states[stockForm.condition] + quantity,
+        },
+        sharpeningBreakdown: {
+          ...currentStock.sharpeningBreakdown,
+          in_company: isSharpening ? currentStock.sharpeningBreakdown.in_company + quantity : currentStock.sharpeningBreakdown.in_company,
+        },
+        lastStockMovement: {
+          type: "receive",
+          quantity,
+          condition: stockForm.condition,
+          grinder: isSharpening ? stockForm.grinder.trim() || DEFAULT_GRINDER : "",
+          note: stockForm.note.trim(),
+          createdAt: new Date().toISOString(),
+        },
+        lastIntakeMetadata: {
+          documentType: stockForm.documentType,
+          documentTypeLabel: DOCUMENT_TYPE_LABELS[stockForm.documentType],
+          documentNumber: stockForm.documentNumber.trim(),
+          source: stockForm.source.trim(),
+          receivedAt: stockForm.receivedAt || getTodayDate(),
+          performedBy: stockForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+          note: stockForm.intakeNote.trim(),
+        },
+      };
+
+      return {
+        ...item,
+        stockSummary: nextStock,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setStockMessage("Naskladnění bylo uloženo.");
+  };
+
   return (
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
@@ -525,17 +654,184 @@ export default function AppGssPage() {
                       <div style={meta}>
                         Zásoba: celkem {item.stockSummary?.total ?? 0} · dostupné {item.stockSummary?.available ?? 0} · rezervace {item.stockSummary?.reserved ?? 0} · výroba {item.stockSummary?.production ?? 0} · broušení {item.stockSummary?.sharpening ?? 0}
                       </div>
+                      <div style={stateBreakdown}>
+                        <span>Nový: {normalizeStockSummary(item.stockSummary).states.new}</span>
+                        <span>Nový přebroušený: {normalizeStockSummary(item.stockSummary).states.resharpened_new}</span>
+                        <span>Použitý: {normalizeStockSummary(item.stockSummary).states.used}</span>
+                        <span>Na broušení: {normalizeStockSummary(item.stockSummary).states.sharpening}</span>
+                      </div>
+                      {item.stockSummary?.lastIntakeMetadata ? (
+                        <div style={meta}>
+                          Poslední příjem: {item.stockSummary.lastIntakeMetadata.documentTypeLabel || "doklad neuveden"} · {item.stockSummary.lastIntakeMetadata.receivedAt || "datum neuvedeno"} · provedl {item.stockSummary.lastIntakeMetadata.performedBy || "neuvedeno"}
+                        </div>
+                      ) : null}
                       <div style={meta}>
                         Min: {item.tenantSettings?.min || "nenastaveno"} · Max: {item.tenantSettings?.max || "nenastaveno"} · Warning: {item.tenantSettings?.warning || "nenastaveno"}
+                      </div>
+                      <div style={offerInfo}>
+                        Použitý nástroj může být stále použitelný pro méně náročné operace.
                       </div>
                       <div style={meta}>
                         DM tracking: {item.tenantSettings?.dmEnabled ? "zapnuto" : "vypnuto"} · Broušení: {item.tenantSettings?.sharpen?.enabled ? "zapnuto" : "vypnuto"} · Stav: {item.tenantSettings?.blocked ? "blokovaná" : "aktivní"}
                       </div>
                       <div style={itemActions}>
                         <button type="button" onClick={() => openItemSettings(item)} style={btnSecondary}>Nastavení položky</button>
-                        <button type="button" style={btnSecondary}>Naskladnit</button>
+                        <button type="button" onClick={() => openStockForm(item)} style={btnSecondary}>Naskladnit</button>
                         <button type="button" style={btnSecondary}>Otevřít detail</button>
                       </div>
+                      {stockItemKey === getItemKey(item) ? (
+                        <form onSubmit={receiveStock} style={settingsPanel}>
+                          <div style={settingsTitle}>Naskladnit položku</div>
+                          <div style={muted}>
+                            První skladový pohyb uloží počet kusů do konkrétního provozního stavu v GSS.
+                          </div>
+
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Počet kusů
+                              <input
+                                type="number"
+                                min="1"
+                                value={stockForm.quantity}
+                                onChange={(event) => updateStockForm("quantity", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Stav naskladnění
+                              <select
+                                value={stockForm.condition}
+                                onChange={(event) => updateStockForm("condition", event.target.value)}
+                                style={input}
+                              >
+                                <option value="new">Nový</option>
+                                <option value="resharpened_new">Nový přebroušený</option>
+                                <option value="used">Použitý</option>
+                                <option value="sharpening">Na broušení</option>
+                              </select>
+                            </label>
+                            {(item.tenantSettings?.sharpen?.enabled || stockForm.condition === "sharpening") ? (
+                              <>
+                                <label style={fieldLabel}>
+                                  Brusič
+                                  <input
+                                    value={stockForm.grinder}
+                                    onChange={(event) => updateStockForm("grinder", event.target.value)}
+                                    style={input}
+                                  />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Provozní poznámka
+                                  <input
+                                    value={stockForm.note}
+                                    onChange={(event) => updateStockForm("note", event.target.value)}
+                                    placeholder="Dát do červené krabice"
+                                    style={input}
+                                  />
+                                </label>
+                              </>
+                            ) : null}
+                          </div>
+
+                          <div style={settingsTitle}>Doklad / důvod příjmu</div>
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Typ dokladu / důvod příjmu
+                              <select
+                                value={stockForm.documentType}
+                                onChange={(event) => {
+                                  const documentType = event.target.value;
+                                  updateStockForm("documentType", documentType);
+                                  if (documentType === "service_delivery_note_after_sharpening" && !stockForm.source.trim()) {
+                                    updateStockForm("source", DEFAULT_GRINDER);
+                                  }
+                                }}
+                                style={input}
+                              >
+                                <option value="supplier_delivery_note">Dodací list dodavatele</option>
+                                <option value="supplier_invoice">Faktura dodavatele</option>
+                                <option value="internal_receipt">Interní příjemka</option>
+                                <option value="service_delivery_note_after_sharpening">Servisní dodací list po broušení</option>
+                                <option value="production_return">Návrat z výroby</option>
+                                <option value="manual_correction_inventory">Ruční korekce / inventura</option>
+                              </select>
+                            </label>
+                            <label style={fieldLabel}>
+                              Číslo dokladu
+                              <input
+                                value={stockForm.documentNumber}
+                                onChange={(event) => updateStockForm("documentNumber", event.target.value)}
+                                placeholder="volitelné pro MVP"
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Dodavatel / zdroj
+                              <input
+                                value={stockForm.source}
+                                onChange={(event) => updateStockForm("source", event.target.value)}
+                                placeholder="např. M-technologies"
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Datum příjmu
+                              <input
+                                type="date"
+                                value={stockForm.receivedAt}
+                                onChange={(event) => updateStockForm("receivedAt", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Provedl
+                              <input
+                                value={stockForm.performedBy}
+                                onChange={(event) => updateStockForm("performedBy", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Poznámka k příjmu
+                              <textarea
+                                value={stockForm.intakeNote}
+                                onChange={(event) => updateStockForm("intakeNote", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                          </div>
+                          <div style={offerInfo}>
+                            Provedl bude později přihlášená osoba, výdejní automat, ERP nebo integrační zdroj.
+                          </div>
+
+                          {stockForm.condition === "sharpening" ? (
+                            <div style={offerInfo}>
+                              Stav Na broušení navyšuje `sharpening`, ale nezvyšuje dostupné kusy pro běžný výdej.
+                            </div>
+                          ) : (
+                            <div style={offerInfo}>
+                              Stav {STOCK_CONDITION_LABELS[stockForm.condition]} navyšuje dostupné kusy.
+                            </div>
+                          )}
+
+                          {stockMessage ? <div style={stockMessage.includes("kladný") ? errorMessage : message}>{stockMessage}</div> : null}
+
+                          <div style={actions}>
+                            <button type="submit" style={btnImport}>Uložit naskladnění</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStockItemKey("");
+                                setStockForm(createStockForm());
+                                setStockMessage("");
+                              }}
+                              style={btnSecondary}
+                            >
+                              Zavřít
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
                       {settingsItemKey === getItemKey(item) && settingsForm ? (
                         <form onSubmit={saveItemSettings} style={settingsPanel}>
                           <div style={settingsTitle}>Tenant nastavení položky</div>
@@ -664,11 +960,13 @@ export default function AppGssPage() {
                       ) : null}
                     </div>
                     <div style={stockSummary}>
-                      <div>Celkem: {item.stockSummary?.total ?? 0}</div>
-                      <div>Dostupné: {item.stockSummary?.available ?? 0}</div>
-                      <div>Rezervace: {item.stockSummary?.reserved ?? 0}</div>
-                      <div>Výroba: {item.stockSummary?.production ?? 0}</div>
-                      <div>Broušení: {item.stockSummary?.sharpening ?? 0}</div>
+                      <div>Celkem: {normalizeStockSummary(item.stockSummary).total}</div>
+                      <div>Dostupné: {normalizeStockSummary(item.stockSummary).available}</div>
+                      <div>Rezervace: {normalizeStockSummary(item.stockSummary).reserved}</div>
+                      <div>Výroba: {normalizeStockSummary(item.stockSummary).production}</div>
+                      <div>Broušení: {normalizeStockSummary(item.stockSummary).sharpening}</div>
+                      <div>Ještě ve firmě: {normalizeStockSummary(item.stockSummary).sharpeningBreakdown.in_company}</div>
+                      <div>V brusírně: {normalizeStockSummary(item.stockSummary).sharpeningBreakdown.at_grinder}</div>
                     </div>
                   </div>
                 ))}
@@ -991,6 +1289,15 @@ const itemActions = {
   flexWrap: "wrap",
   gap: 8,
   marginTop: 10,
+};
+
+const stateBreakdown = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  marginTop: 8,
+  fontSize: 12,
+  color: "rgba(255,255,255,0.78)",
 };
 
 const formBox = {

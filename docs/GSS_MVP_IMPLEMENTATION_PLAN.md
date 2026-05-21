@@ -348,8 +348,179 @@ Rozsah:
 - aktualizace rozměrů po broušení
 - zákaz výdeje konkrétního kusu
 - historie pohybů
+- rozpad zásob podle provozních stavů
+- rozlišení nových, přebroušených, použitých a na broušení čekajících kusů
 
 Pohyby musí být auditované a vázané na firmu, hlavní sklad, položku a případně konkrétní DM kus.
+
+### Provozní Stavy Zásoby Nástroje
+
+Tyto stavy patří do GSS, ne do GPC. GPC říká, co je produkt. GSS říká, kde je konkrétní kus, v jakém je provozním stavu, zda je použitelný, zda má jít na broušení a zda je dostupný k výdeji.
+
+GSS musí rozlišovat:
+
+- `new`: nový nástroj, nikdy nevydaný do výroby
+- `new_resharpened`: nový přebroušený nástroj, který po posledním broušení ještě nebyl vydán do výroby
+- `used`: použitý nástroj, který se vrátil z výroby a je stále použitelný
+- `from_production_for_sharpening`: nástroj z výroby / na broušení, který už není použitelný a má být odeslaný na broušení
+
+U stavu na broušení se eviduje:
+
+- brusič
+- výchozí brusič `M-technologies`
+- možnost editovat brusiče
+- provozní instrukce, například `dát do červené krabice`
+
+### Objednávková Logika
+
+Když GSS generuje objednávku, znamená to požadavek na nový nástroj.
+
+Objednávka nesmí znamenat:
+
+- použitý nástroj
+- nový přebroušený nástroj
+- nástroj vrácený z výroby
+
+Objednávková potřeba se bude do budoucna počítat jako součet potřeb hlavního skladu, dceřiných skladů a budoucích výdejních míst / automatů. V MVP je pouze hlavní sklad, ale datová a procesní logika musí být připravená na rozpad.
+
+### Rozpad Zásob
+
+GSS musí u položky zobrazovat celkem kusů a rozpad:
+
+- nový
+- nový přebroušený
+- použitý
+- na broušení
+
+První úroveň je celkový počet za firmu. Klik zobrazí rozpad podle skladů, v MVP hlavní sklad a později dceřiné sklady. Klik na sklad zobrazí rozpad podle provozního stavu.
+
+Pokud je aktivní DM tracking, klik na provozní stav zobrazí konkrétní DM kusy. DM kus je konec rozpadového řetězce.
+
+### První Naskladnění Položky
+
+První naskladnění je první skladový pohyb nad tenant skladovou položkou. V MVP se ještě neřeší plný audit, ERP pohyby ani detailní DM lifecycle, ale pohyb musí aktualizovat základní `stockSummary`.
+
+Vstup pohybu:
+
+- počet kusů
+- stav naskladnění: `new`, `resharpened_new`, `used`, `sharpening`
+- brusič, pokud jde o brousitelnou položku nebo stav `sharpening`
+- provozní poznámka, například `Dát do červené krabice`
+- typ dokladu / důvod příjmu
+- číslo dokladu, volitelné pro MVP
+- dodavatel / zdroj
+- datum příjmu
+- provedl
+- poznámka k příjmu
+
+Aktualizace `stockSummary`:
+
+- každý pohyb navyšuje `total`
+- stavy `new`, `resharpened_new` a `used` navyšují `available`
+- stav `sharpening` navyšuje `sharpening`, ale nenavyšuje `available`
+- `reserved` a `production` se v tomto kroku nemění
+
+Rozpad stavů se ukládá do:
+
+- `stockSummary.states.new`
+- `stockSummary.states.resharpened_new`
+- `stockSummary.states.used`
+- `stockSummary.states.sharpening`
+
+Použitý nástroj může být stále použitelný pro méně náročné operace. Proto může být naskladněn jako `used` a dostupný pro výdej, dokud není rozhodnutím obsluhy přesunut na broušení, blokaci nebo vyřazení.
+
+### Intake Metadata a Budoucí Doklady
+
+V MVP se při naskladnění uloží poslední příjem / intake metadata k položce. Nejde ještě o plnou historii pohybů, ale připravuje se tím budoucí audit a napojení na doklady.
+
+Podporované důvody / doklady:
+
+- dodací list dodavatele
+- faktura dodavatele
+- interní příjemka
+- servisní dodací list po broušení
+- návrat z výroby
+- ruční korekce / inventura
+
+Pole `provedl` je zatím textové a může mít hodnotu `MVP uživatel`. Později bude odvozené z přihlášené osoby, výdejního automatu, ERP nebo integračního zdroje.
+
+Budoucí směr:
+
+- načítání kódů z dodacích listů
+- načítání kódů z faktur
+- načítání servisních dokladů
+- import dokladů z ERP
+- import z výdejního automatu
+- import od dodavatele
+
+Cílem je minimalizovat ruční zadávání a přitom zachovat dohledatelnost příjmu.
+
+### Servisní Workflow Ostření / M-technologies
+
+Workflow ostření je budoucí servisní tok mezi zákaznickým GSS a M-technologies.
+
+Proces:
+
+1. zákazník v GSS shromažďuje nástroje k ostření
+2. GSS ukazuje počet kusů na broušení
+3. zákazník spustí akci `Odeslat na ostření`
+4. systém ukončí sběr aktuální dávky
+5. vznikne servisní doklad
+
+Servisní doklad může být:
+
+- objednávka ostření
+- dodací list pro předání nástrojů
+- požadavek na povlakování
+
+Doklad obsahuje:
+
+- zákazníka
+- položky
+- počty
+- DM kódy, pokud existují
+- poznámky zákazníka
+- požadavek na broušení
+- požadavek na povlak
+
+M-technologies si tento doklad otevře. Po provedení služby zapíše:
+
+- co bylo provedeno
+- nové rozměry po broušení
+- nový průměr
+- novou délku
+- počet přebroušení
+- poznámku
+- případně typ povlaku
+
+Zákazník si výsledek natáhne zpět do GSS jako příjemku / servisní dodací list. Tím vzniká integrační kanál mezi GSS zákazníka a M-technologies.
+
+### DM Parametrické Změny Po Broušení
+
+Pokud je nástroj sledovaný přes DM, změny rozměrů po broušení se zapisují ke konkrétnímu DM kusu.
+
+Bez DM trackingu se změny zapisují agregovaně nebo poznámkou.
+
+DM kus po broušení může mít:
+
+- nový aktuální průměr
+- novou délku
+- počet přebroušení
+- servisní historii
+- nový štítek / vizuální identifikátor
+
+Zákazník ani servis nesmí měnit GPC master data. Mění se pouze tenant provozní data v GSS.
+
+### Na Broušení
+
+GSS musí zobrazovat celkový počet kusů na broušení a rozpad:
+
+- ještě ve firmě
+- aktuálně v brusírně
+
+Pokud je aktivní DM tracking, u každého čísla lze zobrazit konkrétní DM kusy.
+
+Bez DM trackingu systém pracuje s počtem kusů. S DM trackingem systém pracuje s konkrétními kusy a každý kus má svůj DM kód.
 
 ## Etapa 5: Nadnormativní Zásoby
 
