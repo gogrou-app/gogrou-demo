@@ -298,6 +298,29 @@ Validovaná položka převzatá z GPC má:
 
 Po převzetí do GSS získává vlastní zákaznická nastavení, například min/max, DM tracking a skladovou historii.
 
+### Datové Pravidlo GPC Reference v GSS
+
+GSS nekopíruje kompletní GPC data.
+
+GSS u validované položky ukládá pouze:
+
+- `gpc_id`
+- `gtin`
+- případný malý snapshot pro rychlé zobrazení
+
+Technická data, obrázky, datasheety, 3D modely a odkazy zůstávají v GPC. GSS je načítá přes `gpc_id`.
+
+GSS ukládá pouze tenant provozní data:
+
+- min/max
+- warning
+- stock
+- DM kusy
+- broušení
+- lokální poznámky
+- blokace
+- nadnormativní nabídky
+
 ### Lokální Nevalidovaná Položka v GSS
 
 Pokud položka v GPC není, zákazník ji může založit lokálně v GSS.

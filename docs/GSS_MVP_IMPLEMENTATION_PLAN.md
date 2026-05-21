@@ -264,6 +264,21 @@ Pravidlo:
 
 - GPC položka se v GSS neupravuje jako master data
 - zákaznické provozní nastavení vzniká až v GSS
+- GSS nekopíruje kompletní GPC data
+- GSS ukládá pouze `gpc_id`, `gtin` a případný malý snapshot pro rychlé zobrazení
+
+Technická data, obrázky, datasheety, 3D modely a odkazy zůstávají v GPC. GSS je načítá přes `gpc_id`.
+
+GSS ukládá pouze tenant provozní data:
+
+- min/max
+- warning
+- stock
+- DM kusy
+- broušení
+- lokální poznámky
+- blokace
+- nadnormativní nabídky
 
 ## Etapa 3: Lokální Nastavení Položky
 
