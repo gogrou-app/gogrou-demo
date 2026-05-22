@@ -66,6 +66,8 @@ const createTenantGssItem = (tool) => ({
     blocked: false,
     blockReason: "",
     localNote: "",
+    supplierName: "Gogrou",
+    supplierType: "Gogrou partner",
   },
   stockSummary: createEmptyStockSummary(),
   createdAt: new Date().toISOString(),
@@ -146,6 +148,8 @@ const createLocalTenantGssItem = (form) => ({
     blocked: false,
     blockReason: "",
     localNote: "",
+    supplierName: "Gogrou",
+    supplierType: "Gogrou partner",
   },
   stockSummary: createEmptyStockSummary(),
   createdAt: new Date().toISOString(),
@@ -156,12 +160,14 @@ const createSettingsForm = (item) => ({
   max: item.tenantSettings?.max || "",
   warning: item.tenantSettings?.warning || "",
   supplierPackQuantity: item.tenantSettings?.supplierPackQuantity || "",
-  supplierName: item.tenantSettings?.supplierName || "",
+  supplierName: item.tenantSettings?.supplierName || "Gogrou",
   supplierType: item.tenantSettings?.supplierType || "Gogrou partner",
   dmEnabled: Boolean(item.tenantSettings?.dmEnabled),
   sharpenEnabled: Boolean(item.tenantSettings?.sharpen?.enabled),
   sharpenCycles: item.tenantSettings?.sharpen?.cycles || "",
   sharpenNote: item.tenantSettings?.sharpen?.note || "",
+  drawingReference: item.tenantSettings?.drawingReference || "",
+  coatingNote: item.tenantSettings?.coatingNote || "",
   blocked: Boolean(item.tenantSettings?.blocked),
   blockReason: item.tenantSettings?.blockReason || "",
   localNote: item.tenantSettings?.localNote || "",
@@ -176,6 +182,8 @@ const createStockForm = () => ({
   condition: "new",
   grinder: DEFAULT_GRINDER,
   note: "",
+  purchasePricePerUnit: "",
+  purchaseCurrency: "CZK",
   documentType: "supplier_delivery_note",
   documentNumber: "",
   source: "",
@@ -261,13 +269,32 @@ const OVERSTOCK_STATUS_LABELS = {
   cancelled: "zrušená nabídka",
 };
 
-const OVERSTOCK_BLOCKING_STATUSES = ["active"];
-
-const isBlockingOverstockOffer = (offer) => Boolean(
-  offer?.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(offer.status)
-);
-
 const getOverstockStatusLabel = (status) => OVERSTOCK_STATUS_LABELS[status] || status || "rozpracovaná nabídka";
+
+const getOverstockAlertMessage = (offer) => {
+  if (!offer?.enabled || offer.status !== "active" || !offer.quantity) {
+    return "";
+  }
+
+  return "Sledujte nadnormativní nabídku. Pokud další výdej sníží volné nové kusy pod nabízené množství, nabídka bude automaticky ponížena.";
+};
+
+const releaseLegacyOverstockReservation = (stock, overstockReserved) => {
+  const reserved = Number(overstockReserved) || 0;
+  if (reserved <= 0) {
+    return stock;
+  }
+
+  return {
+    ...stock,
+    available: stock.available + reserved,
+    reserved: Math.max(stock.reserved - reserved, 0),
+    states: {
+      ...stock.states,
+      new: stock.states.new + reserved,
+    },
+  };
+};
 
 const parsePositiveNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -307,7 +334,7 @@ const createPurchaseProposalItem = (item) => {
     gpc_id: item.gpc_id || "",
     gtin: item.gtin || "",
     manufacturer: item.manufacturer || "",
-    supplierName: item.tenantSettings?.supplierName || item.manufacturer || "Dodavatel neuveden",
+    supplierName: item.tenantSettings?.supplierName || "Gogrou",
     supplierType: item.tenantSettings?.supplierType || "Gogrou partner",
     available: stock.available,
     min,
@@ -416,6 +443,9 @@ export default function AppGssPage() {
     ? warehouseItems.filter((item) => itemMatchesIssueQuery(item, normalizedIssueQuery)).slice(0, 12)
     : [];
   const selectedIssueItem = warehouseItems.find((item) => getItemKey(item) === issueItemKey);
+  const selectedIssueStock = selectedIssueItem
+    ? releaseLegacyOverstockReservation(normalizeStockSummary(selectedIssueItem.stockSummary), selectedIssueItem.overstockReserved)
+    : null;
   const normalizedReturnQuery = normalizeSearch(returnQuery);
   const returnResults = normalizedReturnQuery
     ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
@@ -533,6 +563,8 @@ export default function AppGssPage() {
             cycles: settingsForm.sharpenCycles,
             note: settingsForm.sharpenNote,
           },
+          drawingReference: settingsForm.drawingReference,
+          coatingNote: settingsForm.coatingNote,
           blocked: settingsForm.blocked,
           blockReason: settingsForm.blockReason,
           localNote: settingsForm.localNote,
@@ -708,7 +740,6 @@ export default function AppGssPage() {
     }
 
     const currentStock = normalizeStockSummary(selectedItem.stockSummary);
-    const previousOffer = selectedItem.overstockOffer;
     const previousReserved = Number(selectedItem.overstockReserved) || 0;
     const quantity = overstockForm.enabled ? Number(overstockForm.quantity) : 0;
     const pricePerUnit = overstockForm.enabled ? Number(overstockForm.pricePerUnit) : 0;
@@ -724,9 +755,7 @@ export default function AppGssPage() {
     }
 
     const availableNewForOffer = currentStock.states.new + previousReserved;
-    const offerBlocksStock = overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status);
-
-    if (offerBlocksStock && quantity > availableNewForOffer) {
+    if (overstockForm.enabled && quantity > availableNewForOffer) {
       setOverstockMessage("Pro nadnormativní nabídku není dostatek volných nových kusů.");
       return;
     }
@@ -739,7 +768,7 @@ export default function AppGssPage() {
       const stock = normalizeStockSummary(item.stockSummary);
       const previousItemOffer = item.overstockOffer;
       const previousItemReserved = Number(item.overstockReserved) || 0;
-      const nextReserved = offerBlocksStock ? quantity : 0;
+      const nextReserved = 0;
       const reservedDelta = nextReserved - previousItemReserved;
       const now = new Date().toISOString();
       const nextOffer = {
@@ -784,6 +813,7 @@ export default function AppGssPage() {
           status: nextOffer.status,
           previousQuantity: previousItemOffer?.quantity || 0,
           reservedDelta,
+          blocksIssue: false,
         },
       }));
     });
@@ -894,6 +924,12 @@ export default function AppGssPage() {
       return;
     }
 
+    const purchasePricePerUnit = stockForm.purchasePricePerUnit.trim() ? Number(stockForm.purchasePricePerUnit) : null;
+    if (purchasePricePerUnit !== null && (!Number.isFinite(purchasePricePerUnit) || purchasePricePerUnit < 0)) {
+      setStockMessage("Zadejte platnou pořizovací cenu za kus.");
+      return;
+    }
+
     const nextItems = warehouseItems.map((item) => {
       if (getItemKey(item) !== stockItemKey) {
         return item;
@@ -903,6 +939,9 @@ export default function AppGssPage() {
       const isSharpening = stockForm.condition === "sharpening";
       const performedBy = stockForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR;
       const movementNote = stockForm.intakeNote.trim() || stockForm.note.trim();
+      const purchaseCurrency = stockForm.purchaseCurrency.trim() || "CZK";
+      const purchaseSupplier = stockForm.source.trim();
+      const purchaseDate = stockForm.receivedAt || getTodayDate();
       const nextStock = {
         ...currentStock,
         total: currentStock.total + quantity,
@@ -932,11 +971,18 @@ export default function AppGssPage() {
           receivedAt: stockForm.receivedAt || getTodayDate(),
           performedBy,
           note: stockForm.intakeNote.trim(),
+          purchasePricePerUnit,
+          purchaseCurrency,
+          purchaseTotalValue: purchasePricePerUnit !== null ? purchasePricePerUnit * quantity : null,
         },
       };
 
       const nextItem = {
         ...item,
+        lastPurchasePrice: purchasePricePerUnit,
+        lastPurchaseCurrency: purchaseCurrency,
+        lastPurchaseDate: purchaseDate,
+        lastPurchaseSupplier: purchaseSupplier,
         stockSummary: nextStock,
         updatedAt: new Date().toISOString(),
       };
@@ -957,6 +1003,9 @@ export default function AppGssPage() {
           documentNumber: stockForm.documentNumber.trim(),
           source: stockForm.source.trim(),
           receivedAt: stockForm.receivedAt || getTodayDate(),
+          purchasePricePerUnit,
+          purchaseCurrency,
+          purchaseTotalValue: purchasePricePerUnit !== null ? purchasePricePerUnit * quantity : null,
           grinder: isSharpening ? stockForm.grinder.trim() || DEFAULT_GRINDER : "",
           stockNote: stockForm.note.trim(),
         },
@@ -996,7 +1045,10 @@ export default function AppGssPage() {
       return;
     }
 
-    const currentStock = normalizeStockSummary(selectedIssueItem.stockSummary);
+    const currentStock = releaseLegacyOverstockReservation(
+      normalizeStockSummary(selectedIssueItem.stockSummary),
+      selectedIssueItem.overstockReserved
+    );
     if (quantity > currentStock.available) {
       setIssueMessage("Nelze vydat více kusů, než je dostupné množství.");
       return;
@@ -1012,16 +1064,37 @@ export default function AppGssPage() {
         return item;
       }
 
-      const stock = normalizeStockSummary(item.stockSummary);
+      const stock = releaseLegacyOverstockReservation(
+        normalizeStockSummary(item.stockSummary),
+        item.overstockReserved
+      );
+      const currentOffer = item.overstockOffer;
+      const offerQuantity = Number(currentOffer?.quantity) || 0;
+      const nextStateQuantity = stock.states[issueForm.preferredState] - quantity;
+      const offerIsAffected = currentOffer?.enabled && currentOffer.status === "active" && issueForm.preferredState === "new" && offerQuantity > nextStateQuantity;
+      const nextOfferQuantity = offerIsAffected ? Math.max(nextStateQuantity, 0) : offerQuantity;
+      const nextOverstockOffer = offerIsAffected
+        ? {
+            ...currentOffer,
+            quantity: nextOfferQuantity,
+            status: nextOfferQuantity > 0 ? currentOffer.status : "paused",
+            updatedAt: new Date().toISOString(),
+          }
+        : currentOffer;
+      const overstockIssueNote = offerIsAffected
+        ? " Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo."
+        : "";
       const nextItem = {
         ...item,
+        overstockOffer: nextOverstockOffer,
+        overstockReserved: 0,
         stockSummary: {
           ...stock,
           available: stock.available - quantity,
           production: stock.production + quantity,
           states: {
             ...stock.states,
-            [issueForm.preferredState]: stock.states[issueForm.preferredState] - quantity,
+            [issueForm.preferredState]: nextStateQuantity,
           },
           lastIssueMetadata: {
             type: "issue_to_production",
@@ -1032,6 +1105,9 @@ export default function AppGssPage() {
             machine: issueForm.machine.trim(),
             job: issueForm.job.trim(),
             note: issueForm.note.trim(),
+            overstockOfferAdjusted: offerIsAffected,
+            overstockOfferPreviousQuantity: offerIsAffected ? offerQuantity : undefined,
+            overstockOfferNextQuantity: offerIsAffected ? nextOfferQuantity : undefined,
             issuedAt: new Date().toISOString(),
             performedBy: DEFAULT_INTAKE_OPERATOR,
           },
@@ -1046,13 +1122,16 @@ export default function AppGssPage() {
         quantity,
         state: issueForm.preferredState,
         performedBy: DEFAULT_INTAKE_OPERATOR,
-        note: issueForm.note.trim(),
+        note: `${issueForm.note.trim()}${overstockIssueNote}`.trim(),
         metadata: {
           preferredState: issueForm.preferredState,
           preferredStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
           costCenter: issueForm.costCenter.trim(),
           machine: issueForm.machine.trim(),
           job: issueForm.job.trim(),
+          overstockOfferAdjusted: offerIsAffected,
+          overstockOfferPreviousQuantity: offerIsAffected ? offerQuantity : undefined,
+          overstockOfferNextQuantity: offerIsAffected ? nextOfferQuantity : undefined,
           issuedAt: new Date().toISOString(),
         },
       }));
@@ -1060,7 +1139,11 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setIssueMessage("Položka byla vydána do výroby.");
+    const affectedItem = nextItems.find((item) => getItemKey(item) === issueItemKey);
+    const overstockWasAdjusted = Boolean(affectedItem?.stockSummary?.lastIssueMetadata?.overstockOfferAdjusted);
+    setIssueMessage(overstockWasAdjusted
+      ? "Položka byla vydána do výroby. Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo."
+      : "Položka byla vydána do výroby.");
   };
 
   const reportStockDifference = () => {
@@ -1296,6 +1379,15 @@ export default function AppGssPage() {
             <div style={muted}>
               Návrh hledá položky s nastaveným min/max a skutečně volným dostupným množstvím pod minimem. Množství se dopočítává do max a zaokrouhluje na dodací násobek.
             </div>
+            <div style={offerInfo}>
+              Mimořádná ruční objednávka pro budoucí zakázku nebo očekávanou spotřebu bude rozšířením tohoto návrhu v další fázi.
+            </div>
+            <div style={hintBox}>
+              Porovnání nabídek bude doplněno v další fázi.
+            </div>
+            <div style={muted}>
+              Budoucí porovnání zohlední Gogrou partnera, uložené dodavatele zákazníka, nového dodavatele, nadnormativu v komunitě, cenové akce, SS nabídku a Promitea / RFQ výsledek.
+            </div>
 
             {purchaseCandidates.length > 0 ? (
               <div style={resultList}>
@@ -1376,6 +1468,8 @@ export default function AppGssPage() {
 
             <div style={actions}>
               <button type="button" onClick={createPurchaseProposal} style={btnPrimary}>Vytvořit objednávkový návrh</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Porovnání nabídek bude doplněno v další fázi.")} style={btnSecondary}>Připravuje se: porovnání nabídek</button>
+              <button type="button" onClick={() => showPurchasePlaceholder("Ruční mimořádná objednávka bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: ruční objednávka</button>
               <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: vygenerovat objednávku</button>
               <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: Export XLS / Promitea</button>
               <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: odeslat objednávku</button>
@@ -1412,13 +1506,16 @@ export default function AppGssPage() {
               {issueResults.length > 0 ? (
                 <div style={resultList}>
                   {issueResults.map((item) => {
-                    const stock = normalizeStockSummary(item.stockSummary);
+                    const stock = releaseLegacyOverstockReservation(normalizeStockSummary(item.stockSummary), item.overstockReserved);
                     const selected = getItemKey(item) === issueItemKey;
 
                     return (
                       <div key={getItemKey(item)} style={selected ? highlightedResultItem : resultItem}>
                         <div>
                           <div style={resultTitle}>{item.name || item.gpc_id}</div>
+                          {item.origin === "LOCAL" ? (
+                            <div style={badgeWarning}>Lokální nevalidovaná položka</div>
+                          ) : null}
                           <div style={meta}>{item.manufacturer || "Výrobce neuveden"} · {item.type || "Typ neuveden"}</div>
                           <div style={meta}>
                             {item.origin === "LOCAL" ? `Lokální ID: ${item.localFields?.internalCode || getItemKey(item)}` : `GPC ID: ${item.gpc_id || "bez vazby"}`} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
@@ -1452,16 +1549,19 @@ export default function AppGssPage() {
                 <form onSubmit={issueToProduction} style={settingsPanel}>
                   <div style={settingsTitle}>Vydat do výroby</div>
                   <div style={meta}>
-                    {selectedIssueItem.name || selectedIssueItem.gpc_id} · dostupné {normalizeStockSummary(selectedIssueItem.stockSummary).available} ks
+                    {selectedIssueItem.name || selectedIssueItem.gpc_id} · dostupné {selectedIssueStock.available} ks
                   </div>
+                  {selectedIssueItem.origin === "LOCAL" ? (
+                    <div style={badgeWarning}>Lokální nevalidovaná položka · lze vydat do výroby jako tenant skladovou položku</div>
+                  ) : null}
                   <div style={stateBreakdown}>
-                    <span>Dostupné celkem: {normalizeStockSummary(selectedIssueItem.stockSummary).available}</span>
-                    <span>Nový: {normalizeStockSummary(selectedIssueItem.stockSummary).states.new}</span>
-                    <span>Nový přebroušený: {normalizeStockSummary(selectedIssueItem.stockSummary).states.resharpened_new}</span>
-                    <span>Použitý: {normalizeStockSummary(selectedIssueItem.stockSummary).states.used}</span>
+                    <span>Dostupné celkem: {selectedIssueStock.available}</span>
+                    <span>Nový: {selectedIssueStock.states.new}</span>
+                    <span>Nový přebroušený: {selectedIssueStock.states.resharpened_new}</span>
+                    <span>Použitý: {selectedIssueStock.states.used}</span>
                   </div>
                   <div style={hintBox}>
-                    Vybraný stav: {ISSUE_STATE_LABELS[issueForm.preferredState]} · dostupné v tomto stavu: {normalizeStockSummary(selectedIssueItem.stockSummary).states[issueForm.preferredState]} ks
+                    Vybraný stav: {ISSUE_STATE_LABELS[issueForm.preferredState]} · dostupné v tomto stavu: {selectedIssueStock.states[issueForm.preferredState]} ks
                   </div>
                   {selectedIssueItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
@@ -1531,6 +1631,9 @@ export default function AppGssPage() {
                   </div>
                   <div style={offerInfo}>
                     Výdej sníží dostupné množství, zvýší množství ve výrobě a nikdy nevydává kusy ve stavu Na broušení.
+                  </div>
+                  <div style={hintBox}>
+                    Výdej nad systémovou zásobu není v MVP povolený. Pokud fyzicky vidíte více kusů než systém, použijte Ohlásit rozdíl ve skladu. Budoucí override pro vyšší roli bude doplněn později.
                   </div>
 
                   {issueMessage ? <div style={issueMessage.includes("vydána") || issueMessage.includes("ohlášen") ? message : errorMessage}>{issueMessage}</div> : null}
@@ -1855,6 +1958,9 @@ export default function AppGssPage() {
 
           <div ref={warehouseSectionRef} style={warehouseHighlighted ? highlightedBox : box}>
             <h2 style={subtitle}>Tenant skladové položky</h2>
+            <div style={offerInfo}>
+              Cílově bude sklad zobrazený jako kompaktní řádkový seznam s detailem po kliknutí. Aktuální dlouhé karty jsou MVP prototyp pro rychlé ověření skladových toků.
+            </div>
             {warehouseItems.length === 0 ? (
               <div style={muted}>Tenant sklad zatím neobsahuje žádné položky převzaté z GPC.</div>
             ) : (
@@ -1862,8 +1968,8 @@ export default function AppGssPage() {
                 {warehouseItems.map((item) => {
                   const activeReservations = getActiveReservations(item);
                   const overstockOffer = item.overstockOffer;
-                  const overstockBlocksIssue = isBlockingOverstockOffer(overstockOffer);
-                  const overstockBlockedQuantity = overstockBlocksIssue ? Number(item.overstockReserved) || 0 : 0;
+                  const overstockIsActive = Boolean(overstockOffer?.enabled && overstockOffer.status === "active");
+                  const overstockAlert = getOverstockAlertMessage(overstockOffer);
 
                   return (
                   <div key={item.id || item.gpc_id} style={resultItem}>
@@ -1917,12 +2023,13 @@ export default function AppGssPage() {
                         <div style={meta}>
                           Nadnormativa {overstockOffer?.enabled ? getOverstockStatusLabel(overstockOffer.status) : "neaktivní"} · počet {overstockOffer?.quantity || 0} ks · cena {overstockOffer?.pricePerUnit || "nenastaveno"} {overstockOffer?.currency || ""}
                         </div>
-                        <div style={overstockBlocksIssue ? badgeWarning : meta}>
-                          {overstockBlocksIssue
-                            ? `Blokuje výdej: ano · blokováno ${overstockBlockedQuantity} ks jako nadnormativa`
-                            : "Blokuje výdej: ne · blokováno 0 ks jako nadnormativa"}
+                        <div style={overstockIsActive ? badgeWarning : meta}>
+                          {overstockIsActive
+                            ? `Aktivní nabídka: ${overstockOffer.quantity || 0} ks · výdej má prioritu a nabídka se může automaticky ponížit`
+                            : "Nadnormativa teď nezasahuje do výdeje."}
                         </div>
                         <div style={meta}>Stav nabídky: {getOverstockStatusLabel(overstockOffer?.status || "draft")}</div>
+                        {overstockAlert ? <div style={offerInfo}>{overstockAlert}</div> : null}
                       </div>
                       {item.stockSummary?.lastIntakeMetadata ? (
                         <div style={meta}>
@@ -1938,8 +2045,13 @@ export default function AppGssPage() {
                         Min: {item.tenantSettings?.min || "nenastaveno"} · Max: {item.tenantSettings?.max || "nenastaveno"} · Warning: {item.tenantSettings?.warning || "nenastaveno"}
                       </div>
                       <div style={meta}>
-                        Dodavatel: {item.tenantSettings?.supplierName || item.manufacturer || "nenastaveno"} · {item.tenantSettings?.supplierType || "Gogrou partner"} · Dodací násobek: {item.tenantSettings?.supplierPackQuantity || 1}
+                        Dodavatel: {item.tenantSettings?.supplierName || "Gogrou"} · {item.tenantSettings?.supplierType || "Gogrou partner"} · Dodací násobek: {item.tenantSettings?.supplierPackQuantity || 1}
                       </div>
+                      {item.lastPurchasePrice !== undefined && item.lastPurchasePrice !== null ? (
+                        <div style={meta}>
+                          Poslední pořizovací cena: {item.lastPurchasePrice} {item.lastPurchaseCurrency || "CZK"} · dodavatel {item.lastPurchaseSupplier || "neuveden"} · datum {item.lastPurchaseDate || "neuvedeno"}
+                        </div>
+                      ) : null}
                       <div style={offerInfo}>
                         Použitý nástroj může být stále použitelný pro méně náročné operace.
                       </div>
@@ -2044,7 +2156,27 @@ export default function AppGssPage() {
                               <input
                                 value={stockForm.source}
                                 onChange={(event) => updateStockForm("source", event.target.value)}
-                                placeholder="např. M-technologies"
+                                placeholder="např. Gogrou, M-technologies, SANDVIK"
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Pořizovací cena za kus
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={stockForm.purchasePricePerUnit}
+                                onChange={(event) => updateStockForm("purchasePricePerUnit", event.target.value)}
+                                placeholder="volitelné"
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Měna
+                              <input
+                                value={stockForm.purchaseCurrency}
+                                onChange={(event) => updateStockForm("purchaseCurrency", event.target.value)}
                                 style={input}
                               />
                             </label>
@@ -2077,6 +2209,11 @@ export default function AppGssPage() {
                           <div style={offerInfo}>
                             Provedl bude později přihlášená osoba, výdejní automat, ERP nebo integrační zdroj.
                           </div>
+                          {stockForm.purchasePricePerUnit.trim() && Number.isFinite(Number(stockForm.purchasePricePerUnit)) && Number(stockForm.purchasePricePerUnit) >= 0 && Number(stockForm.quantity) > 0 ? (
+                            <div style={offerInfo}>
+                              Celková hodnota příjmu: {Number(stockForm.purchasePricePerUnit) * Number(stockForm.quantity)} {stockForm.purchaseCurrency || "CZK"}.
+                            </div>
+                          ) : null}
 
                           {stockForm.condition === "sharpening" ? (
                             <div style={offerInfo}>
@@ -2088,7 +2225,7 @@ export default function AppGssPage() {
                             </div>
                           )}
 
-                          {stockMessage ? <div style={stockMessage.includes("kladný") ? errorMessage : message}>{stockMessage}</div> : null}
+                          {stockMessage ? <div style={stockMessage.includes("kladný") || stockMessage.includes("platnou") ? errorMessage : message}>{stockMessage}</div> : null}
 
                           <div style={actions}>
                             <button type="submit" style={btnImport}>Uložit naskladnění</button>
@@ -2215,7 +2352,7 @@ export default function AppGssPage() {
                         <form onSubmit={saveOverstockOffer} style={settingsPanel}>
                           <div style={settingsTitle}>Nadnormativa</div>
                           <div style={muted}>
-                            MVP nadnormativa může pracovat pouze s volnými novými kusy. Nový přebroušený, Použitý, Na broušení, Ve výrobě a rezervované kusy nelze nabídnout.
+                            MVP nadnormativa pracuje pouze s volnými novými kusy. Jde o nabídku přebytku, ne tvrdou rezervaci; výroba má prioritu.
                           </div>
                           <div style={checkRow}>
                             <label style={checkLabel}>
@@ -2285,10 +2422,10 @@ export default function AppGssPage() {
                               <div style={offerInfo}>
                                 Volné nové kusy: {normalizeStockSummary(item.stockSummary).states.new + (Number(item.overstockReserved) || 0)} ks.
                               </div>
-                              <div style={overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status) ? badgeWarning : offerInfo}>
-                                {overstockForm.enabled && OVERSTOCK_BLOCKING_STATUSES.includes(overstockForm.status)
-                                  ? "Tento stav blokuje výdej nabízených kusů."
-                                  : "Tento stav neblokuje výdej."}
+                              <div style={overstockForm.enabled && overstockForm.status === "active" ? badgeWarning : offerInfo}>
+                                {overstockForm.enabled && overstockForm.status === "active"
+                                  ? "Aktivní nabídka eviduje nabízené množství. Pokud výdej zasáhne do nových kusů, nabídka se automaticky poníží."
+                                  : "Tento stav výdej neblokuje."}
                               </div>
                             </>
                           ) : null}
@@ -2386,8 +2523,8 @@ export default function AppGssPage() {
                                 style={input}
                               >
                                 <option value="Gogrou partner">Gogrou partner</option>
-                                <option value="Standard supplier">Standard supplier</option>
-                                <option value="Internal supplier">Internal supplier</option>
+                                <option value="Standard supplier">Standardní dodavatel</option>
+                                <option value="Internal supplier">Interní dodavatel</option>
                               </select>
                             </label>
                           </div>
@@ -2429,6 +2566,24 @@ export default function AppGssPage() {
                               <textarea
                                 value={settingsForm.sharpenNote}
                                 onChange={(event) => updateSettingsForm("sharpenNote", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Výkres / odkaz na přílohu
+                              <textarea
+                                value={settingsForm.drawingReference}
+                                onChange={(event) => updateSettingsForm("drawingReference", event.target.value)}
+                                placeholder="budoucí příloha nebo odkaz"
+                                style={textarea}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Povlak / poznámka k povlaku
+                              <textarea
+                                value={settingsForm.coatingNote}
+                                onChange={(event) => updateSettingsForm("coatingNote", event.target.value)}
+                                placeholder="budoucí samostatné pole podle operace"
                                 style={textarea}
                               />
                             </label>
@@ -2531,7 +2686,15 @@ export default function AppGssPage() {
               Zde bude možné označit skladové položky jako nadnormativní a nabídnout je ostatním firmám.
             </div>
             <div style={offerInfo}>
-              Rezervované kusy nebudou dostupné pro běžný výdej.
+              V aktuálním MVP nadnormativa neblokuje výrobu. Pokud výdej zasáhne do aktivní nabídky, nabízené množství se automaticky poníží.
+            </div>
+            <div style={hintBox}>
+              Budoucí upozornění odpovědné osobě: sklad se blíží množství nabízenému jako nadnormativa.
+            </div>
+            <div style={actions}>
+              <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: na položku</button>
+              <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: ignorovat</button>
+              <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: hlásit znovu po dalším pohybu</button>
             </div>
             {dmItemCount > 0 ? (
               <div style={offerInfo}>
@@ -2539,7 +2702,7 @@ export default function AppGssPage() {
               </div>
             ) : null}
             <div style={actions}>
-              <button type="button" style={btnSecondary}>Připravit nabídku</button>
+              <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: připravit nabídku</button>
             </div>
           </div>
 

@@ -404,6 +404,13 @@ Výběr položek:
 - položka má nastavené `max`
 - `stockSummary.available < min`
 
+Vznik objednávky:
+
+- automaticky při poklesu na `min` nebo pod `min`
+- ručně / mimořádně pro budoucí zakázku, plánovanou vyšší spotřebu nebo mimořádný nákup
+
+Ruční mimořádná objednávka je v MVP zatím dokumentovaná jako budoucí rozšíření objednávkového návrhu. Vždy ale platí, že objednávka znamená nový nástroj / novou položku.
+
 Do `available` se nesmí přičítat `reserved`, `production`, `sharpening` ani `overstockReserved`. Jde pouze o skutečně volné dostupné množství.
 
 Výpočet:
@@ -427,6 +434,26 @@ Tenant nastavení dodavatele:
 - `supplierType`: `Gogrou partner`, `Standard supplier`, `Internal supplier`
 
 Primární filozofie Gogrou je napojit zákazníka pokud možno přímo na výrobce nebo partnera. Preferovaný typ je proto `Gogrou partner`.
+
+Při tvorbě objednávky bude možné vybrat:
+
+- `Gogrou` / `Gogrou partner` jako default
+- jiného uloženého dodavatele zákazníka
+- nového dodavatele
+- dodavatele z aktuální nabídky / akce / Promitea / SS
+
+Budoucí nákupní porovnání před objednávkou:
+
+- nadnormativa v Gogrou komunitě
+- aktuální cena od Gogrou partnera
+- běžící cenová akce
+- SS nabídka
+- Promitea / RFQ výsledek
+- ceníky jiných dodavatelů stejné položky
+
+U nadnormativy musí GSS ověřit aktuální dostupnost u nabízející firmy, protože stav nemusí být vždy 100% aktuální.
+
+Výstup pro zákazníka má ukázat, kde lze položku pořídit, za kolik, od koho a za jakých podmínek. Zákazník pak vybere konkrétní nákupní cestu.
 
 `purchaseProposal`:
 
@@ -457,6 +484,8 @@ Při vytvoření návrhu vzniká `movementHistory` typ `purchase_proposal_create
 
 Placeholdery MVP:
 
+- `Porovnání nabídek`: budoucí porovnání Gogrou partner / dodavatelé / nadnormativa / akce / SS / Promitea
+- `Ruční objednávka`: budoucí mimořádná objednávka mimo automatický min/max návrh
 - `Vygenerovat objednávku`: budoucí PDF
 - `Export XLS / Promitea`: budoucí XLS nebo Promitea RFQ
 - `Odeslat objednávku`: budoucí e-mail nebo Gogrou kanál
@@ -1022,22 +1051,26 @@ MVP formulář ukládá `overstockOffer`:
 Kontrola dostupnosti:
 
 - nabízený počet nesmí být větší než počet volných kusů ve stavu `new`
-- volné nové kusy znamenají `stockSummary.states.new` očištěné o už blokované nabídky
+- volné nové kusy znamenají aktuální `stockSummary.states.new`; nadnormativa se v MVP z dostupnosti tvrdě neodečítá
 - pokud není dost kusů, UI zobrazí `Pro nadnormativní nabídku není dostatek volných nových kusů.`
 
-Kusy označené k nabídce musí být blokované proti běžnému výdeji.
+Kusy označené k nabídce nejsou v MVP tvrdě blokované proti běžnému výdeji. Výroba má prioritu a aktivní nabídka se při zásahu výdejem automaticky poníží.
 
 Stavy nadnormativní nabídky:
 
 - `draft`: rozpracovaná nabídka
-- `active`: aktivní nabídka, blokuje kusy proti běžnému výdeji
+- `active`: aktivní nabídka přebytku
 - `paused`: pozastavená nabídka
 - `sold`: prodaná nabídka
 - `cancelled`: zrušená nabídka
 
-Pouze stav `active` blokuje výdej. Ostatní stavy výdej neblokují a UI musí jasně zobrazit, zda aktuální nabídka výdej blokuje a kolik kusů je blokovaných jako nadnormativa.
+Stav `active` znamená aktivní nabídku přebytku, ale v MVP tvrdě neblokuje výdej. Výroba má prioritu.
 
-V MVP se blokace aktivní nabídky provede odečtením nabízených kusů ze `stockSummary.available` a ze `stockSummary.states.new` a navýšením `stockSummary.reserved`. Zároveň se může evidovat `overstockReserved`.
+Pokud výdej nových kusů zasáhne do aktivně nabízeného množství, UI automaticky poníží `overstockOffer.quantity`. Pokud množství klesne na `0`, nabídka se pozastaví (`paused`) a uživatel dostane hlášku:
+
+`Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo.`
+
+`overstockReserved` se v aktuálním MVP nepoužívá jako tvrdá skladová blokace. Pokud existuje ze staršího prototypu, uložení nadnormativní nabídky ho uvolní zpět do skladové dostupnosti.
 
 Při vytvoření nebo změně nabídky vzniká `movementHistory`:
 
@@ -1072,7 +1105,7 @@ Příklad:
 - rezervováno pro nabídku: 5 ks
 - dostupné pro běžný výdej: 15 ks
 
-Rezervované množství se odečítá z dostupného množství pro běžný výdej.
+V aktuálním MVP se nadnormativní nabídka neodečítá z dostupného množství pro běžný výdej. Systém eviduje nabízené množství a při výdeji ho podle potřeby automaticky poníží.
 
 ### Rezervace S DM Trackingem
 
@@ -1113,3 +1146,51 @@ Záměrně se zatím neprogramuje:
 - plná ERP integrace
 - plná automat integrace
 - víceúrovňové schvalování
+
+## Stabilizační Tuning Po Prvním Testování
+
+Lokální nevalidovaná položka musí ve výdeji fungovat stejně jako položka převzatá z GPC. Rozdíl je ve validaci a dostupných pokročilých funkcích, ne v základní skladové operaci.
+
+Příjem skladové položky v MVP eviduje volitelnou pořizovací cenu za kus a měnu. UI dopočítá celkovou hodnotu příjmu. K položce se ukládá poslední pořizovací cena, měna, datum a dodavatel / zdroj. Tato data připravují cenové analýzy, nadnormativy, SS akce a GINA doporučení.
+
+Nadnormativa není tvrdá rezervace. Aktivní nabídka eviduje přebytek, ale výroba má prioritu. Výdej nových kusů může automaticky snížit `overstockOffer.quantity`; pokud nabídka klesne na `0`, status se nastaví na `paused` a UI zobrazí upozornění.
+
+Budoucí upozornění nadnormativy:
+
+- `Na položku`
+- `Ignorovat`
+- `Hlásit znovu po dalším pohybu`
+
+V MVP jsou tyto akce pouze placeholder. Cílem je upozornit odpovědnou osobu, pokud se sklad blíží množství nabízenému jako nadnormativa.
+
+Výdej nad systémovou zásobu se v MVP nepovoluje. Uživatel má použít `Ohlásit rozdíl ve skladu`. Budoucí override režim pro vyšší roli bude muset vytvořit výrazný historický / auditní záznam a upozornit odpovědnou osobu, aby se výroba nezastavila bez dohledatelnosti.
+
+Dodavatelé zákazníka budou později samostatná administrační data firmy. Položka bude odkazovat na konkrétního dodavatele a zároveň uchová typ vztahu: `Gogrou partner`, `Standardní dodavatel`, `Interní dodavatel`. Default v MVP je `Gogrou` / `Gogrou partner`.
+
+Poznámka k broušení, výkres / příloha / odkaz a povlak jsou připravené jako lehké tenant provozní údaje. Plná správa příloh, povlaků a technických dat se zatím neprogramuje.
+
+Parametrické šablony lokálních položek budou později řízené typem položky a sladěné s GPC / ToolsUnited strukturou. MVP zatím používá pouze minimální provozní validaci.
+
+Tenant skladové položky mají cílově přejít na kompaktní řádkový seznam s odděleným detailem položky. Současná dlouhá karta je přijatelná pro MVP prototyp, ale není cílové UX.
+
+Řádek skladové položky má zobrazit:
+
+- název položky
+- výrobce
+- GPC ID / lokální označení
+- celkem
+- nový
+- nový přebroušený
+- použitý
+- ve výrobě
+- na broušení
+- rezervováno
+- nadnormativa
+
+Klik na řádek otevře detail položky. V detailu budou hlavní akce: `Výdej`, `Návrat z výroby`, `Příjem / naskladnění`, `Nastavení položky`, `Rezervovat`, `Nadnormativa`, `Vytvořit objednávku` a `Historie pohybů`.
+
+Detail musí mít akce `Zavřít` a `Vrátit zpět na řádkový seznam`, aby se uživatel rychle vrátil do přehledu skladu.
+
+Vyhledání položky má být centrální. Budoucí cílový tok má kombinovat hledání v GSS skladu, hledání v GPC a později GINA / AI dotazy typu `Najdi vrták průměr 10`, `Najdi APKX` nebo `Najdi frézu 4 zuby D10`.
+
+V této etapě se celé UI nepřepisuje. Přidává se pouze poznámka do MVP UI a dokumentační ukotvení cílového směru.
