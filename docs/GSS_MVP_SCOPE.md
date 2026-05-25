@@ -1651,3 +1651,101 @@ Vyhledání položky má být centrální. Jeden vstup má postupně umět hleda
 - `Najdi frézu 4 zuby D10`
 
 V MVP se celé UI zatím nepřepisuje. Tento zápis pouze ukotvuje cílový směr před budoucí komponentizací a redesignem skladové části.
+
+## DM Foundation MVP
+
+DM tracking patří do GSS, ne do GPC. GPC říká, co je produkt. GSS + DM říká, kde je konkrétní fyzický kus, v jakém je stavu, co se s ním stalo a jaké má aktuální provozní parametry.
+
+Tenant skladová položka může mít `dmItems[]`. Každý DM kus eviduje:
+
+- `id`
+- `dmCode`
+- `itemId`
+- `gpc_id`, pokud existuje
+- `origin`: `GPC` nebo `LOCAL`
+- `status`: `new`, `resharpened_new`, `used`, `production`, `sharpening`, `in_grinding_shop`, `reserved`, `blocked`, `scrapped`
+- `location`: `main_warehouse`, `production`, `sharpening_collection`, `grinding_shop`, `black_box`, `unknown`
+- `currentDiameter`
+- `currentLength`
+- `sharpeningCount`
+- `maxSharpeningCount`
+- `lastServiceAt`
+- `lastMeasuredAt`
+- `lastMeasurementProtocol`
+- `serviceNote`
+- `coating`
+- `drawingUrl`
+- `blockedReason`
+- `reservedForOrder`
+- `history[]`
+
+Pokud je u položky zapnutý DM tracking, GSS zobrazí sekci `DM kusy`. Pokud žádné kusy neexistují, zobrazí empty state `Zatím nejsou vytvořené žádné DM kusy.`
+
+MVP umožňuje digitálně vytvořit DM kusy bez tisku fyzických štítků. Uživatel zadá počet kusů, stav, výchozí průměr, výchozí délku, max počet přebroušení a umístění. Systém automaticky vytvoří unikátní DM kódy v rámci tenant skladu a zapíše `movementHistory` typ `dm_items_created`.
+
+Formát DM kódu je:
+
+`PREFIX-GID-DMSEQ`
+
+Příklad:
+
+`AH01-000045872-001`
+
+Pravidla:
+
+- `PREFIX` je zákaznický prefix organizace
+- `GID` je Gogrou ID položky v pevné délce 9 číslic
+- `DMSEQ` je pořadové číslo konkrétního kusu u zákazníka v pevné délce 3 číslice
+- DM kód musí být unikátní v rámci tenant organizace
+- DM kód se po broušení nikdy nemění
+- změněné rozměry po broušení se zapisují ke konkrétnímu DM kusu
+- vyřazené DM kusy zůstávají v historii
+- znovupoužití pořadového čísla se zatím neimplementuje
+- pokud položka nemá GID, použije se dočasný lokální GID / local item ID
+
+DM detail zobrazuje:
+
+- DM kód
+- název položky
+- GPC ID / lokální položku
+- výrobce
+- typ
+- aktuální průměr
+- aktuální délku
+- počet přebroušení
+- max počet přebroušení
+- povlak
+- výkres / odkaz na výkres
+- stav
+- umístění
+- blokaci
+- poznámku
+- poslední servis
+- historii DM kusu
+
+Po načtení DM kódu má zákazník okamžitě vidět aktuální hodnoty po ostření, například `MTTM MAXLIFE D=11,83 mm, L=24,73 mm`.
+
+DM detail v MVP umožňuje akci `Zapsat servis / změnit parametry`. Uživatel nebo servisní partner může ručně zapsat nový aktuální průměr, novou aktuální délku, počet přebroušení, povlak, poznámku k servisu, měřicí protokol / odkaz, kdo servis provedl a datum servisu. Po uložení se DM kus nastaví na `resharpened_new`, umístění `main_warehouse` a vznikne `movementHistory` typ `dm_service_updated`.
+
+M-technologies / Gogrou je výchozí servisní autorita. Servisní partner může po načtení DM kódu otevřít servisní pohled konkrétního nástroje zákazníka a zapsat aktuální parametry po broušení. GPC master data se nemění; mění se pouze tenant provozní data konkrétního DM kusu v GSS.
+
+Pokud chce zákazník povolit jinou brusírnu jako servisního partnera, bude to později placená autorizační služba. Platit může zákazník i externí brusírna podle budoucího obchodního modelu. Detailní fee model není součástí MVP.
+
+M-technologies může po změření na Helicheku generovat měřicí protokol. Do budoucna může měřicí zařízení poslat data přímo do Gogrou a systém podle DM kódu zapíše konkrétní hodnoty, například průměr, délku a další měřené parametry podle typu nástroje. V MVP je pouze pole `měřicí protokol / odkaz` a ruční zadání hodnot.
+
+Aktuální hodnoty DM kusu bude možné později exportovat mimo Gogrou pro rychlé nahrání korekcí do stroje, podklad pro programátora nebo servisní report. V MVP je export pouze placeholder.
+
+Pokud je DM kus `blocked`, detail výrazně zobrazí `Tento kus je blokovaný` a důvod blokace. Blokovaný kus nesmí být vydán do výroby.
+
+Pokud `sharpeningCount >= maxSharpeningCount`, GSS zobrazí varování `Tento nástroj dosáhl limitu přebroušení. Doporučeno vyřadit.` Automatické vyřazení není součástí MVP.
+
+DM umožňuje:
+
+- evidovat konkrétní fyzický kus
+- sledovat aktuální rozměry po broušení
+- rezervovat konkrétní kus
+- vést servisní historii
+- připravit integraci měřicích zařízení
+- připravit export hodnot do výroby
+
+V MVP se neřeší fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth ani export do CNC / strojů.

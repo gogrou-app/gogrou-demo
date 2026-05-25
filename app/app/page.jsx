@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "gogrou_organizations";
+const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
 
 const MODULES = {
   GSS: {
@@ -50,6 +51,8 @@ const BILLING_STATUS_LABELS = {
 
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
+const getOrganizationId = (organization) => organization?.organizationId || organization?.id || "";
+
 const readOrganizations = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -87,15 +90,34 @@ const getModuleState = (organization) => {
 };
 
 export default function GogrouAppPage() {
+  const [organizations, setOrganizations] = useState([]);
   const [organization, setOrganization] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [placeholderModule, setPlaceholderModule] = useState("");
 
   useEffect(() => {
-    const organizations = readOrganizations();
-    setOrganization(organizations[0] || null);
+    const storedOrganizations = readOrganizations();
+    const storedActiveOrganizationId = localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
+    const activeOrganization = storedOrganizations.find((item) => getOrganizationId(item) === storedActiveOrganizationId) || storedOrganizations[0] || null;
+    const activeOrganizationId = getOrganizationId(activeOrganization);
+
+    setOrganizations(storedOrganizations);
+    setOrganization(activeOrganization);
+    if (activeOrganizationId) {
+      localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, activeOrganizationId);
+    }
     setLoaded(true);
   }, []);
+
+  const changeActiveOrganization = (organizationId) => {
+    const nextOrganization = organizations.find((item) => getOrganizationId(item) === organizationId) || null;
+
+    setOrganization(nextOrganization);
+    setPlaceholderModule("");
+    if (organizationId) {
+      localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
+    }
+  };
 
   if (!loaded) {
     return (
@@ -126,11 +148,27 @@ export default function GogrouAppPage() {
     <div style={wrap}>
       <h1 style={title}>Gogrou</h1>
       <div style={lead}>
-        Zákaznický tenant shell. V MVP se jako aktuální tenant používá první organizace z `gogrou_organizations`.
+        Zákaznický tenant shell. V MVP lze aktivní organizaci přepnout lokálně pro testování více firem.
       </div>
 
       <div style={box}>
         <h2 style={subtitle}>Organizace</h2>
+        {organizations.length > 1 ? (
+          <label style={fieldLabel}>
+            Aktivní organizace
+            <select
+              value={getOrganizationId(organization)}
+              onChange={(event) => changeActiveOrganization(event.target.value)}
+              style={select}
+            >
+              {organizations.map((item) => (
+                <option key={getOrganizationId(item)} value={getOrganizationId(item)}>
+                  {item.name || "Organizace bez názvu"} {item.prefix ? `(${item.prefix})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div style={summaryGrid}>
           <div style={summaryItem}>
             <div style={summaryLabel}>Název</div>
@@ -255,6 +293,26 @@ const summaryGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 10,
+};
+
+const fieldLabel = {
+  display: "grid",
+  gap: 6,
+  maxWidth: 420,
+  marginBottom: 14,
+  fontSize: 12,
+  fontWeight: 800,
+  color: "rgba(255,255,255,0.82)",
+};
+
+const select = {
+  width: "100%",
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 8,
+  background: "#090909",
+  color: "#fff",
+  padding: "10px 12px",
+  fontSize: 14,
 };
 
 const summaryItem = {

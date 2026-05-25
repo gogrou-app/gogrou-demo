@@ -23,13 +23,15 @@ import {
 import { getOrganizations as readOrganizations, getTenantWarehouse as readWarehouse, saveTenantWarehouse as writeWarehouse } from "../../../lib/gss/storage.js";
 import { createEmptyStockSummary, getPrimaryStockState, normalizeStockSummary } from "../../../lib/gss/stock.js";
 
+const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
+
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
 const formatModules = (modules) =>
   (modules && modules.length > 0 ? modules : []).map((module) => labelFromMap(MODULE_LABELS, module)).join(", ") || "žádné";
 
 const countDmItems = (items) =>
-  items.filter((item) => item.tenantSettings?.dmEnabled || item.dmTracking || item.dm_mode || item.dmPieces || item.dmCode).length;
+  items.reduce((total, item) => total + (item.dmItems?.length || 0), 0);
 
 const normalizeSearch = (value) => String(value || "").toLowerCase().trim();
 
@@ -175,7 +177,52 @@ const createSettingsForm = (item) => ({
 
 const getItemKey = (item) => item.id || item.gpc_id || item.name;
 
+const getOrganizationId = (organization) => organization?.organizationId || organization?.id || "";
+
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
+
+const DM_STATUS_LABELS = {
+  new: "Nový",
+  resharpened_new: "Nový přebroušený",
+  used: "Použitý",
+  production: "Ve výrobě",
+  sharpening: "Na broušení",
+  in_grinding_shop: "V brusírně",
+  reserved: "Rezervovaný",
+  blocked: "Blokovaný",
+  scrapped: "Vyřazený",
+};
+
+const DM_LOCATION_LABELS = {
+  main_warehouse: "Hlavní sklad",
+  production: "Výroba",
+  sharpening_collection: "Sběr na broušení",
+  grinding_shop: "Brusírna",
+  black_box: "Černá bedýnka",
+  unknown: "Neznámé",
+};
+
+const DM_CREATE_STATUS_OPTIONS = ["new", "resharpened_new", "used"];
+
+const createDmForm = () => ({
+  quantity: "",
+  status: "new",
+  currentDiameter: "",
+  currentLength: "",
+  maxSharpeningCount: "",
+  location: "main_warehouse",
+});
+
+const createDmServiceForm = (dmItem = {}) => ({
+  currentDiameter: dmItem.currentDiameter || "",
+  currentLength: dmItem.currentLength || "",
+  sharpeningCount: dmItem.sharpeningCount ?? "",
+  coating: dmItem.coating || "",
+  serviceNote: dmItem.serviceNote || "",
+  lastMeasurementProtocol: dmItem.lastMeasurementProtocol || "",
+  serviceProvider: "M-technologies",
+  serviceDate: getTodayDate(),
+});
 
 const createStockForm = () => ({
   quantity: "",
@@ -296,6 +343,81 @@ const releaseLegacyOverstockReservation = (stock, overstockReserved) => {
   };
 };
 
+const getAllDmCodes = (items) => new Set(
+  items.flatMap((item) => (item.dmItems || []).map((dmItem) => dmItem.dmCode))
+);
+
+const getDmGid = (item) => {
+  const source = item.gogrouId || item.gid || item.gpcNumericId || item.gpc_id || item.localFields?.internalCode || item.id || item.name || "0";
+  const digits = String(source).replace(/\D/g, "");
+
+  if (digits) {
+    return digits.slice(-9).padStart(9, "0");
+  }
+
+  let hash = 0;
+  String(source).split("").forEach((char) => {
+    hash = (hash * 31 + char.charCodeAt(0)) % 1000000000;
+  });
+
+  return String(hash || 1).padStart(9, "0");
+};
+
+const getDmPrefix = (organization) => {
+  const prefix = String(organization?.prefix || "GG00").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return prefix || "GG00";
+};
+
+const getNextDmSequence = (items, prefix, gid) => {
+  const pattern = new RegExp(`^${prefix}-${gid}-(\\d{3})$`);
+  const maxSequence = items
+    .flatMap((item) => item.dmItems || [])
+    .reduce((max, dmItem) => {
+      const match = String(dmItem.dmCode || "").match(pattern);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+
+  return maxSequence + 1;
+};
+
+const generateDmCode = ({ existingCodes, prefix, gid, sequence }) => {
+  let nextSequence = sequence;
+  let code = `${prefix}-${gid}-${String(nextSequence).padStart(3, "0")}`;
+
+  while (existingCodes.has(code)) {
+    nextSequence += 1;
+    code = `${prefix}-${gid}-${String(nextSequence).padStart(3, "0")}`;
+  }
+
+  existingCodes.add(code);
+  return { code, nextSequence: nextSequence + 1 };
+};
+
+const createDmHistoryRecord = ({ type, note, performedBy = DEFAULT_INTAKE_OPERATOR, metadata = {} }) => ({
+  id: crypto.randomUUID(),
+  createdAt: new Date().toISOString(),
+  type,
+  performedBy,
+  note: note || "",
+  metadata,
+});
+
+const findDmItemInWarehouse = (items, dmCode) => {
+  const normalizedCode = normalizeSearch(dmCode);
+  if (!normalizedCode) {
+    return null;
+  }
+
+  for (const item of items) {
+    const dmItem = (item.dmItems || []).find((candidate) => normalizeSearch(candidate.dmCode) === normalizedCode);
+    if (dmItem) {
+      return { item, dmItem };
+    }
+  }
+
+  return null;
+};
+
 const parsePositiveNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -348,6 +470,141 @@ const createPurchaseProposalItem = (item) => {
   };
 };
 
+function DmDetailContent({
+  item,
+  dmItem,
+  dmServiceForm,
+  dmServiceMessage,
+  onUpdateServiceForm,
+  onSaveService,
+  onClose,
+  onPlaceholder,
+}) {
+  const maxSharpeningCount = dmItem.maxSharpeningCount ?? item.tenantSettings?.sharpen?.cycles;
+  const hasSharpeningLimit = maxSharpeningCount !== "" && maxSharpeningCount !== null && maxSharpeningCount !== undefined;
+  const reachedSharpeningLimit = hasSharpeningLimit && Number(dmItem.sharpeningCount || 0) >= Number(maxSharpeningCount);
+  const displayDiameter = dmItem.currentDiameter || "neuvedeno";
+  const displayLength = dmItem.currentLength || "neuvedeno";
+
+  return (
+    <div style={settingsPanel}>
+      <div style={dmHeader}>
+        <div>
+          <div style={settingsTitle}>{dmItem.dmCode}</div>
+          <div style={resultTitle}>
+            {item.name || item.gpc_id || "Položka"} D={displayDiameter} mm, L={displayLength} mm
+          </div>
+          <div style={meta}>
+            {item.type || "Typ neuveden"} · {item.manufacturer || "Výrobce neuveden"} · {item.gpc_id ? `GPC ID: ${item.gpc_id}` : "Lokální položka"}
+          </div>
+        </div>
+        <div style={badge}>{labelFromMap(DM_STATUS_LABELS, dmItem.status)}</div>
+      </div>
+
+      {dmItem.status === "blocked" || dmItem.blockedReason ? (
+        <div style={errorMessage}>
+          Tento kus je blokovaný. {dmItem.blockedReason ? `Důvod: ${dmItem.blockedReason}` : ""}
+        </div>
+      ) : null}
+      {reachedSharpeningLimit ? (
+        <div style={errorMessage}>Tento nástroj dosáhl limitu přebroušení. Doporučeno vyřadit.</div>
+      ) : null}
+
+      <div style={summaryGrid}>
+        <div style={summaryItem}>
+          <div style={summaryLabel}>Aktuální průměr</div>
+          <div style={summaryValue}>{displayDiameter}</div>
+        </div>
+        <div style={summaryItem}>
+          <div style={summaryLabel}>Aktuální délka</div>
+          <div style={summaryValue}>{displayLength}</div>
+        </div>
+        <div style={summaryItem}>
+          <div style={summaryLabel}>Přebroušení</div>
+          <div style={summaryValue}>{dmItem.sharpeningCount ?? 0}/{maxSharpeningCount || "nenastaveno"}</div>
+        </div>
+        <div style={summaryItem}>
+          <div style={summaryLabel}>Umístění</div>
+          <div style={summaryValue}>{labelFromMap(DM_LOCATION_LABELS, dmItem.location)}</div>
+        </div>
+      </div>
+
+      <div style={stateBreakdown}>
+        <span>Povlak: {dmItem.coating || "neuvedeno"}</span>
+        <span>Výkres: {dmItem.drawingUrl || "neuvedeno"}</span>
+        <span>Rezervace: {dmItem.reservedForOrder || "ne"}</span>
+        <span>Poslední servis: {dmItem.lastServiceAt || "neuvedeno"}</span>
+      </div>
+      {dmItem.serviceNote ? <div style={offerInfo}>{dmItem.serviceNote}</div> : null}
+
+      <div style={hintBox}>
+        Zákazník po načtení DM okamžitě vidí aktuální hodnoty po ostření. GPC master data se nemění.
+      </div>
+
+      <form onSubmit={onSaveService} style={formBox}>
+        <div style={settingsTitle}>Zapsat servis / změnit parametry</div>
+        <div style={formGrid}>
+          <label style={fieldLabel}>
+            Nový aktuální průměr
+            <input value={dmServiceForm.currentDiameter} onChange={(event) => onUpdateServiceForm("currentDiameter", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Nová aktuální délka
+            <input value={dmServiceForm.currentLength} onChange={(event) => onUpdateServiceForm("currentLength", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Počet přebroušení
+            <input type="number" min="0" value={dmServiceForm.sharpeningCount} onChange={(event) => onUpdateServiceForm("sharpeningCount", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Povlak
+            <input value={dmServiceForm.coating} onChange={(event) => onUpdateServiceForm("coating", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Měřicí protokol / odkaz
+            <input value={dmServiceForm.lastMeasurementProtocol} onChange={(event) => onUpdateServiceForm("lastMeasurementProtocol", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Servis provedl
+            <input value={dmServiceForm.serviceProvider} onChange={(event) => onUpdateServiceForm("serviceProvider", event.target.value)} style={input} />
+          </label>
+          <label style={fieldLabel}>
+            Datum servisu
+            <input type="date" value={dmServiceForm.serviceDate} onChange={(event) => onUpdateServiceForm("serviceDate", event.target.value)} style={input} />
+          </label>
+        </div>
+        <label style={fieldLabel}>
+          Poznámka k servisu
+          <textarea value={dmServiceForm.serviceNote} onChange={(event) => onUpdateServiceForm("serviceNote", event.target.value)} style={textarea} />
+        </label>
+        {dmServiceMessage ? <div style={message}>{dmServiceMessage}</div> : null}
+        <div style={actions}>
+          <button type="submit" style={btnImport}>Uložit servisní parametry</button>
+          <button type="button" onClick={onPlaceholder} style={btnSecondary}>Připravuje se: exportovat aktuální parametry</button>
+          <button type="button" onClick={onClose} style={btnSecondary}>Zavřít detail</button>
+        </div>
+      </form>
+
+      <div style={historyPanel}>
+        <div style={settingsTitle}>Historie DM kusu</div>
+        {dmItem.history?.length ? (
+          <div style={historyList}>
+            {dmItem.history.slice(0, 10).map((history) => (
+              <div key={history.id} style={historyItem}>
+                <div style={historyTitle}>{history.type} · {formatMovementDate(history.createdAt)}</div>
+                <div style={meta}>Provedl {history.performedBy || "neuvedeno"}</div>
+                {history.note ? <div style={meta}>{history.note}</div> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={muted}>Zatím bez DM historie.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AppGssPage() {
   const warehouseSectionRef = useRef(null);
   const localItemSectionRef = useRef(null);
@@ -366,6 +623,14 @@ export default function AppGssPage() {
   const [stockItemKey, setStockItemKey] = useState("");
   const [stockForm, setStockForm] = useState(createStockForm());
   const [stockMessage, setStockMessage] = useState("");
+  const [dmFormItemKey, setDmFormItemKey] = useState("");
+  const [dmForm, setDmForm] = useState(createDmForm());
+  const [dmMessage, setDmMessage] = useState("");
+  const [dmCodeQuery, setDmCodeQuery] = useState("");
+  const [dmSearchMessage, setDmSearchMessage] = useState("");
+  const [selectedDmDetail, setSelectedDmDetail] = useState(null);
+  const [dmServiceForm, setDmServiceForm] = useState(createDmServiceForm());
+  const [dmServiceMessage, setDmServiceMessage] = useState("");
   const [reservationItemKey, setReservationItemKey] = useState("");
   const [reservationForm, setReservationForm] = useState(createReservationForm());
   const [reservationMessage, setReservationMessage] = useState("");
@@ -390,11 +655,15 @@ export default function AppGssPage() {
 
   useEffect(() => {
     const organizations = readOrganizations();
-    const activeOrganization = organizations[0] || null;
-    const organizationId = activeOrganization?.organizationId || activeOrganization?.id;
+    const activeOrganizationId = localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
+    const activeOrganization = organizations.find((item) => getOrganizationId(item) === activeOrganizationId) || organizations[0] || null;
+    const organizationId = getOrganizationId(activeOrganization);
 
     setOrganization(activeOrganization);
     setWarehouseItems(organizationId ? readWarehouse(organizationId) : []);
+    if (organizationId) {
+      localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
+    }
     setLoaded(true);
   }, []);
 
@@ -418,7 +687,7 @@ export default function AppGssPage() {
     );
   }
 
-  const organizationId = organization.organizationId || organization.id;
+  const organizationId = getOrganizationId(organization);
   const activeModules = organization.activatedModules || organization.selectedModules || [];
   const hasGssModule = activeModules.includes("GSS");
   const dmItemCount = countDmItems(warehouseItems);
@@ -453,6 +722,7 @@ export default function AppGssPage() {
   const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
   const movementHistory = collectMovementHistory(warehouseItems);
   const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
+  const selectedDmContext = selectedDmDetail ? findDmItemInWarehouse(warehouseItems, selectedDmDetail.dmCode) : null;
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -915,6 +1185,256 @@ export default function AppGssPage() {
     setPlaceholderMessage("Tato funkce bude doplněna v další fázi.");
   };
 
+  const openDmForm = (item) => {
+    setDmFormItemKey(getItemKey(item));
+    setDmForm(createDmForm());
+    setDmMessage("");
+  };
+
+  const updateDmForm = (field, value) => {
+    setDmForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setDmMessage("");
+  };
+
+  const openDmDetail = (item, dmItem) => {
+    setSelectedDmDetail({
+      itemId: getItemKey(item),
+      dmCode: dmItem.dmCode,
+    });
+    setDmServiceForm(createDmServiceForm(dmItem));
+    setDmServiceMessage("");
+    setDmSearchMessage("");
+  };
+
+  const closeDmDetail = () => {
+    setSelectedDmDetail(null);
+    setDmServiceForm(createDmServiceForm());
+    setDmServiceMessage("");
+  };
+
+  const updateDmServiceForm = (field, value) => {
+    setDmServiceForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setDmServiceMessage("");
+  };
+
+  const createDmItems = (event) => {
+    event.preventDefault();
+
+    const selectedItem = warehouseItems.find((item) => getItemKey(item) === dmFormItemKey);
+    if (!selectedItem) {
+      setDmMessage("Vyberte položku pro vytvoření DM kusů.");
+      return;
+    }
+
+    const quantity = Number(dmForm.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setDmMessage("Zadejte kladný počet DM kusů.");
+      return;
+    }
+
+    const existingCodes = getAllDmCodes(warehouseItems);
+    const dmPrefix = getDmPrefix(organization);
+    const dmGid = getDmGid(selectedItem);
+    let nextDmSequence = getNextDmSequence(warehouseItems, dmPrefix, dmGid);
+    const now = new Date().toISOString();
+    const maxSharpeningCount = dmForm.maxSharpeningCount.trim() ? Number(dmForm.maxSharpeningCount) : null;
+    const newDmItems = Array.from({ length: quantity }, () => {
+      const generated = generateDmCode({
+        existingCodes,
+        prefix: dmPrefix,
+        gid: dmGid,
+        sequence: nextDmSequence,
+      });
+      nextDmSequence = generated.nextSequence;
+      const dmCode = generated.code;
+
+      return {
+        id: crypto.randomUUID(),
+        dmCode,
+        itemId: getItemKey(selectedItem),
+        gid: dmGid,
+        sequence: Number(dmCode.slice(-3)),
+        gpc_id: selectedItem.gpc_id || "",
+        origin: selectedItem.origin || "LOCAL",
+        status: dmForm.status,
+        location: dmForm.location || "main_warehouse",
+        currentDiameter: dmForm.currentDiameter.trim(),
+        currentLength: dmForm.currentLength.trim(),
+        sharpeningCount: 0,
+        maxSharpeningCount,
+        lastServiceAt: "",
+        lastMeasuredAt: "",
+        lastMeasurementProtocol: "",
+        serviceNote: "",
+        coating: selectedItem.tenantSettings?.coatingNote || "",
+        drawingUrl: selectedItem.tenantSettings?.drawingReference || "",
+        blockedReason: "",
+        reservedForOrder: "",
+        history: [
+          createDmHistoryRecord({
+            type: "dm_created",
+            note: "DM kus vytvořen v GSS MVP.",
+            metadata: {
+              status: dmForm.status,
+              location: dmForm.location,
+              currentDiameter: dmForm.currentDiameter.trim(),
+              currentLength: dmForm.currentLength.trim(),
+            },
+          }),
+        ],
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== dmFormItemKey) {
+        return item;
+      }
+
+      const nextItem = {
+        ...item,
+        dmItems: [...(item.dmItems || []), ...newDmItems],
+        updatedAt: now,
+      };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: "dm_items_created",
+        quantity,
+        state: dmForm.status,
+        performedBy: DEFAULT_INTAKE_OPERATOR,
+        note: "Vytvořeny digitální DM kusy.",
+        metadata: {
+          dmCodes: newDmItems.map((dmItem) => dmItem.dmCode),
+          location: dmForm.location,
+          currentDiameter: dmForm.currentDiameter.trim(),
+          currentLength: dmForm.currentLength.trim(),
+          maxSharpeningCount,
+          dmPrefix,
+          gid: dmGid,
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setDmForm(createDmForm());
+    setDmMessage(`Vytvořeno ${quantity} DM kusů.`);
+  };
+
+  const searchDmCode = () => {
+    const found = findDmItemInWarehouse(warehouseItems, dmCodeQuery);
+    if (!found) {
+      setDmSearchMessage("DM kód nebyl nalezen.");
+      return;
+    }
+
+    openDmDetail(found.item, found.dmItem);
+    setDmSearchMessage("DM kus byl nalezen.");
+  };
+
+  const saveDmService = (event) => {
+    event.preventDefault();
+
+    if (!selectedDmDetail) {
+      setDmServiceMessage("Vyberte DM kus.");
+      return;
+    }
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== selectedDmDetail.itemId) {
+        return item;
+      }
+
+      const currentDmItem = (item.dmItems || []).find((dmItem) => dmItem.dmCode === selectedDmDetail.dmCode);
+      if (!currentDmItem) {
+        return item;
+      }
+
+      const sharpeningCount = dmServiceForm.sharpeningCount === "" ? currentDmItem.sharpeningCount : Number(dmServiceForm.sharpeningCount);
+      const serviceDate = dmServiceForm.serviceDate || getTodayDate();
+      const serviceProvider = dmServiceForm.serviceProvider.trim() || DEFAULT_GRINDER;
+      const historyRecord = createDmHistoryRecord({
+        type: "dm_service_updated",
+        performedBy: serviceProvider,
+        note: dmServiceForm.serviceNote.trim(),
+        metadata: {
+          previousDiameter: currentDmItem.currentDiameter,
+          previousLength: currentDmItem.currentLength,
+          currentDiameter: dmServiceForm.currentDiameter.trim(),
+          currentLength: dmServiceForm.currentLength.trim(),
+          sharpeningCount,
+          coating: dmServiceForm.coating.trim(),
+          measurementProtocol: dmServiceForm.lastMeasurementProtocol.trim(),
+          serviceDate,
+        },
+      });
+
+      const nextDmItems = (item.dmItems || []).map((dmItem) => {
+        if (dmItem.dmCode !== selectedDmDetail.dmCode) {
+          return dmItem;
+        }
+
+        return {
+          ...dmItem,
+          currentDiameter: dmServiceForm.currentDiameter.trim(),
+          currentLength: dmServiceForm.currentLength.trim(),
+          sharpeningCount,
+          coating: dmServiceForm.coating.trim(),
+          serviceNote: dmServiceForm.serviceNote.trim(),
+          lastServiceAt: serviceDate,
+          lastMeasuredAt: serviceDate,
+          lastMeasurementProtocol: dmServiceForm.lastMeasurementProtocol.trim(),
+          status: "resharpened_new",
+          location: "main_warehouse",
+          history: [historyRecord, ...(dmItem.history || [])].slice(0, 100),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      const nextItem = {
+        ...item,
+        dmItems: nextDmItems,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return appendMovement(nextItem, createMovementRecord({
+        organizationId,
+        item,
+        type: "dm_service_updated",
+        quantity: 1,
+        state: "resharpened_new",
+        performedBy: serviceProvider,
+        note: dmServiceForm.serviceNote.trim(),
+        metadata: {
+          dmCode: selectedDmDetail.dmCode,
+          currentDiameter: dmServiceForm.currentDiameter.trim(),
+          currentLength: dmServiceForm.currentLength.trim(),
+          sharpeningCount,
+          coating: dmServiceForm.coating.trim(),
+          measurementProtocol: dmServiceForm.lastMeasurementProtocol.trim(),
+          serviceDate,
+        },
+      }));
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    const updated = findDmItemInWarehouse(nextItems, selectedDmDetail.dmCode);
+    if (updated) {
+      setDmServiceForm(createDmServiceForm(updated.dmItem));
+    }
+    setDmServiceMessage("Servisní parametry DM kusu byly uloženy.");
+  };
+
   const receiveStock = (event) => {
     event.preventDefault();
 
@@ -1306,7 +1826,7 @@ export default function AppGssPage() {
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
       <div style={lead}>
-        Tenant-aware GSS vstup pro aktuální organizaci. V MVP se aktivní tenant bere jako první organizace z `gogrou_organizations`.
+        Tenant-aware GSS vstup pro aktuální organizaci. V MVP se aktivní tenant bere z `activeOrganizationId`, s fallbackem na první organizaci z `gogrou_organizations`.
       </div>
 
       <div style={box}>
@@ -1956,6 +2476,50 @@ export default function AppGssPage() {
             ) : null}
           </div>
 
+          <div style={box}>
+            <h2 style={subtitle}>Načíst DM kód</h2>
+            <div style={hintBox}>
+              Ruční MVP vstup pro DM kód. Později bude napojený na čtečku a automaticky otevře konkrétní kus.
+            </div>
+            <div style={formGrid}>
+              <label style={fieldLabel}>
+                DM kód
+                <input
+                  value={dmCodeQuery}
+                  onChange={(event) => {
+                    setDmCodeQuery(event.target.value);
+                    setDmSearchMessage("");
+                  }}
+                  placeholder="např. AH01-000045872-001"
+                  style={input}
+                />
+              </label>
+            </div>
+            {dmSearchMessage ? <div style={dmSearchMessage.includes("nalezen") ? message : errorMessage}>{dmSearchMessage}</div> : null}
+            <div style={actions}>
+              <button type="button" onClick={searchDmCode} style={btnImport}>Vyhledat DM</button>
+            </div>
+            <div style={offerInfo}>
+              M-technologies / Gogrou servisní přístup je v MVP připraven jako princip: servisní partner načte DM kód a pracuje pouze s tenant provozními daty konkrétního kusu.
+            </div>
+          </div>
+
+          {selectedDmContext ? (
+            <div style={box}>
+              <h2 style={subtitle}>DM detail</h2>
+              <DmDetailContent
+                item={selectedDmContext.item}
+                dmItem={selectedDmContext.dmItem}
+                dmServiceForm={dmServiceForm}
+                dmServiceMessage={dmServiceMessage}
+                onUpdateServiceForm={updateDmServiceForm}
+                onSaveService={saveDmService}
+                onClose={closeDmDetail}
+                onPlaceholder={showPlaceholder}
+              />
+            </div>
+          ) : null}
+
           <div ref={warehouseSectionRef} style={warehouseHighlighted ? highlightedBox : box}>
             <h2 style={subtitle}>Tenant skladové položky</h2>
             <div style={offerInfo}>
@@ -2065,6 +2629,96 @@ export default function AppGssPage() {
                         <button type="button" onClick={() => openOverstockForm(item)} style={btnSecondary}>Nadnormativa</button>
                         <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: detail</button>
                       </div>
+                      {item.tenantSettings?.dmEnabled ? (
+                        <div style={historyPanel}>
+                          <div style={settingsTitle}>DM kusy</div>
+                          {(item.dmItems || []).length === 0 ? (
+                            <div style={muted}>Zatím nejsou vytvořené žádné DM kusy.</div>
+                          ) : (
+                            <div style={historyList}>
+                              {(item.dmItems || []).map((dmItem) => (
+                                <div key={dmItem.id || dmItem.dmCode} style={historyItem}>
+                                  <div style={historyTitle}>{dmItem.dmCode}</div>
+                                  <div style={meta}>
+                                    Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)} · Umístění: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)}
+                                  </div>
+                                  <div style={meta}>
+                                    D {dmItem.currentDiameter || "neuvedeno"} · L {dmItem.currentLength || "neuvedeno"} · přebroušení {dmItem.sharpeningCount ?? 0}/{dmItem.maxSharpeningCount ?? "nenastaveno"}
+                                  </div>
+                                  <div style={meta}>
+                                    Blokace: {dmItem.status === "blocked" || dmItem.blockedReason ? "ano" : "ne"} · Rezervace: {dmItem.reservedForOrder || "ne"} · poslední servis: {dmItem.lastServiceAt || "neuvedeno"}
+                                  </div>
+                                  <button type="button" onClick={() => openDmDetail(item, dmItem)} style={btnSecondary}>Otevřít DM detail</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={actions}>
+                            <button type="button" onClick={() => openDmForm(item)} style={btnSecondary}>Vytvořit DM kusy</button>
+                          </div>
+                          {dmFormItemKey === getItemKey(item) ? (
+                            <form onSubmit={createDmItems} style={settingsPanel}>
+                              <div style={settingsTitle}>Vytvořit DM kusy</div>
+                              <div style={formGrid}>
+                                <label style={fieldLabel}>
+                                  Počet kusů
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={dmForm.quantity}
+                                    onChange={(event) => updateDmForm("quantity", event.target.value)}
+                                    style={input}
+                                  />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Stav
+                                  <select value={dmForm.status} onChange={(event) => updateDmForm("status", event.target.value)} style={input}>
+                                    {DM_CREATE_STATUS_OPTIONS.map((status) => (
+                                      <option key={status} value={status}>{labelFromMap(DM_STATUS_LABELS, status)}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label style={fieldLabel}>
+                                  Výchozí průměr
+                                  <input value={dmForm.currentDiameter} onChange={(event) => updateDmForm("currentDiameter", event.target.value)} style={input} />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Výchozí délka
+                                  <input value={dmForm.currentLength} onChange={(event) => updateDmForm("currentLength", event.target.value)} style={input} />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Max počet přebroušení
+                                  <input type="number" min="0" value={dmForm.maxSharpeningCount} onChange={(event) => updateDmForm("maxSharpeningCount", event.target.value)} style={input} />
+                                </label>
+                                <label style={fieldLabel}>
+                                  Umístění
+                                  <select value={dmForm.location} onChange={(event) => updateDmForm("location", event.target.value)} style={input}>
+                                    <option value="main_warehouse">Hlavní sklad</option>
+                                    <option value="production">Výroba</option>
+                                    <option value="sharpening_collection">Sběr na broušení</option>
+                                    <option value="unknown">Neznámé</option>
+                                  </select>
+                                </label>
+                              </div>
+                              {dmMessage ? <div style={dmMessage.includes("Vytvořeno") ? message : errorMessage}>{dmMessage}</div> : null}
+                              <div style={actions}>
+                                <button type="submit" style={btnImport}>Vytvořit DM kusy</button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDmFormItemKey("");
+                                    setDmForm(createDmForm());
+                                    setDmMessage("");
+                                  }}
+                                  style={btnSecondary}
+                                >
+                                  Zavřít
+                                </button>
+                              </div>
+                            </form>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {stockItemKey === getItemKey(item) ? (
                         <form onSubmit={receiveStock} style={settingsPanel}>
                           <div style={settingsTitle}>Naskladnit položku</div>
@@ -3037,6 +3691,14 @@ const settingsTitle = {
   fontSize: 14,
   fontWeight: 900,
   marginBottom: 8,
+};
+
+const dmHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  marginBottom: 12,
 };
 
 const historyPanel = {

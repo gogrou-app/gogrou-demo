@@ -1194,3 +1194,95 @@ Detail musí mít akce `Zavřít` a `Vrátit zpět na řádkový seznam`, aby se
 Vyhledání položky má být centrální. Budoucí cílový tok má kombinovat hledání v GSS skladu, hledání v GPC a později GINA / AI dotazy typu `Najdi vrták průměr 10`, `Najdi APKX` nebo `Najdi frézu 4 zuby D10`.
 
 V této etapě se celé UI nepřepisuje. Přidává se pouze poznámka do MVP UI a dokumentační ukotvení cílového směru.
+
+## DM Foundation MVP
+
+DM tracking je tenant provozní vrstva GSS. Nezasahuje do GPC master dat. GPC definuje produkt, zatímco DM v GSS definuje konkrétní fyzický kus, jeho stav, umístění, aktuální rozměry a servisní historii.
+
+Implementační základ:
+
+- tenant položka má volitelné `dmItems[]`
+- DM kus má unikátní `dmCode` v rámci tenant skladu
+- DM kus má vlastní `status`, `location`, aktuální rozměry a `history[]`
+- vytvoření DM kusů zapisuje provozní historii `dm_items_created`
+- servisní úprava DM kusu zapisuje `dm_service_updated`
+
+MVP formulář `Vytvořit DM kusy`:
+
+- počet kusů
+- stav: `new`, `resharpened_new`, `used`
+- výchozí průměr
+- výchozí délka
+- max počet přebroušení
+- umístění, default `main_warehouse`
+
+Systém generuje digitální DM kód ve formátu `PREFIX-GID-DMSEQ`, například `AH01-000045872-001`.
+
+Pravidla formátu:
+
+- `PREFIX` je zákaznický prefix organizace
+- `GID` je Gogrou ID položky v pevné délce 9 číslic
+- `DMSEQ` je pořadové číslo konkrétního kusu u zákazníka v pevné délce 3 číslice
+- DM kód je unikátní v rámci tenant organizace
+- DM kód se po broušení nikdy nemění
+- změněné rozměry po broušení se zapisují ke konkrétnímu DM kusu
+- vyřazené DM kusy zůstávají v historii
+- znovupoužití pořadového čísla se v MVP neimplementuje
+- pokud položka nemá GID, použije se dočasný lokální GID / local item ID
+
+Fyzický tisk štítků není součástí MVP.
+
+DM detail zobrazuje aktuální hodnoty konkrétního kusu. Důraz je na rychlou čitelnost po načtení kódu, například `MTTM MAXLIFE D=11,83 mm, L=24,73 mm`.
+
+MVP sekce `Načíst DM kód` používá textové pole a tlačítko `Vyhledat DM`. Později bude stejné místo napojené na čtečku, která automaticky otevře detail konkrétního kusu.
+
+Servisní zápis v DM detailu:
+
+- nový aktuální průměr
+- nová aktuální délka
+- počet přebroušení
+- povlak
+- poznámka k servisu
+- měřicí protokol / odkaz
+- servis provedl, default `M-technologies`
+- datum servisu
+
+Po uložení se aktualizuje DM kus:
+
+- `currentDiameter`
+- `currentLength`
+- `sharpeningCount`
+- `coating`
+- `serviceNote`
+- `lastServiceAt`
+- `lastMeasuredAt`
+- `lastMeasurementProtocol`
+- `status = resharpened_new`
+- `location = main_warehouse`
+
+M-technologies / Gogrou je výchozí servisní autorita zdarma. Servisní partner po načtení DM kódu otevře konkrétní nástroj zákazníka a zapíše aktuální parametry po broušení. Jiná brusírna jako servisní partner bude později řešená placenou autorizací; detailní fee model není součást MVP.
+
+Helichek / měřicí protokol:
+
+- M-technologies může po měření generovat protokol
+- později může měřicí zařízení posílat data přímo do Gogrou
+- systém podle DM kódu zapíše konkrétní hodnoty ke konkrétnímu kusu
+- v MVP se hodnoty i protokol zadávají ručně
+
+Blokovaný DM kus:
+
+- detail ukáže `Tento kus je blokovaný`
+- zobrazí důvod blokace
+- blokovaný kus nesmí být vydán do výroby
+
+Limit přebroušení:
+
+- pokud `sharpeningCount >= maxSharpeningCount`, UI zobrazí `Tento nástroj dosáhl limitu přebroušení. Doporučeno vyřadit.`
+- automatické vyřazení není součást MVP
+
+Export aktuálních hodnot:
+
+- v UI je pouze placeholder `Exportovat aktuální parametry`
+- budoucí cíle jsou korekce do stroje, podklad pro programátora a servisní report
+
+Mimo MVP zůstává fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth a export do CNC / strojů.
