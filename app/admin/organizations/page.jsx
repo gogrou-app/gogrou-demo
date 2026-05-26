@@ -103,7 +103,7 @@ export default function OrganizationsAdminPage() {
           <div style={empty}>Zatím není založena žádná organizace.</div>
         ) : (
           organizations.map((organization) => {
-            const organizationId = organization.organizationId || organization.id;
+            const organizationId = organization.id || organization.organizationId;
             const modules = organization.activatedModules || organization.selectedModules || [];
             const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
             const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
@@ -128,9 +128,12 @@ export default function OrganizationsAdminPage() {
                 </div>
 
                 <div style={controls}>
-                  <a href={`/admin/organizations/${encodeURIComponent(organizationId)}`} style={detailLink}>
-                    Otevřít detail firmy
-                  </a>
+                  <div style={detailAction}>
+                    <a href={`/admin/organizations/${encodeURIComponent(organizationId)}`} style={detailLink}>
+                      Otevřít detail firmy
+                    </a>
+                    <div style={detailIdHint}>URL ID: {organizationId || "chybí"}</div>
+                  </div>
 
                   <label style={controlLabel}>
                     Stav organizace
@@ -257,6 +260,19 @@ const detailLink = {
   fontWeight: 800,
   fontSize: 12,
   textDecoration: "none",
+};
+
+const detailAction = {
+  display: "inline-flex",
+  flexDirection: "column",
+  gap: 4,
+};
+
+const detailIdHint = {
+  fontSize: 10,
+  opacity: 0.5,
+  overflowWrap: "anywhere",
+  maxWidth: 260,
 };
 
 const controlLabel = {
