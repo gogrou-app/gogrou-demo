@@ -128,6 +128,10 @@ export default function OrganizationsAdminPage() {
                 </div>
 
                 <div style={controls}>
+                  <a href={`/admin/organizations/${encodeURIComponent(organizationId)}`} style={detailLink}>
+                    Otevřít detail firmy
+                  </a>
+
                   <label style={controlLabel}>
                     Stav organizace
                     <select
@@ -240,6 +244,19 @@ const controls = {
   flexWrap: "wrap",
   gap: 10,
   marginTop: 10,
+  alignItems: "flex-end",
+};
+
+const detailLink = {
+  display: "inline-flex",
+  padding: "9px 12px",
+  borderRadius: 8,
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 12,
+  textDecoration: "none",
 };
 
 const controlLabel = {
