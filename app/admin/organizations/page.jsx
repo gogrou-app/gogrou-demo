@@ -104,6 +104,7 @@ export default function OrganizationsAdminPage() {
         ) : (
           organizations.map((organization) => {
             const organizationId = organization.id || organization.organizationId;
+            const detailOrganizationId = organization.id;
             const modules = organization.activatedModules || organization.selectedModules || [];
             const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
             const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
@@ -129,10 +130,11 @@ export default function OrganizationsAdminPage() {
 
                 <div style={controls}>
                   <div style={detailAction}>
-                    <a href={`/admin/organizations/${encodeURIComponent(organizationId)}`} style={detailLink}>
+                    <a href={`/admin/organizations/${encodeURIComponent(detailOrganizationId || "")}`} style={detailLink}>
                       Otevřít detail firmy
                     </a>
-                    <div style={detailIdHint}>URL ID: {organizationId || "chybí"}</div>
+                    <div style={detailIdHint}>Detail ID: {detailOrganizationId || "chybí"}</div>
+                    <div style={detailIdHint}>Prefix: {organization.prefix || "chybí"}</div>
                   </div>
 
                   <label style={controlLabel}>
@@ -245,34 +247,36 @@ const meta = {
 const controls = {
   display: "flex",
   flexWrap: "wrap",
-  gap: 10,
-  marginTop: 10,
+  gap: 14,
+  marginTop: 14,
   alignItems: "flex-end",
 };
 
 const detailLink = {
   display: "inline-flex",
-  padding: "9px 12px",
+  justifyContent: "center",
+  padding: "12px 16px",
   borderRadius: 8,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.18)",
-  color: "#fff",
+  background: "#fff",
+  border: "1px solid #fff",
+  color: "#000",
   fontWeight: 800,
-  fontSize: 12,
+  fontSize: 13,
   textDecoration: "none",
+  minWidth: 190,
 };
 
 const detailAction = {
   display: "inline-flex",
   flexDirection: "column",
-  gap: 4,
+  gap: 3,
 };
 
 const detailIdHint = {
-  fontSize: 10,
-  opacity: 0.5,
+  fontSize: 11,
+  opacity: 0.62,
   overflowWrap: "anywhere",
-  maxWidth: 260,
+  maxWidth: 320,
 };
 
 const controlLabel = {
