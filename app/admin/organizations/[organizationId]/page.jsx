@@ -66,18 +66,43 @@ const readOrganizations = () => {
   }
 };
 
-const getOrganizationId = (organization) => organization?.id || organization?.organizationId || "";
+const toLookupString = (value) => String(value ?? "").trim();
 
-const normalizeLookupValue = (value) => decodeURIComponent(String(value || "")).trim().toLowerCase();
+const safeDecodeURIComponent = (value) => {
+  const stringValue = toLookupString(value);
+
+  try {
+    return decodeURIComponent(stringValue);
+  } catch {
+    return stringValue;
+  }
+};
+
+const getOrganizationId = (organization) =>
+  toLookupString(organization?.id) || toLookupString(organization?.organizationId);
+
+const normalizeLookupValue = (value) => safeDecodeURIComponent(value).trim().toLowerCase();
+
+const getRouteId = (params) => {
+  const value = Array.isArray(params?.organizationId) ? params.organizationId[0] : params?.organizationId;
+  return toLookupString(value);
+};
+
+const getOrganizationLookupValues = (organization) => [
+  organization?.id,
+  organization?.organizationId,
+  getOrganizationId(organization),
+  organization?.prefix,
+  organization?.name,
+];
 
 const findOrganization = (organizations, routeId) => {
   const normalizedRouteId = normalizeLookupValue(routeId);
-  return organizations.find((organization) => (
-    normalizeLookupValue(organization.id) === normalizedRouteId ||
-    normalizeLookupValue(organization.organizationId) === normalizedRouteId ||
-    normalizeLookupValue(organization.prefix) === normalizedRouteId ||
-    normalizeLookupValue(organization.name) === normalizedRouteId
-  )) || null;
+  if (!normalizedRouteId) return null;
+
+  return organizations.find((organization) =>
+    getOrganizationLookupValues(organization).some((value) => normalizeLookupValue(value) === normalizedRouteId)
+  ) || null;
 };
 
 export default function OrganizationDetailPage() {
@@ -86,7 +111,7 @@ export default function OrganizationDetailPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const routeId = Array.isArray(params?.organizationId) ? params.organizationId[0] : params?.organizationId;
+    const routeId = getRouteId(params);
     const organizations = readOrganizations();
     const matchedOrganization = findOrganization(organizations, routeId);
     const fallbackOrganization = !matchedOrganization && organizations.length === 1 ? organizations[0] : null;

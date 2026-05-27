@@ -68,6 +68,11 @@ const writeOrganizations = (organizations) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(organizations));
 };
 
+const toLookupString = (value) => String(value ?? "").trim();
+
+const getOrganizationRouteId = (organization) =>
+  toLookupString(organization?.id) || toLookupString(organization?.organizationId);
+
 export default function OrganizationsAdminPage() {
   const [organizations, setOrganizations] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -103,8 +108,8 @@ export default function OrganizationsAdminPage() {
           <div style={empty}>Zatím není založena žádná organizace.</div>
         ) : (
           organizations.map((organization) => {
-            const organizationId = organization.id || organization.organizationId;
-            const detailOrganizationId = organization.id || organization.organizationId;
+            const organizationId = getOrganizationRouteId(organization);
+            const detailOrganizationId = getOrganizationRouteId(organization);
             const detailUrl = `/admin/organizations/${encodeURIComponent(detailOrganizationId || "")}`;
             const modules = organization.activatedModules || organization.selectedModules || [];
             const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
