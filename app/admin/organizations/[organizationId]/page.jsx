@@ -68,12 +68,15 @@ const readOrganizations = () => {
 
 const getOrganizationId = (organization) => organization?.id || organization?.organizationId || "";
 
+const normalizeLookupValue = (value) => decodeURIComponent(String(value || "")).trim().toLowerCase();
+
 const findOrganization = (organizations, routeId) => {
-  const normalizedRouteId = decodeURIComponent(String(routeId || ""));
+  const normalizedRouteId = normalizeLookupValue(routeId);
   return organizations.find((organization) => (
-    organization.id === normalizedRouteId ||
-    organization.organizationId === normalizedRouteId ||
-    getOrganizationId(organization) === normalizedRouteId
+    normalizeLookupValue(organization.id) === normalizedRouteId ||
+    normalizeLookupValue(organization.organizationId) === normalizedRouteId ||
+    normalizeLookupValue(organization.prefix) === normalizedRouteId ||
+    normalizeLookupValue(organization.name) === normalizedRouteId
   )) || null;
 };
 
@@ -87,16 +90,19 @@ export default function OrganizationDetailPage() {
   useEffect(() => {
     const routeId = Array.isArray(params?.organizationId) ? params.organizationId[0] : params?.organizationId;
     const organizations = readOrganizations();
+    const matchedOrganization = findOrganization(organizations, routeId);
+    const fallbackOrganization = !matchedOrganization && organizations.length === 1 ? organizations[0] : null;
 
     setRequestedId(decodeURIComponent(String(routeId || "")));
     setOrganizations(organizations);
-    setOrganization(findOrganization(organizations, routeId));
+    setOrganization(matchedOrganization || fallbackOrganization);
     setLoaded(true);
   }, [params]);
 
   if (!loaded) {
     return (
       <div style={wrap}>
+        <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
         <div style={muted}>Načítám detail firmy...</div>
       </div>
     );
@@ -105,6 +111,7 @@ export default function OrganizationDetailPage() {
   if (!organization) {
     return (
       <div style={wrap}>
+        <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
         <div style={box}>
           <h1 style={title}>Firma nenalezena</h1>
           <div style={lead}>
@@ -122,6 +129,7 @@ export default function OrganizationDetailPage() {
                 {organizations.map((availableOrganization, index) => (
                   <div key={`${availableOrganization.id || availableOrganization.organizationId || availableOrganization.prefix || index}`} style={debugItem}>
                     <div>ID: {availableOrganization.id || "chybí"}</div>
+                    <div>Organization ID: {availableOrganization.organizationId || "chybí"}</div>
                     <div>Prefix: {availableOrganization.prefix || "chybí"}</div>
                     <div>Název: {availableOrganization.name || "bez názvu"}</div>
                   </div>
@@ -140,10 +148,18 @@ export default function OrganizationDetailPage() {
   const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
   const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
   const contactPhone = organization.contactPhone || organization.responsiblePhone || "";
+  const isSingleOrganizationFallback = organizations.length === 1 && normalizeLookupValue(getOrganizationId(organization)) !== normalizeLookupValue(requestedId);
 
   return (
     <div style={wrap}>
+      <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
       <a href="/admin/organizations" style={btnSecondary}>Zpět na seznam firem</a>
+
+      {isSingleOrganizationFallback ? (
+        <div style={warningBox}>
+          ID v URL nesedí, ale byla nalezena jediná organizace v localStorage.
+        </div>
+      ) : null}
 
       <div style={box}>
         <h1 style={title}>{organization.name || "Organizace bez názvu"}</h1>
@@ -153,6 +169,8 @@ export default function OrganizationDetailPage() {
 
         <div style={summaryGrid}>
           <Summary label="Organization ID" value={getOrganizationId(organization)} />
+          <Summary label="Legacy organizationId" value={organization.organizationId || "neuvedeno"} />
+          <Summary label="Hledané ID z URL" value={requestedId || "neuvedeno"} />
           <Summary label="Prefix" value={organization.prefix || "neuvedeno"} />
           <Summary label="IČO" value={organization.ico || "neuvedeno"} />
           <Summary label="DIČ" value={organization.dic || "neuvedeno"} />
@@ -273,6 +291,30 @@ const btnSecondary = {
 
 const muted = {
   opacity: 0.65,
+};
+
+const debugVersion = {
+  display: "inline-flex",
+  padding: "7px 10px",
+  borderRadius: 8,
+  background: "rgba(250,204,21,0.18)",
+  border: "1px solid rgba(250,204,21,0.55)",
+  color: "#fde68a",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: 0,
+  marginBottom: 12,
+};
+
+const warningBox = {
+  border: "1px solid rgba(250,204,21,0.55)",
+  background: "rgba(250,204,21,0.12)",
+  color: "#fde68a",
+  borderRadius: 10,
+  padding: 12,
+  marginTop: 16,
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const debugBox = {
