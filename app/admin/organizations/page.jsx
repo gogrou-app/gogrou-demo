@@ -104,13 +104,11 @@ export default function OrganizationsAdminPage() {
         ) : (
           organizations.map((organization) => {
             const organizationId = organization.id || organization.organizationId;
-            const detailOrganizationId = organization.id;
+            const detailOrganizationId = organization.id || organization.organizationId;
             const detailUrl = `/admin/organizations/${encodeURIComponent(detailOrganizationId || "")}`;
             const modules = organization.activatedModules || organization.selectedModules || [];
             const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
             const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
-
-            console.log("ORG DEBUG", organization);
 
             return (
               <div key={organizationId} style={item}>
@@ -130,26 +128,18 @@ export default function OrganizationsAdminPage() {
                   Zodpovědná osoba: {contactName}
                   {contactEmail ? ` · ${contactEmail}` : ""}
                 </div>
-                <div style={debugMeta}>organization.id: {organization.id || "chybí"}</div>
-                <div style={debugMeta}>organization.organizationId: {organization.organizationId || "chybí"}</div>
-                <div style={debugMeta}>organization.prefix: {organization.prefix || "chybí"}</div>
-                <div style={debugMeta}>organization.name: {organization.name || "chybí"}</div>
 
                 <div style={controls}>
                   <div style={detailAction}>
                     <button
                       type="button"
                       onClick={() => {
-                        console.log("DETAIL CLICK URL", detailUrl);
                         window.location.href = detailUrl;
                       }}
                       style={detailLink}
                     >
                       Otevřít detail firmy
                     </button>
-                    <div style={detailIdHint}>Detail ID: {detailOrganizationId || "chybí"}</div>
-                    <div style={detailIdHint}>Prefix: {organization.prefix || "chybí"}</div>
-                    <div style={detailUrlHint}>DETAIL URL: {detailUrl}</div>
                   </div>
 
                   <label style={controlLabel}>
@@ -259,13 +249,6 @@ const meta = {
   opacity: 0.65,
 };
 
-const debugMeta = {
-  marginTop: 3,
-  fontSize: 11,
-  opacity: 0.72,
-  overflowWrap: "anywhere",
-};
-
 const controls = {
   display: "flex",
   flexWrap: "wrap",
@@ -293,20 +276,6 @@ const detailAction = {
   display: "inline-flex",
   flexDirection: "column",
   gap: 3,
-};
-
-const detailIdHint = {
-  fontSize: 11,
-  opacity: 0.62,
-  overflowWrap: "anywhere",
-  maxWidth: 320,
-};
-
-const detailUrlHint = {
-  fontSize: 11,
-  opacity: 0.78,
-  overflowWrap: "anywhere",
-  maxWidth: 420,
 };
 
 const controlLabel = {

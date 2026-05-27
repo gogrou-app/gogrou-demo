@@ -83,9 +83,7 @@ const findOrganization = (organizations, routeId) => {
 export default function OrganizationDetailPage() {
   const params = useParams();
   const [organization, setOrganization] = useState(null);
-  const [organizations, setOrganizations] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [requestedId, setRequestedId] = useState("");
 
   useEffect(() => {
     const routeId = Array.isArray(params?.organizationId) ? params.organizationId[0] : params?.organizationId;
@@ -93,8 +91,6 @@ export default function OrganizationDetailPage() {
     const matchedOrganization = findOrganization(organizations, routeId);
     const fallbackOrganization = !matchedOrganization && organizations.length === 1 ? organizations[0] : null;
 
-    setRequestedId(decodeURIComponent(String(routeId || "")));
-    setOrganizations(organizations);
     setOrganization(matchedOrganization || fallbackOrganization);
     setLoaded(true);
   }, [params]);
@@ -102,7 +98,6 @@ export default function OrganizationDetailPage() {
   if (!loaded) {
     return (
       <div style={wrap}>
-        <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
         <div style={muted}>Načítám detail firmy...</div>
       </div>
     );
@@ -111,31 +106,10 @@ export default function OrganizationDetailPage() {
   if (!organization) {
     return (
       <div style={wrap}>
-        <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
         <div style={box}>
           <h1 style={title}>Firma nenalezena</h1>
           <div style={lead}>
-            V localStorage klíči `gogrou_organizations` nebyla nalezena organizace pro ID `{requestedId || "neuvedeno"}`.
-          </div>
-          <div style={debugBox}>
-            <div style={debugTitle}>Diagnostika localStorage</div>
-            <div style={debugLine}>Hledané organizationId z URL: {requestedId || "neuvedeno"}</div>
-            <div style={debugLine}>Počet organizací načtených z localStorage: {organizations.length}</div>
-            <div style={debugTitle}>Dostupné organizace</div>
-            {organizations.length === 0 ? (
-              <div style={debugLine}>Žádná organizace není v `gogrou_organizations` dostupná.</div>
-            ) : (
-              <div style={debugList}>
-                {organizations.map((availableOrganization, index) => (
-                  <div key={`${availableOrganization.id || availableOrganization.organizationId || availableOrganization.prefix || index}`} style={debugItem}>
-                    <div>ID: {availableOrganization.id || "chybí"}</div>
-                    <div>Organization ID: {availableOrganization.organizationId || "chybí"}</div>
-                    <div>Prefix: {availableOrganization.prefix || "chybí"}</div>
-                    <div>Název: {availableOrganization.name || "bez názvu"}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+            V localStorage klíči `gogrou_organizations` nebyla nalezena odpovídající organizace.
           </div>
           <a href="/admin/organizations" style={btnSecondary}>Zpět na seznam organizací</a>
         </div>
@@ -148,18 +122,10 @@ export default function OrganizationDetailPage() {
   const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
   const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
   const contactPhone = organization.contactPhone || organization.responsiblePhone || "";
-  const isSingleOrganizationFallback = organizations.length === 1 && normalizeLookupValue(getOrganizationId(organization)) !== normalizeLookupValue(requestedId);
 
   return (
     <div style={wrap}>
-      <div style={debugVersion}>ORG DETAIL DEBUG VERSION</div>
       <a href="/admin/organizations" style={btnSecondary}>Zpět na seznam firem</a>
-
-      {isSingleOrganizationFallback ? (
-        <div style={warningBox}>
-          ID v URL nesedí, ale byla nalezena jediná organizace v localStorage.
-        </div>
-      ) : null}
 
       <div style={box}>
         <h1 style={title}>{organization.name || "Organizace bez názvu"}</h1>
@@ -169,8 +135,6 @@ export default function OrganizationDetailPage() {
 
         <div style={summaryGrid}>
           <Summary label="Organization ID" value={getOrganizationId(organization)} />
-          <Summary label="Legacy organizationId" value={organization.organizationId || "neuvedeno"} />
-          <Summary label="Hledané ID z URL" value={requestedId || "neuvedeno"} />
           <Summary label="Prefix" value={organization.prefix || "neuvedeno"} />
           <Summary label="IČO" value={organization.ico || "neuvedeno"} />
           <Summary label="DIČ" value={organization.dic || "neuvedeno"} />
@@ -291,63 +255,4 @@ const btnSecondary = {
 
 const muted = {
   opacity: 0.65,
-};
-
-const debugVersion = {
-  display: "inline-flex",
-  padding: "7px 10px",
-  borderRadius: 8,
-  background: "rgba(250,204,21,0.18)",
-  border: "1px solid rgba(250,204,21,0.55)",
-  color: "#fde68a",
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: 0,
-  marginBottom: 12,
-};
-
-const warningBox = {
-  border: "1px solid rgba(250,204,21,0.55)",
-  background: "rgba(250,204,21,0.12)",
-  color: "#fde68a",
-  borderRadius: 10,
-  padding: 12,
-  marginTop: 16,
-  fontSize: 13,
-  fontWeight: 800,
-};
-
-const debugBox = {
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 10,
-  padding: 12,
-  marginBottom: 16,
-  background: "rgba(255,255,255,0.04)",
-};
-
-const debugTitle = {
-  fontSize: 12,
-  fontWeight: 900,
-  opacity: 0.8,
-  margin: "8px 0 6px",
-};
-
-const debugLine = {
-  fontSize: 12,
-  opacity: 0.68,
-  overflowWrap: "anywhere",
-};
-
-const debugList = {
-  display: "grid",
-  gap: 8,
-};
-
-const debugItem = {
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 8,
-  padding: 8,
-  fontSize: 12,
-  opacity: 0.72,
-  overflowWrap: "anywhere",
 };
