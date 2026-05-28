@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "gogrou_organizations";
+const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
 
 const MODULE_LABELS = {
   GSS: "GSS",
@@ -38,6 +39,34 @@ const ORGANIZATION_STATUS_OPTIONS = [
 ];
 
 const BILLING_STATUS_OPTIONS = ["trial", "active", "past_due", "cancelled"];
+
+const COMPANY_TYPE_OPTIONS = [
+  { value: "manufacturing_company", label: "Výrobní firma" },
+  { value: "tool_manufacturer", label: "Výrobce nástrojů" },
+  { value: "tool_supplier", label: "Dodavatel nástrojů" },
+  { value: "grinding_service", label: "Brusírna" },
+  { value: "coating_service", label: "Povlakovna" },
+  { value: "heat_treatment_service", label: "Kalírna / tepelné zpracování" },
+  { value: "trading_company", label: "Obchodní firma" },
+  { value: "consulting", label: "Poradenství" },
+  { value: "other", label: "Ostatní" },
+];
+
+const MODULE_OPTIONS = [
+  { value: "GSS", label: "GSS" },
+  { value: "Promitea/RFQ", label: "Promitea / RFQ" },
+  { value: "GPC supplier data channel", label: "GPC datový kanál" },
+  { value: "Toolshop", label: "Toolshop" },
+  { value: "Services", label: "Služby" },
+];
+
+const defaultNewOrganizationForm = {
+  name: "",
+  prefix: "",
+  ico: "",
+  companyType: "manufacturing_company",
+  modules: ["GSS"],
+};
 
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
@@ -75,6 +104,9 @@ const getOrganizationRouteId = (organization) =>
 
 export default function OrganizationsAdminPage() {
   const [organizations, setOrganizations] = useState([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newOrganizationForm, setNewOrganizationForm] = useState(defaultNewOrganizationForm);
+  const [createMessage, setCreateMessage] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -94,6 +126,87 @@ export default function OrganizationsAdminPage() {
     });
   };
 
+  const openOrganizationGss = (organizationId) => {
+    if (!organizationId) return;
+    localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
+    window.location.href = "/app/gss";
+  };
+
+  const updateNewOrganizationForm = (field, value) => {
+    setNewOrganizationForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setCreateMessage("");
+  };
+
+  const toggleNewOrganizationModule = (module) => {
+    setNewOrganizationForm((current) => {
+      const modules = current.modules.includes(module)
+        ? current.modules.filter((item) => item !== module)
+        : [...current.modules, module];
+
+      return {
+        ...current,
+        modules,
+      };
+    });
+    setCreateMessage("");
+  };
+
+  const openCreateForm = () => {
+    setShowCreateForm(true);
+    setCreateMessage("");
+  };
+
+  const createOrganization = (event) => {
+    event.preventDefault();
+
+    const name = newOrganizationForm.name.trim();
+    const prefix = newOrganizationForm.prefix.trim().toUpperCase();
+    const ico = newOrganizationForm.ico.trim();
+    const modules = newOrganizationForm.modules.length > 0 ? newOrganizationForm.modules : ["GSS"];
+
+    if (!name || !prefix) {
+      setCreateMessage("Doplňte název firmy a prefix.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const organizationId = crypto.randomUUID();
+    const organization = {
+      id: organizationId,
+      organizationId,
+      name,
+      prefix,
+      ico,
+      country: "CZ",
+      language: "cs",
+      companyTypes: [newOrganizationForm.companyType],
+      selectedModules: modules,
+      activatedModules: modules,
+      status: "trial",
+      billingStatus: "trial",
+      subscriptionPlan: "trial_mvp",
+      paymentProvider: "",
+      paymentConfirmedAt: "",
+      mainWarehouse: {
+        id: "MAIN",
+        name: "Hlavní sklad",
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const nextOrganizations = [organization, ...organizations];
+    writeOrganizations(nextOrganizations);
+    localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
+    setOrganizations(nextOrganizations);
+    setNewOrganizationForm(defaultNewOrganizationForm);
+    setCreateMessage("");
+    window.location.href = "/app/gss";
+  };
+
   return (
     <div style={wrap}>
       <h1 style={title}>Gogrou — správa organizací</h1>
@@ -102,10 +215,90 @@ export default function OrganizationsAdminPage() {
       </div>
 
       <div style={box}>
-        <h2 style={subtitle}>Organizace</h2>
+        <div style={topRow}>
+          <h2 style={subtitle}>Organizace</h2>
+          <button type="button" onClick={openCreateForm} style={compactButton}>+ Nová firma</button>
+        </div>
+
+        {showCreateForm ? (
+          <form onSubmit={createOrganization} style={formBox}>
+            <div style={formGrid}>
+              <label style={controlLabel}>
+                Název firmy
+                <input
+                  value={newOrganizationForm.name}
+                  onChange={(event) => updateNewOrganizationForm("name", event.target.value)}
+                  style={input}
+                />
+              </label>
+              <label style={controlLabel}>
+                Prefix
+                <input
+                  value={newOrganizationForm.prefix}
+                  onChange={(event) => updateNewOrganizationForm("prefix", event.target.value)}
+                  placeholder="např. AH01"
+                  style={input}
+                />
+              </label>
+              <label style={controlLabel}>
+                IČO
+                <input
+                  value={newOrganizationForm.ico}
+                  onChange={(event) => updateNewOrganizationForm("ico", event.target.value)}
+                  style={input}
+                />
+              </label>
+              <label style={controlLabel}>
+                Typ firmy
+                <select
+                  value={newOrganizationForm.companyType}
+                  onChange={(event) => updateNewOrganizationForm("companyType", event.target.value)}
+                  style={select}
+                >
+                  {COMPANY_TYPE_OPTIONS.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div style={sectionLabel}>Aktivní moduly</div>
+            <div style={moduleGrid}>
+              {MODULE_OPTIONS.map((module) => (
+                <label key={module.value} style={checkLabel}>
+                  <input
+                    type="checkbox"
+                    checked={newOrganizationForm.modules.includes(module.value)}
+                    onChange={() => toggleNewOrganizationModule(module.value)}
+                  />
+                  {module.label}
+                </label>
+              ))}
+            </div>
+
+            {createMessage ? <div style={errorMessage}>{createMessage}</div> : null}
+
+            <div style={formActions}>
+              <button type="submit" style={detailLink}>Uložit a otevřít GSS</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setCreateMessage("");
+                }}
+                style={gssLink}
+              >
+                Zavřít
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         {organizations.length === 0 ? (
-          <div style={empty}>Zatím není založena žádná organizace.</div>
+          <div style={emptyState}>
+            <div style={empty}>Zatím není založena žádná organizace.</div>
+            <button type="button" onClick={openCreateForm} style={detailLink}>Založit první firmu</button>
+          </div>
         ) : (
           organizations.map((organization) => {
             const organizationId = getOrganizationRouteId(organization);
@@ -144,6 +337,13 @@ export default function OrganizationsAdminPage() {
                       style={detailLink}
                     >
                       Otevřít detail firmy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openOrganizationGss(organizationId)}
+                      style={gssLink}
+                    >
+                      Otevřít GSS
                     </button>
                   </div>
 
@@ -213,14 +413,103 @@ const box = {
   padding: 16,
 };
 
+const topRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+  marginBottom: 12,
+};
+
 const subtitle = {
   fontSize: 18,
   fontWeight: 800,
-  marginBottom: 12,
+  margin: 0,
 };
 
 const empty = {
   opacity: 0.6,
+};
+
+const emptyState = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: 12,
+  padding: "12px 0",
+};
+
+const compactButton = {
+  display: "inline-flex",
+  justifyContent: "center",
+  padding: "8px 12px",
+  borderRadius: 8,
+  background: "#fff",
+  border: "1px solid #fff",
+  color: "#000",
+  fontWeight: 900,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const formBox = {
+  border: "1px solid rgba(255,255,255,0.14)",
+  borderRadius: 10,
+  padding: 14,
+  marginBottom: 16,
+  background: "rgba(255,255,255,0.04)",
+};
+
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+};
+
+const input = {
+  minWidth: 0,
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "#000",
+  color: "#fff",
+};
+
+const sectionLabel = {
+  marginTop: 14,
+  marginBottom: 8,
+  fontSize: 12,
+  fontWeight: 800,
+  opacity: 0.85,
+};
+
+const moduleGrid = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+const checkLabel = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  border: "1px solid rgba(255,255,255,0.16)",
+  borderRadius: 8,
+  padding: "7px 9px",
+  fontSize: 12,
+};
+
+const formActions = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 14,
+};
+
+const errorMessage = {
+  marginTop: 10,
+  color: "#fecaca",
+  fontSize: 13,
 };
 
 const item = {
@@ -273,6 +562,20 @@ const detailLink = {
   fontWeight: 800,
   fontSize: 13,
   textDecoration: "none",
+  minWidth: 190,
+  cursor: "pointer",
+};
+
+const gssLink = {
+  display: "inline-flex",
+  justifyContent: "center",
+  padding: "9px 12px",
+  borderRadius: 8,
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 12,
   minWidth: 190,
   cursor: "pointer",
 };
