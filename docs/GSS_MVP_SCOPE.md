@@ -1644,13 +1644,99 @@ Po kliknutí na řádek se otevře detail položky. Detail obsahuje akce:
 
 Po práci v detailu musí být možné kliknout `Zavřít` nebo `Vrátit zpět na řádkový seznam`.
 
+V MVP dlouhé kartě musí mít každá rozbalená akce položky bezpečný návrat na detail položky. Akce jako `Naskladnit`, `Nastavení položky`, `Rezervovat`, `Nadnormativa` a DM detail musí jít zavřít bez smazání položky a bez ztráty uložených skladových dat. Pokud je u jedné položky otevřeno více rozbalených akcí, návrat na detail položky zavře všechny tyto akce a vrátí položku do základního detailu položky.
+
 Vyhledání položky má být centrální. Jeden vstup má postupně umět hledat v GSS skladu, hledat v GPC a později využít GINA logiku / AI dotazy, například:
 
 - `Najdi vrták průměr 10`
 - `Najdi APKX`
 - `Najdi frézu 4 zuby D10`
 
-V MVP se celé UI zatím nepřepisuje. Tento zápis pouze ukotvuje cílový směr před budoucí komponentizací a redesignem skladové části.
+V MVP se celé UI překlápí do provozního skladového terminálu. Základní tok je:
+
+`najít položku -> otevřít detail -> vybrat akci -> provést -> zpět`.
+
+Hlavní pohled `/app/gss` má být zúžený. Nesmí trvale zobrazovat všechny procesní sekce najednou. V horní části zůstává aktivní firma, prefix, stav organizace a rychlý vstup do správy organizací / založení další firmy. Pod tím je hlavní akční panel:
+
+- `Příjem`
+- `Výdej`
+- `Návrat z výroby`
+- `Načíst DM kód`
+- `Vyhledat v GPC`
+- `Přidat lokální položku`
+- `Objednávkový návrh`
+- `Nadnormativní zásoby`
+
+Akční sekce se otevírají pouze na vyžádání a vždy má být otevřený nejvýše jeden hlavní panel. Každý hlavní panel má mít návrat `Zpět na akce`.
+
+Sekce `Skladové položky` musí být čistá a připravená na stovky až tisíce položek. Nad řádkovým seznamem je základní vyhledávání, které filtruje tenant sklad podle názvu, výrobce, typu, GPC ID, GTIN, GID, interního / lokálního kódu a základních lokálních parametrů.
+
+MVP hledání podporuje jednoduché víceparametrové zadání bez AI. Uživatel může oddělit kritéria středníkem, čárkou nebo více mezerami, například `Walter ; fréza ; D12 ; 4z` nebo `VBD ; CNMG ; Walter ; WKP35G`. Položka projde filtrem pouze tehdy, když splní všechna zadaná kritéria. Jednoduché zápisy jako `D12`, `d=12`, `Z4`, `4z`, `L25` nebo `l=25` se pro MVP převedou na číselné tokeny.
+
+Toto je rychlé provozní hledání ve skladu a příprava na budoucí parametrické / GINA hledání. Později se stejný princip rozšíří i do GPC katalogu a Toolshop obchodní vrstvy.
+
+Vyhledávání skladových položek je základní provozní funkce. Budoucí GINA hledání má umět postupné dotazování:
+
+- typ nástroje
+- průměr
+- délka břitu
+- počet zubů
+- výrobce
+- použití
+
+Podporované budou také přesné identifikátory jako GTIN, GID, přesný název a načtení čtečkou.
+
+Budoucí parametrické vyhledávání v GSS i GPC bude řízené typem položky. Uživatel nejdříve zvolí nebo zadá typ a systém nabídne pouze relevantní parametry pro danou skupinu. Příklady typů:
+
+- TK fréza
+- TK vrták
+- VBD
+- držák
+- povlak
+- OPP
+- materiál
+- náhradní díl
+
+Příklad pro TK frézu:
+
+- průměr
+- délka břitu
+- počet zubů
+- stopka
+- povlak
+- výrobce
+- použití / operace
+
+Příklad pro TK vrták:
+
+- průměr
+- délka
+- hloubka vrtání
+- úhel špičky
+- povlak
+- výrobce
+- použití
+
+Příklad pro VBD:
+
+- tvar
+- velikost
+- rádius
+- povlak
+- materiálová skupina
+- výrobce
+- ISO označení
+
+Parametry musí vycházet z GPC. GPC bude sladěné s ToolsUnited strukturou, aby validované položky měly čistá a typově použitelná data. Lokální nevalidované položky v GSS musí mít minimální povinné parametry podle svého typu, aby je šlo provozně hledat, vydávat a později validovat do GPC.
+
+GINA / AI hledání bude další vrstva nad čistými daty. Umí postupně dotazovat chybějící parametry, například `Fréza` -> `Jaký průměr?` -> `Jaká délka břitu?` -> `Kolik zubů?`. Textové hledání v MVP zůstává základní vrstva, parametrické a AI hledání je navazující vrstva nad strukturovanými GPC/GSS daty.
+
+Příjem na sklad má dvě logické varianty:
+
+- `Bez objednávky`: ruční příjem položky, inventura, servisní návrat nebo jiný provozní příjem.
+- `Z objednávky`: budoucí příjem podle vystavené objednávky GSS.
+
+Příjem z objednávky je důležitý pro budoucí vazbu `objednávka -> dodací list -> faktura -> příjem`. V MVP je varianta `Z objednávky` pouze placeholder s číslem objednávky, dodavatelem a informací, že seznam položek objednávky bude doplněn později.
 
 ## DM Foundation MVP
 
@@ -1749,3 +1835,127 @@ DM umožňuje:
 - připravit export hodnot do výroby
 
 V MVP se neřeší fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth ani export do CNC / strojů.
+
+## Komunikační Vrstva pro Nadnormativy
+
+Nadnormativy mezi firmami potřebují řízenou komunikaci. Nadnormativní nabídka nemusí být vždy 100% aktuální, protože fyzická zásoba se může mezitím změnit. Nabízející firma proto musí potvrdit, že položku stále má, v jakém množství, za jakou cenu a za jakých podmínek.
+
+MVP směr je jednoduché tlačítko `Mám zájem`. Po kliknutí vznikne `inquiry` / poptávkový kontakt navázaný na konkrétní nadnormativní nabídku.
+
+Inquiry eviduje:
+
+- kupující firmu
+- prodávající firmu
+- položku
+- počet kusů
+- zprávu
+- stav: `nový`, `řeší se`, `potvrzeno`, `zamítnuto`, `dokončeno`
+
+Komunikace v MVP může začít jako interní zpráva v Gogrou. E-mail upozornění slouží jako fallback, aby prodávající firma nezmeškala zájem o nabídku.
+
+Pozdější směr:
+
+- Gogrou chat mezi firmami
+- vlákno navázané na konkrétní nadnormativní nabídku
+- potvrzení aktuální dostupnosti
+- potvrzení ceny
+- dohoda dopravy / předání
+- přechod do objednávky / RFQ
+
+Komunikace musí být auditovatelná. GSS musí umět zpětně dohledat, kdo projevil zájem, kdo dostupnost potvrdil, jaká cena byla potvrzena a jaký byl výsledek komunikace.
+
+Tato komunikační vrstva je budoucí Gogrou workflow. V aktuálním MVP se neprogramuje chat, e-mailové odesílání, objednávka ani RFQ přechod.
+
+## Hlídací Pes / Watchdog
+
+Hlídací pes je budoucí služba Gogrou, ve které si zákazník nastaví, co ho obchodně nebo provozně zajímá. Gogrou potom za zákazníka sleduje relevantní signály napříč GSS, nadnormativami, Gogrou partnery, akcemi, SS / RFQ / Promitea výsledky a budoucí obchodní vrstvou.
+
+Hlídací pes může sledovat:
+
+- cenu konkrétní položky
+- nadnormativy v Gogrou komunitě
+- obchodní akce
+- alternativní nabídky
+- nabídky Gogrou partnerů
+- budoucí SS / RFQ / Promitea výsledky
+
+Důležité pravidlo: Hlídací pes není objednávka. Je to upozornění / obchodní příležitost, ze které může později vzniknout inquiry, poptávka, RFQ nebo objednávka.
+
+### Hlídání Konkrétní Položky
+
+Uživatel může u položky v GSS zapnout akci `Hlídat položku`.
+
+Nastavení hlídání:
+
+- cílová cena
+- procento pod poslední nákupní cenou
+- hlídat pouze nadnormativy
+- hlídat Gogrou partner nabídky
+- aktivní / neaktivní
+- poznámka
+
+Tato nastavení jsou tenant provozní a obchodní vrstva. Nemění GPC master data.
+
+### Hlídání Podle Parametrů
+
+Budoucí možnost je hlídání podle parametrického dotazu, například:
+
+- tvrdokovová fréza
+- průměr D12
+- 4 zuby
+- HPC
+- konkrétní výrobce / bez výrobce
+- maximální cena
+- dostupnost
+
+Parametrické hlídání může později využívat GPC jako validovaný technický katalog, GSS nákupní historii a obchodní nabídky nad GPC.
+
+### Watchdog Záznam
+
+Dokumentační model `watchdog`:
+
+- `id`
+- `organizationId`
+- `userId`
+- `type`: `item` nebo `parameter_search`
+- `itemId`
+- `gpc_id`
+- `gtin`
+- `filters`
+- `targetPrice`
+- `compareToLastPurchasePrice`
+- `targetDiscountPercent`
+- `overstockOnly`
+- `gogrouPartnerOnly`
+- `active`
+- `createdAt`
+- `updatedAt`
+
+### Výstup Hlídacího Psa
+
+Pokud Gogrou najde shodu, vytvoří upozornění. Upozornění musí ukázat:
+
+- odkud nabídka je
+- cenu
+- dodavatele
+- stav dostupnosti
+- možnost vytvořit inquiry / poptávku / objednávku
+
+Hlídací pes bude napojený na komunikační vrstvu Gogrou:
+
+- notifikace
+- interní Gogrou zprávu
+- e-mail fallback
+- později push do Gogrou app
+
+### Budoucí GINA
+
+GINA může později nad daty Hlídacího psa doporučovat:
+
+- tuto položku kupujete draze
+- existuje levnější alternativa
+- objevila se nadnormativa
+- je vhodné vytvořit RFQ
+- akce SS je výhodná proti vaší historii nákupů
+
+Pro MVP se Hlídací pes pouze dokumentačně připravuje. Neprogramuje se UI, DB, AI matching, skutečné notifikace, marketplace, platby ani backend.

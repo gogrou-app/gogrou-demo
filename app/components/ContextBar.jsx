@@ -10,7 +10,7 @@ export default function ContextBar() {
   let moduleLabel = "Dashboard";
 
   if (pathname.startsWith("/gpc")) moduleLabel = "GPC – Produktový katalog";
-  else if (pathname.startsWith("/gss")) moduleLabel = "GSS – Skladový systém";
+  else if (pathname.startsWith("/app/gss") || pathname.startsWith("/gss")) moduleLabel = "GSS – Skladový systém";
   else if (pathname.startsWith("/ss")) moduleLabel = "SmartSplit";
   else if (pathname.startsWith("/ai")) moduleLabel = "AI Assistant";
 

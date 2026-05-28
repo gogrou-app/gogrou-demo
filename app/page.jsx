@@ -27,7 +27,7 @@ export default function HomePage() {
           GPC
         </Link>
 
-        <Link href="/gss" style={btn}>
+        <Link href="/app/gss" style={btn}>
           GSS
         </Link>
 

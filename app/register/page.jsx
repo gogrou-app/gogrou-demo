@@ -236,7 +236,7 @@ export default function RegisterPage() {
               Pokračovat do Gogrou
             </a>
             {hasGssModule ? (
-              <a href="/gss" style={btnSecondaryLink}>
+              <a href="/app/gss" style={btnSecondaryLink}>
                 Otevřít GSS modul
               </a>
             ) : null}

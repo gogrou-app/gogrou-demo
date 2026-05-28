@@ -18,7 +18,7 @@ export default function RootLayout({ children }) {
             <nav style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <a href="/">Dashboard</a>
               <a href="/gpc">GPC</a>
-              <a href="/gss">GSS</a>
+              <a href="/app/gss">GSS</a>
               <a href="/ss">SmartSplit</a>
               <a href="/ai">AI Asistent</a>
             </nav>

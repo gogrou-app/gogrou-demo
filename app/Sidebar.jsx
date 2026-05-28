@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const items = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "GPC", href: "/gpc" },
-  { label: "GSS", href: "/gss" },
+  { label: "GSS", href: "/app/gss" },
   { label: "SmartSplit", href: "/ss" },
   { label: "AI Asistent", href: "/ai" },
 ];

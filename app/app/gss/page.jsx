@@ -33,7 +33,48 @@ const formatModules = (modules) =>
 const countDmItems = (items) =>
   items.reduce((total, item) => total + (item.dmItems?.length || 0), 0);
 
-const normalizeSearch = (value) => String(value || "").toLowerCase().trim();
+const normalizeSearch = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const normalizeWarehouseSearchPart = (value) => {
+  let token = normalizeSearch(value).replace(/\s+/g, " ");
+
+  token = token
+    .replace(/\b(?:d|l|z)\s*=\s*(\d+(?:[.,]\d+)?)\b/g, "$1")
+    .replace(/\b(?:d|l|z)\s*(\d+(?:[.,]\d+)?)\b/g, "$1")
+    .replace(/\b(\d+(?:[.,]\d+)?)\s*z\b/g, "$1")
+    .replace(/\b(?:prumer|pruměr)\s+(\d+(?:[.,]\d+)?)\b/g, "$1")
+    .replace(/\bdelka\s+(\d+(?:[.,]\d+)?)\b/g, "$1")
+    .replace(",", ".");
+
+  return token.trim();
+};
+
+const tokenizeWarehouseSearch = (value) => {
+  const raw = String(value || "");
+  const normalized = normalizeSearch(raw);
+  if (!normalized) {
+    return [];
+  }
+
+  const hasExplicitSeparators = /[;,]|\s{2,}/.test(raw);
+  const hasParameterSyntax = /\b(?:d|l|z)\s*=?\s*\d|\b\d+\s*z\b|\b(?:prumer|průměr|delka|délka)\s+\d/i.test(raw);
+  const source = hasExplicitSeparators
+    ? raw.split(/[;,]|\s{2,}/)
+    : hasParameterSyntax
+      ? raw.split(/\s+/)
+      : [raw];
+
+  return source
+    .map(normalizeWarehouseSearchPart)
+    .filter(Boolean);
+};
+
+const normalizeId = (value) => String(value ?? "").trim();
 
 const formatBasicParameters = (tool) => {
   const params = [
@@ -177,7 +218,23 @@ const createSettingsForm = (item) => ({
 
 const getItemKey = (item) => item.id || item.gpc_id || item.name;
 
-const getOrganizationId = (organization) => organization?.organizationId || organization?.id || "";
+const getOrganizationId = (organization) =>
+  normalizeId(organization?.organizationId) || normalizeId(organization?.id);
+
+const getOrganizationLookupValues = (organization) => [
+  normalizeId(organization?.id),
+  normalizeId(organization?.organizationId),
+  getOrganizationId(organization),
+].filter(Boolean);
+
+const findOrganizationById = (organizations, organizationId) => {
+  const normalizedOrganizationId = normalizeId(organizationId);
+  if (!normalizedOrganizationId) return null;
+
+  return organizations.find((organization) =>
+    getOrganizationLookupValues(organization).includes(normalizedOrganizationId)
+  ) || null;
+};
 
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
 
@@ -284,10 +341,29 @@ const createReturnForm = () => ({
   confirmSharpeningOverride: false,
 });
 
-const itemMatchesIssueQuery = (item, query) => {
+const flattenSearchValues = (value) => {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(flattenSearchValues);
+  }
+
+  if (typeof value === "object") {
+    return Object.values(value).flatMap(flattenSearchValues);
+  }
+
+  return [value];
+};
+
+const getWarehouseSearchHaystack = (item) => {
   const stock = normalizeStockSummary(item.stockSummary);
-  const haystack = [
+  return [
     item.name,
+    item.gogrouId,
+    item.gid,
+    item.gpcNumericId,
     item.gpc_id,
     item.gtin,
     item.manufacturer,
@@ -295,16 +371,36 @@ const itemMatchesIssueQuery = (item, query) => {
     item.localFields?.internalCode,
     item.localFields?.dimensionNote,
     item.localFields?.diameter,
+    item.localFields?.length,
     item.localFields?.material,
     item.localFields?.insertShape,
+    item.category,
+    item.productCategory,
+    item.technicalParameters,
+    item.technical_parameters,
+    item.geometry,
+    item.tool_features,
+    item.parameters,
     stock.lastIntakeMetadata?.documentNumber,
     stock.lastIntakeMetadata?.source,
-  ].map(normalizeSearch).join(" ");
+  ].flatMap(flattenSearchValues).map(normalizeSearch).join(" ");
+};
+
+const itemMatchesIssueQuery = (item, query) => {
+  const haystack = getWarehouseSearchHaystack(item);
 
   return haystack.includes(query);
 };
 
-const itemMatchesWarehouseQuery = itemMatchesIssueQuery;
+const itemMatchesWarehouseQuery = (item, query) => {
+  const tokens = Array.isArray(query) ? query : tokenizeWarehouseSearch(query);
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const haystack = getWarehouseSearchHaystack(item);
+  return tokens.every((token) => haystack.includes(token));
+};
 
 const getActiveReservations = (item) => (item.reservations || []).filter((reservation) => reservation.status !== "cancelled");
 
@@ -581,7 +677,7 @@ function DmDetailContent({
         <div style={actions}>
           <button type="submit" style={btnImport}>Uložit servisní parametry</button>
           <button type="button" onClick={onPlaceholder} style={btnSecondary}>Připravuje se: exportovat aktuální parametry</button>
-          <button type="button" onClick={onClose} style={btnSecondary}>Zavřít detail</button>
+          <button type="button" onClick={onClose} style={btnSecondary}>Zpět na detail položky</button>
         </div>
       </form>
 
@@ -617,6 +713,8 @@ export default function AppGssPage() {
   const [showLocalItemForm, setShowLocalItemForm] = useState(false);
   const [localItemForm, setLocalItemForm] = useState(defaultLocalItemForm);
   const [localItemMessage, setLocalItemMessage] = useState("");
+  const [selectedWarehouseItemKey, setSelectedWarehouseItemKey] = useState("");
+  const [warehouseSearchQuery, setWarehouseSearchQuery] = useState("");
   const [settingsItemKey, setSettingsItemKey] = useState("");
   const [settingsForm, setSettingsForm] = useState(null);
   const [settingsMessage, setSettingsMessage] = useState("");
@@ -640,6 +738,7 @@ export default function AppGssPage() {
   const [purchaseProposal, setPurchaseProposal] = useState(null);
   const [purchaseProposalMessage, setPurchaseProposalMessage] = useState("");
   const [placeholderMessage, setPlaceholderMessage] = useState("");
+  const [activeMainPanel, setActiveMainPanel] = useState("");
   const [showIssuePanel, setShowIssuePanel] = useState(false);
   const [issueQuery, setIssueQuery] = useState("");
   const [issueItemKey, setIssueItemKey] = useState("");
@@ -655,15 +754,14 @@ export default function AppGssPage() {
 
   useEffect(() => {
     const organizations = readOrganizations();
-    const activeOrganizationId = localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
-    const activeOrganization = organizations.find((item) => getOrganizationId(item) === activeOrganizationId) || organizations[0] || null;
+    const activeOrganizationId = normalizeId(localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY));
+    const activeOrganization = activeOrganizationId
+      ? findOrganizationById(organizations, activeOrganizationId)
+      : null;
     const organizationId = getOrganizationId(activeOrganization);
 
     setOrganization(activeOrganization);
     setWarehouseItems(organizationId ? readWarehouse(organizationId) : []);
-    if (organizationId) {
-      localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
-    }
     setLoaded(true);
   }, []);
 
@@ -680,8 +778,8 @@ export default function AppGssPage() {
       <div style={wrap}>
         <div style={box}>
           <h1 style={title}>GSS</h1>
-          <div style={lead}>Nebyla nalezena žádná organizace.</div>
-          <a href="/register" style={btnPrimary}>Registrovat organizaci</a>
+          <div style={lead}>Vyberte firmu v administraci organizací</div>
+          <a href="/admin/organizations" style={btnPrimary}>Otevřít správu organizací</a>
         </div>
       </div>
     );
@@ -723,6 +821,13 @@ export default function AppGssPage() {
   const movementHistory = collectMovementHistory(warehouseItems);
   const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
   const selectedDmContext = selectedDmDetail ? findDmItemInWarehouse(warehouseItems, selectedDmDetail.dmCode) : null;
+  const warehouseSearchTokens = tokenizeWarehouseSearch(warehouseSearchQuery);
+  const filteredWarehouseItems = warehouseSearchTokens.length > 0
+    ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, warehouseSearchTokens))
+    : warehouseItems;
+  const selectedWarehouseItem = selectedWarehouseItemKey
+    ? warehouseItems.find((item) => getItemKey(item) === selectedWarehouseItemKey) || null
+    : null;
 
   const addGpcItemToGss = (tool) => {
     const exists = warehouseItems.some((item) => item.gpc_id === tool.gpc_id);
@@ -746,7 +851,46 @@ export default function AppGssPage() {
     }, 1800);
   };
 
+  const openWarehouseItemDetail = (item) => {
+    setSelectedWarehouseItemKey(getItemKey(item));
+    window.setTimeout(() => {
+      warehouseSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const closeWarehouseItemDetail = (item) => {
+    closeItemDetails(item);
+    setSelectedWarehouseItemKey("");
+  };
+
+  const closeMainPanel = () => {
+    setActiveMainPanel("");
+    setShowIssuePanel(false);
+    setShowReturnPanel(false);
+    setShowLocalItemForm(false);
+    setSelectedDmDetail(null);
+    setIssueItemKey("");
+    setReturnItemKey("");
+    setIssueMessage("");
+    setReturnMessage("");
+  };
+
+  const openMainPanel = (panel) => {
+    setActiveMainPanel(panel);
+    setShowIssuePanel(panel === "issue");
+    setShowReturnPanel(panel === "return");
+    setShowLocalItemForm(panel === "local");
+    setPlaceholderMessage("");
+
+    window.setTimeout(() => {
+      warehouseSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
   const openLocalItemForm = () => {
+    setActiveMainPanel("local");
+    setShowIssuePanel(false);
+    setShowReturnPanel(false);
     setShowLocalItemForm(true);
     window.setTimeout(() => {
       localItemSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -754,14 +898,20 @@ export default function AppGssPage() {
   };
 
   const openIssuePanel = () => {
+    setActiveMainPanel("issue");
     setShowIssuePanel(true);
+    setShowReturnPanel(false);
+    setShowLocalItemForm(false);
     window.setTimeout(() => {
       issueSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
 
   const openReturnPanel = () => {
+    setActiveMainPanel("return");
+    setShowIssuePanel(false);
     setShowReturnPanel(true);
+    setShowLocalItemForm(false);
     window.setTimeout(() => {
       returnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
@@ -789,10 +939,12 @@ export default function AppGssPage() {
     setLocalItemForm(defaultLocalItemForm);
     setLocalItemMessage("Lokální nevalidovaná položka byla založena v tenant skladu.");
     setShowLocalItemForm(false);
+    setActiveMainPanel("");
     openWarehouseSection();
   };
 
   const openItemSettings = (item) => {
+    closeItemDetails(item);
     setSettingsItemKey(getItemKey(item));
     setSettingsForm(createSettingsForm(item));
     setSettingsMessage("");
@@ -865,10 +1017,13 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setSettingsMessage("Nastavení položky bylo uloženo.");
+    setSettingsItemKey("");
+    setSettingsForm(null);
+    setSettingsMessage("");
   };
 
   const openStockForm = (item) => {
+    closeItemDetails(item);
     setStockItemKey(getItemKey(item));
     setStockForm(createStockForm());
     setStockMessage("");
@@ -883,6 +1038,7 @@ export default function AppGssPage() {
   };
 
   const openReservationForm = (item) => {
+    closeItemDetails(item);
     setReservationItemKey(getItemKey(item));
     setReservationForm(createReservationForm());
     setReservationMessage("");
@@ -897,6 +1053,7 @@ export default function AppGssPage() {
   };
 
   const openOverstockForm = (item) => {
+    closeItemDetails(item);
     setOverstockItemKey(getItemKey(item));
     setOverstockForm(createOverstockOfferForm(item));
     setOverstockMessage("");
@@ -997,7 +1154,9 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setReservationMessage("Rezervace byla vytvořena.");
+    setReservationItemKey("");
+    setReservationForm(createReservationForm());
+    setReservationMessage("");
   };
 
   const saveOverstockOffer = (event) => {
@@ -1090,7 +1249,9 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setOverstockMessage("Nadnormativní nabídka byla uložena.");
+    setOverstockItemKey("");
+    setOverstockForm(createOverstockOfferForm());
+    setOverstockMessage("");
   };
 
   const createPurchaseProposal = () => {
@@ -1186,6 +1347,7 @@ export default function AppGssPage() {
   };
 
   const openDmForm = (item) => {
+    closeItemDetails(item);
     setDmFormItemKey(getItemKey(item));
     setDmForm(createDmForm());
     setDmMessage("");
@@ -1200,6 +1362,7 @@ export default function AppGssPage() {
   };
 
   const openDmDetail = (item, dmItem) => {
+    closeItemDetails(item);
     setSelectedDmDetail({
       itemId: getItemKey(item),
       dmCode: dmItem.dmCode,
@@ -1213,6 +1376,44 @@ export default function AppGssPage() {
     setSelectedDmDetail(null);
     setDmServiceForm(createDmServiceForm());
     setDmServiceMessage("");
+  };
+
+  const closeItemDetails = (item) => {
+    const itemKey = getItemKey(item);
+
+    if (settingsItemKey === itemKey) {
+      setSettingsItemKey("");
+      setSettingsForm(null);
+      setSettingsMessage("");
+    }
+
+    if (stockItemKey === itemKey) {
+      setStockItemKey("");
+      setStockForm(createStockForm());
+      setStockMessage("");
+    }
+
+    if (reservationItemKey === itemKey) {
+      setReservationItemKey("");
+      setReservationForm(createReservationForm());
+      setReservationMessage("");
+    }
+
+    if (overstockItemKey === itemKey) {
+      setOverstockItemKey("");
+      setOverstockForm(createOverstockOfferForm());
+      setOverstockMessage("");
+    }
+
+    if (dmFormItemKey === itemKey) {
+      setDmFormItemKey("");
+      setDmForm(createDmForm());
+      setDmMessage("");
+    }
+
+    if (selectedDmDetail?.itemId === itemKey) {
+      closeDmDetail();
+    }
   };
 
   const updateDmServiceForm = (field, value) => {
@@ -1326,8 +1527,9 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
+    setDmFormItemKey("");
     setDmForm(createDmForm());
-    setDmMessage(`Vytvořeno ${quantity} DM kusů.`);
+    setDmMessage("");
   };
 
   const searchDmCode = () => {
@@ -1534,7 +1736,9 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setStockMessage("Naskladnění bylo uloženo.");
+    setStockItemKey("");
+    setStockForm(createStockForm());
+    setStockMessage("");
   };
 
   const selectIssueItem = (item) => {
@@ -1826,7 +2030,10 @@ export default function AppGssPage() {
     <div style={wrap}>
       <h1 style={title}>GSS</h1>
       <div style={lead}>
-        Tenant-aware GSS vstup pro aktuální organizaci. V MVP se aktivní tenant bere z `activeOrganizationId`, s fallbackem na první organizaci z `gogrou_organizations`.
+        Tenant-aware GSS vstup pro aktuální organizaci. V MVP se aktivní tenant bere z `activeOrganizationId`.
+      </div>
+      <div style={actions}>
+        <a href="/admin/organizations" style={btnSecondary}>Správa organizací / založit další firmu</a>
       </div>
 
       <div style={box}>
@@ -1861,7 +2068,10 @@ export default function AppGssPage() {
       ) : (
         <>
           <div style={box}>
-            <h2 style={subtitle}>Hlavní sklad organizace</h2>
+            <h2 style={subtitle}>Skladový terminál</h2>
+            <div style={hintBox}>
+              Najděte položku, otevřete její detail, vyberte akci a po provedení se vraťte zpět na skladový seznam.
+            </div>
             <div style={summaryGrid}>
               <div style={summaryItem}>
                 <div style={summaryLabel}>Položky</div>
@@ -1883,16 +2093,59 @@ export default function AppGssPage() {
 
             <div style={actions}>
               <button type="button" onClick={openWarehouseSection} style={btnPrimary}>Otevřít sklad</button>
+              <button type="button" onClick={() => openMainPanel("intake")} style={btnPrimary}>Příjem</button>
               <button type="button" onClick={openIssuePanel} style={btnPrimary}>Výdej</button>
               <button type="button" onClick={openReturnPanel} style={btnPrimary}>Návrat z výroby</button>
-              <a href="/gpc" style={btnSecondary}>Vyhledat v GPC</a>
+              <button type="button" onClick={() => openMainPanel("dm")} style={btnSecondary}>Načíst DM kód</button>
+              <button type="button" onClick={() => openMainPanel("gpc")} style={btnSecondary}>Vyhledat v GPC</button>
               <button type="button" onClick={openLocalItemForm} style={btnSecondary}>Přidat lokální položku</button>
+              <button type="button" onClick={() => openMainPanel("purchase")} style={btnSecondary}>Objednávkový návrh</button>
+              <button type="button" onClick={() => openMainPanel("overstock")} style={btnSecondary}>Nadnormativní zásoby</button>
+              <button type="button" onClick={() => openMainPanel("movements")} style={btnSecondary}>Poslední pohyby</button>
             </div>
             {placeholderMessage ? <div style={errorMessage}>{placeholderMessage}</div> : null}
           </div>
 
+          {activeMainPanel === "intake" ? (
+            <div style={box}>
+              <div style={detailHeader}>
+                <div>
+                  <h2 style={subtitle}>Příjem</h2>
+                  <div style={muted}>Příjem na sklad se v MVP provádí z detailu konkrétní položky přes akci Naskladnit.</div>
+                </div>
+                <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+              </div>
+              <div style={summaryGrid}>
+                <div style={summaryItem}>
+                  <div style={settingsTitle}>Bez objednávky</div>
+                  <div style={meta}>
+                    Otevřete detail skladové položky a použijte akci Naskladnit. Tento režim slouží pro ruční příjem, inventuru, servisní návrat nebo příjem bez vazby na vystavenou objednávku.
+                  </div>
+                </div>
+                <div style={summaryItem}>
+                  <div style={settingsTitle}>Z objednávky</div>
+                  <div style={formGrid}>
+                    <label style={fieldLabel}>
+                      Číslo objednávky
+                      <input disabled value="" placeholder="bude doplněno později" style={input} />
+                    </label>
+                    <label style={fieldLabel}>
+                      Dodavatel
+                      <input disabled value="" placeholder="bude doplněno později" style={input} />
+                    </label>
+                  </div>
+                  <div style={offerInfo}>Budoucí příjem podle vystavené objednávky GSS. Seznam položek objednávky bude doplněn později.</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {activeMainPanel === "purchase" ? (
           <div style={box}>
-            <h2 style={subtitle}>Objednávkový návrh</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Objednávkový návrh</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             <div style={hintBox}>
               Objednávka v GSS vždy znamená požadavek na nový nástroj. Použité, přebroušené, výrobní, brousicí a rezervované kusy se neobjednávají.
             </div>
@@ -1995,10 +2248,14 @@ export default function AppGssPage() {
               <button type="button" onClick={() => showPurchasePlaceholder("Tato funkce bude doplněna v další fázi.")} style={btnSecondary}>Připravuje se: odeslat objednávku</button>
             </div>
           </div>
+          ) : null}
 
           {showIssuePanel ? (
             <div ref={issueSectionRef} style={box}>
-              <h2 style={subtitle}>Výdej do výroby</h2>
+              <div style={detailHeader}>
+                <h2 style={subtitle}>Výdej do výroby</h2>
+                <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+              </div>
               <div style={hintBox}>
                 Výdej do výroby je samostatná GSS služba. Nejde o přesun mezi sklady zákazníka.
               </div>
@@ -2186,7 +2443,10 @@ export default function AppGssPage() {
 
           {showReturnPanel ? (
             <div ref={returnSectionRef} style={box}>
-              <h2 style={subtitle}>Návrat z výroby</h2>
+              <div style={detailHeader}>
+                <h2 style={subtitle}>Návrat z výroby</h2>
+                <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+              </div>
               <div style={hintBox}>
                 Návrat z výroby je samostatný GSS pohyb. Po návratu musí být vždy rozhodnuto, co se s položkou stane dál.
               </div>
@@ -2420,8 +2680,12 @@ export default function AppGssPage() {
             </div>
           ) : null}
 
+          {activeMainPanel === "gpc" ? (
           <div style={box}>
-            <h2 style={subtitle}>Vyhledat v GPC</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Vyhledat v GPC</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             <div style={hintBox}>
               Vyhledejte validovanou položku v GPC a převeďte ji do svého skladu.
             </div>
@@ -2475,9 +2739,14 @@ export default function AppGssPage() {
               </div>
             ) : null}
           </div>
+          ) : null}
 
+          {activeMainPanel === "dm" ? (
           <div style={box}>
-            <h2 style={subtitle}>Načíst DM kód</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Načíst DM kód</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             <div style={hintBox}>
               Ruční MVP vstup pro DM kód. Později bude napojený na čtečku a automaticky otevře konkrétní kus.
             </div>
@@ -2503,6 +2772,7 @@ export default function AppGssPage() {
               M-technologies / Gogrou servisní přístup je v MVP připraven jako princip: servisní partner načte DM kód a pracuje pouze s tenant provozními daty konkrétního kusu.
             </div>
           </div>
+          ) : null}
 
           {selectedDmContext ? (
             <div style={box}>
@@ -2514,30 +2784,88 @@ export default function AppGssPage() {
                 dmServiceMessage={dmServiceMessage}
                 onUpdateServiceForm={updateDmServiceForm}
                 onSaveService={saveDmService}
-                onClose={closeDmDetail}
+                onClose={() => closeItemDetails(selectedDmContext.item)}
                 onPlaceholder={showPlaceholder}
               />
             </div>
           ) : null}
 
           <div ref={warehouseSectionRef} style={warehouseHighlighted ? highlightedBox : box}>
-            <h2 style={subtitle}>Tenant skladové položky</h2>
-            <div style={offerInfo}>
-              Cílově bude sklad zobrazený jako kompaktní řádkový seznam s detailem po kliknutí. Aktuální dlouhé karty jsou MVP prototyp pro rychlé ověření skladových toků.
-            </div>
+            <h2 style={subtitle}>Skladové položky</h2>
+            {!selectedWarehouseItem ? (
+              <>
+                <input
+                  value={warehouseSearchQuery}
+                  onChange={(event) => setWarehouseSearchQuery(event.target.value)}
+                  placeholder="Vyhledat skladovou položku… např. Walter ; fréza ; D12 ; 4z"
+                  style={input}
+                />
+                <div style={muted}>
+                  Více kritérií oddělte čárkou nebo středníkem. Např. Walter ; fréza ; D12 ; 4z.
+                  Později zde bude GINA/AI vyhledávání: např. Najdi frézu D12, 4 zuby, délka břitu min. 25.
+                </div>
+              </>
+            ) : null}
             {warehouseItems.length === 0 ? (
               <div style={muted}>Tenant sklad zatím neobsahuje žádné položky převzaté z GPC.</div>
+            ) : !selectedWarehouseItem && filteredWarehouseItems.length === 0 ? (
+              <div style={muted}>Žádná skladová položka neodpovídá zadaným kritériím.</div>
             ) : (
               <div style={resultList}>
-                {warehouseItems.map((item) => {
+                {(selectedWarehouseItem ? [selectedWarehouseItem] : filteredWarehouseItems).map((item) => {
+                  const itemKey = getItemKey(item);
+                  const stock = normalizeStockSummary(item.stockSummary);
                   const activeReservations = getActiveReservations(item);
                   const overstockOffer = item.overstockOffer;
                   const overstockIsActive = Boolean(overstockOffer?.enabled && overstockOffer.status === "active");
                   const overstockAlert = getOverstockAlertMessage(overstockOffer);
 
+                  if (!selectedWarehouseItem) {
+                    return (
+                      <div key={itemKey} style={warehouseRow}>
+                        <button type="button" onClick={() => openWarehouseItemDetail(item)} style={warehouseRowMain}>
+                          <div>
+                            <div style={resultTitle}>{item.name || item.gpc_id || "Položka bez názvu"}</div>
+                            <div style={meta}>{item.type || "Typ neuveden"} · {item.manufacturer || "Výrobce neuveden"}</div>
+                            <div style={meta}>
+                              {item.origin === "LOCAL"
+                                ? `GSS lokální: ${item.localFields?.internalCode || itemKey}`
+                                : `GPC ID: ${item.gpc_id || "bez vazby"}`}
+                              {item.gtin ? ` · GTIN: ${item.gtin}` : ""}
+                            </div>
+                          </div>
+                          <div style={warehouseRowNumbers}>
+                            <span>Celkem {stock.total}</span>
+                            <span>Dostupné {stock.available}</span>
+                            <span>Rezervace {stock.reserved}</span>
+                            <span>Výroba {stock.production}</span>
+                            <span>Broušení {stock.sharpening}</span>
+                          </div>
+                          <div style={warehouseRowNumbers}>
+                            <span>DM {item.tenantSettings?.dmEnabled ? "ano" : "ne"}</span>
+                            <span>Min {item.tenantSettings?.min || "-"}</span>
+                            <span>Max {item.tenantSettings?.max || "-"}</span>
+                            <span>Warning {item.tenantSettings?.warning || "-"}</span>
+                            <span>Nadnormativa {overstockOffer?.enabled ? getOverstockStatusLabel(overstockOffer.status) : "ne"}</span>
+                          </div>
+                        </button>
+                        <button type="button" onClick={() => openWarehouseItemDetail(item)} style={btnSecondary}>Detail položky</button>
+                      </div>
+                    );
+                  }
+
                   return (
-                  <div key={item.id || item.gpc_id} style={resultItem}>
+                  <div key={itemKey} style={resultItem}>
                     <div>
+                      <div style={detailHeader}>
+                        <div>
+                          <div style={settingsTitle}>Detail položky</div>
+                          <div style={muted}>Po práci s položkou se můžete vrátit zpět na kompaktní skladový seznam.</div>
+                        </div>
+                        <button type="button" onClick={() => closeWarehouseItemDetail(item)} style={btnSecondary}>
+                          Zpět na skladový seznam
+                        </button>
+                      </div>
                       <div style={resultTitle}>{item.name || item.gpc_id}</div>
                       {item.origin === "LOCAL" ? (
                         <div style={badgeWarning}>Lokální nevalidovaná položka</div>
@@ -2611,6 +2939,20 @@ export default function AppGssPage() {
                       <div style={meta}>
                         Dodavatel: {item.tenantSettings?.supplierName || "Gogrou"} · {item.tenantSettings?.supplierType || "Gogrou partner"} · Dodací násobek: {item.tenantSettings?.supplierPackQuantity || 1}
                       </div>
+                      <div style={meta}>
+                        Poznámka k broušení: {item.tenantSettings?.sharpen?.note || "nenastaveno"}
+                      </div>
+                      <div style={meta}>
+                        Výkres / příloha: {item.tenantSettings?.drawingReference || "nenastaveno"} · Povlak: {item.tenantSettings?.coatingNote || "nenastaveno"}
+                      </div>
+                      <div style={meta}>
+                        Lokální poznámka: {item.tenantSettings?.localNote || "nenastaveno"}
+                      </div>
+                      {item.tenantSettings?.blocked ? (
+                        <div style={badgeWarning}>
+                          Položka je blokovaná{item.tenantSettings?.blockReason ? ` · ${item.tenantSettings.blockReason}` : ""}
+                        </div>
+                      ) : null}
                       {item.lastPurchasePrice !== undefined && item.lastPurchasePrice !== null ? (
                         <div style={meta}>
                           Poslední pořizovací cena: {item.lastPurchasePrice} {item.lastPurchaseCurrency || "CZK"} · dodavatel {item.lastPurchaseSupplier || "neuveden"} · datum {item.lastPurchaseDate || "neuvedeno"}
@@ -2625,6 +2967,28 @@ export default function AppGssPage() {
                       <div style={itemActions}>
                         <button type="button" onClick={() => openItemSettings(item)} style={btnSecondary}>Nastavení položky</button>
                         <button type="button" onClick={() => openStockForm(item)} style={btnSecondary}>Naskladnit</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeItemDetails(item);
+                            openIssuePanel();
+                            selectIssueItem(item);
+                          }}
+                          style={btnSecondary}
+                        >
+                          Výdej
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeItemDetails(item);
+                            openReturnPanel();
+                            selectReturnItem(item);
+                          }}
+                          style={btnSecondary}
+                        >
+                          Návrat z výroby
+                        </button>
                         <button type="button" onClick={() => openReservationForm(item)} style={btnSecondary}>Rezervovat</button>
                         <button type="button" onClick={() => openOverstockForm(item)} style={btnSecondary}>Nadnormativa</button>
                         <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: detail</button>
@@ -2705,14 +3069,10 @@ export default function AppGssPage() {
                                 <button type="submit" style={btnImport}>Vytvořit DM kusy</button>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setDmFormItemKey("");
-                                    setDmForm(createDmForm());
-                                    setDmMessage("");
-                                  }}
+                                  onClick={() => closeItemDetails(item)}
                                   style={btnSecondary}
                                 >
-                                  Zavřít
+                                  Zpět na detail položky
                                 </button>
                               </div>
                             </form>
@@ -2885,14 +3245,10 @@ export default function AppGssPage() {
                             <button type="submit" style={btnImport}>Uložit naskladnění</button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setStockItemKey("");
-                                setStockForm(createStockForm());
-                                setStockMessage("");
-                              }}
+                              onClick={() => closeItemDetails(item)}
                               style={btnSecondary}
                             >
-                              Zavřít
+                              Zpět na detail položky
                             </button>
                           </div>
                         </form>
@@ -2990,14 +3346,10 @@ export default function AppGssPage() {
                             <button type="submit" style={btnImport}>Uložit rezervaci</button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setReservationItemKey("");
-                                setReservationForm(createReservationForm());
-                                setReservationMessage("");
-                              }}
+                              onClick={() => closeItemDetails(item)}
                               style={btnSecondary}
                             >
-                              Zavřít
+                              Zpět na detail položky
                             </button>
                           </div>
                         </form>
@@ -3090,14 +3442,10 @@ export default function AppGssPage() {
                             <button type="submit" style={btnImport}>Uložit nadnormativu</button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setOverstockItemKey("");
-                                setOverstockForm(createOverstockOfferForm());
-                                setOverstockMessage("");
-                              }}
+                              onClick={() => closeItemDetails(item)}
                               style={btnSecondary}
                             >
-                              Zavřít
+                              Zpět na detail položky
                             </button>
                           </div>
                         </form>
@@ -3265,14 +3613,10 @@ export default function AppGssPage() {
                             <button type="submit" style={btnImport}>Uložit nastavení</button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setSettingsItemKey("");
-                                setSettingsForm(null);
-                                setSettingsMessage("");
-                              }}
+                              onClick={() => closeItemDetails(item)}
                               style={btnSecondary}
                             >
-                              Zavřít
+                              Zpět na detail položky
                             </button>
                           </div>
                         </form>
@@ -3314,8 +3658,12 @@ export default function AppGssPage() {
             )}
           </div>
 
+          {activeMainPanel === "movements" ? (
           <div style={box}>
-            <h2 style={subtitle}>Poslední skladové pohyby</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Poslední skladové pohyby</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             {movementHistory.length > 0 ? (
               <div style={historyList}>
                 {movementHistory.slice(0, 20).map((movement) => (
@@ -3333,9 +3681,14 @@ export default function AppGssPage() {
               <div style={muted}>Zatím nejsou evidované žádné skladové pohyby.</div>
             )}
           </div>
+          ) : null}
 
+          {activeMainPanel === "overstock" ? (
           <div style={box}>
-            <h2 style={subtitle}>Nadnormativní zásoby</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Nadnormativní zásoby</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             <div style={muted}>
               Zde bude možné označit skladové položky jako nadnormativní a nabídnout je ostatním firmám.
             </div>
@@ -3359,9 +3712,14 @@ export default function AppGssPage() {
               <button type="button" onClick={showPlaceholder} style={btnSecondary}>Připravuje se: připravit nabídku</button>
             </div>
           </div>
+          ) : null}
 
+          {activeMainPanel === "local" ? (
           <div style={box}>
-            <h2 style={subtitle}>Lokální nevalidované položky</h2>
+            <div style={detailHeader}>
+              <h2 style={subtitle}>Lokální nevalidované položky</h2>
+              <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
+            </div>
             <div style={hintBox}>
               Lokální položky slouží pro rychlé zavedení položek, které ještě nejsou validované v GPC.
             </div>
@@ -3497,13 +3855,14 @@ export default function AppGssPage() {
 
                 <div style={actions}>
                   <button type="submit" style={btnImport}>Vytvořit lokální položku</button>
-                  <button type="button" onClick={() => setShowLocalItemForm(false)} style={btnSecondary}>Zavřít</button>
+                  <button type="button" onClick={closeMainPanel} style={btnSecondary}>Zpět na akce</button>
                 </div>
               </form>
             ) : localItemMessage ? (
               <div style={message}>{localItemMessage}</div>
             ) : null}
           </div>
+          ) : null}
 
           <div style={box}>
             <h2 style={subtitle}>Doporučené další kroky</h2>
@@ -3644,6 +4003,45 @@ const highlightedResultItem = {
   ...resultItem,
   border: "1px solid rgba(34,197,94,0.55)",
   background: "rgba(34,197,94,0.08)",
+};
+
+const warehouseRow = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: 10,
+  alignItems: "center",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 8,
+  padding: 10,
+};
+
+const warehouseRowMain = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 1.4fr) minmax(220px, 1fr) minmax(220px, 1fr)",
+  gap: 10,
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  color: "#fff",
+  padding: 0,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const warehouseRowNumbers = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+  fontSize: 12,
+  color: "rgba(255,255,255,0.76)",
+};
+
+const detailHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 12,
 };
 
 const resultTitle = {

@@ -6,7 +6,7 @@ export default function AppHeader() {
   const pathname = usePathname();
 
   let module = "Dashboard";
-  if (pathname.startsWith("/gss")) module = "GSS – Skladový systém";
+  if (pathname.startsWith("/app/gss") || pathname.startsWith("/gss")) module = "GSS – Skladový systém";
   else if (pathname.startsWith("/gpc")) module = "GPC – Katalog";
   else if (pathname.startsWith("/smartsplit")) module = "SmartSplit";
   else if (pathname.startsWith("/ai")) module = "AI Assistant";

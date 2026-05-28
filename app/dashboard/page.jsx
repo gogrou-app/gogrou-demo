@@ -21,7 +21,7 @@ export default function DashboardPage() {
         <Box
           title="GSS"
           desc="Skladový systém, pohyby, minima / maxima"
-          href="/gss"
+          href="/app/gss"
         />
 
         <Box
