@@ -260,6 +260,11 @@ const DM_LOCATION_LABELS = {
 };
 
 const DM_CREATE_STATUS_OPTIONS = ["new", "resharpened_new", "used"];
+const DM_ISSUE_AVAILABLE_STATUSES = ["new", "resharpened_new", "used"];
+const DM_MARKING_STATUS_LABELS = {
+  unmarked: "DM vytvořen, fyzicky neznačeno",
+  marked: "DM fyzicky označen",
+};
 
 const createDmForm = () => ({
   quantity: "",
@@ -318,6 +323,7 @@ const createOverstockOfferForm = (item = {}) => ({
 const createIssueForm = () => ({
   quantity: "",
   preferredState: "used",
+  dmQuery: "",
   costCenter: "",
   machine: "",
   job: "",
@@ -326,6 +332,7 @@ const createIssueForm = () => ({
 
 const createReturnForm = () => ({
   quantity: "",
+  dmQuery: "",
   decision: "return_used",
   returnedAt: getTodayDate(),
   performedBy: DEFAULT_INTAKE_OPERATOR,
@@ -439,9 +446,137 @@ const releaseLegacyOverstockReservation = (stock, overstockReserved) => {
   };
 };
 
+const getDmStockSummary = (item) => {
+  const stock = createEmptyStockSummary();
+
+  (item.dmItems || []).forEach((dmItem) => {
+    const status = dmItem.status || "new";
+
+    if (status !== "scrapped") {
+      stock.total += 1;
+    }
+
+    if (status === "new") {
+      stock.available += 1;
+      stock.states.new += 1;
+      return;
+    }
+
+    if (status === "resharpened_new") {
+      stock.available += 1;
+      stock.states.resharpened_new += 1;
+      return;
+    }
+
+    if (status === "used") {
+      stock.available += 1;
+      stock.states.used += 1;
+      return;
+    }
+
+    if (status === "reserved") {
+      stock.reserved += 1;
+      return;
+    }
+
+    if (status === "production") {
+      stock.production += 1;
+      return;
+    }
+
+    if (status === "sharpening") {
+      stock.sharpening += 1;
+      stock.states.sharpening += 1;
+      stock.sharpeningBreakdown.in_company += 1;
+      return;
+    }
+
+    if (status === "in_grinding_shop") {
+      stock.sharpening += 1;
+      stock.states.sharpening += 1;
+      stock.sharpeningBreakdown.at_grinder += 1;
+    }
+  });
+
+  return stock;
+};
+
+const getItemStockSummary = (item) =>
+  item.tenantSettings?.dmEnabled ? getDmStockSummary(item) : normalizeStockSummary(item.stockSummary);
+
+const getDmSummaryCounts = (item) => {
+  const dmItems = item.dmItems || [];
+
+  return {
+    total: dmItems.filter((dmItem) => dmItem.status !== "scrapped").length,
+    available: dmItems.filter((dmItem) => DM_ISSUE_AVAILABLE_STATUSES.includes(dmItem.status)).length,
+    new: dmItems.filter((dmItem) => dmItem.status === "new").length,
+    resharpened_new: dmItems.filter((dmItem) => dmItem.status === "resharpened_new").length,
+    production: dmItems.filter((dmItem) => dmItem.status === "production").length,
+    sharpening: dmItems.filter((dmItem) => dmItem.status === "sharpening" || dmItem.status === "in_grinding_shop").length,
+    blocked: dmItems.filter((dmItem) => dmItem.status === "blocked" || dmItem.blockedReason).length,
+    unmarked: dmItems.filter((dmItem) => (dmItem.markingStatus || "unmarked") === "unmarked").length,
+  };
+};
+
+const getFilteredDmItems = (item, filter) => {
+  const dmItems = item.dmItems || [];
+
+  if (!filter || filter === "all") {
+    return dmItems;
+  }
+
+  if (filter === "available") {
+    return dmItems.filter((dmItem) => DM_ISSUE_AVAILABLE_STATUSES.includes(dmItem.status));
+  }
+
+  if (filter === "sharpening") {
+    return dmItems.filter((dmItem) => dmItem.status === "sharpening" || dmItem.status === "in_grinding_shop");
+  }
+
+  if (filter === "blocked") {
+    return dmItems.filter((dmItem) => dmItem.status === "blocked" || dmItem.blockedReason);
+  }
+
+  if (filter === "unmarked") {
+    return dmItems.filter((dmItem) => (dmItem.markingStatus || "unmarked") === "unmarked");
+  }
+
+  return dmItems.filter((dmItem) => dmItem.status === filter);
+};
+
+const syncDmStockSummary = (item) =>
+  item.tenantSettings?.dmEnabled
+    ? {
+        ...item,
+        stockSummary: {
+          ...normalizeStockSummary(item.stockSummary),
+          ...getDmStockSummary(item),
+        },
+      }
+    : item;
+
 const getAllDmCodes = (items) => new Set(
   items.flatMap((item) => (item.dmItems || []).map((dmItem) => dmItem.dmCode))
 );
+
+const getAllQuickIds = (items) => new Set(
+  items.flatMap((item) => (item.dmItems || []).map((dmItem) => dmItem.quickId).filter(Boolean))
+);
+
+const generateQuickId = (existingQuickIds) => {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let quickId = "";
+
+  do {
+    const letterPart = Array.from({ length: 3 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+    const numberPart = String(Math.floor(Math.random() * 100000)).padStart(5, "0");
+    quickId = `${letterPart} ${numberPart}`;
+  } while (existingQuickIds.has(quickId));
+
+  existingQuickIds.add(quickId);
+  return quickId;
+};
 
 const getDmGid = (item) => {
   const source = item.gogrouId || item.gid || item.gpcNumericId || item.gpc_id || item.localFields?.internalCode || item.id || item.name || "0";
@@ -498,6 +633,21 @@ const createDmHistoryRecord = ({ type, note, performedBy = DEFAULT_INTAKE_OPERAT
   metadata,
 });
 
+const createDmLabelText = (item, dmItem) => [
+  `QID: ${dmItem.quickId || "není vygenerováno"}`,
+  `Název: ${item.name || item.gpc_id || "Položka"}`,
+  "Rozměry:",
+  `D = ${dmItem.currentDiameter || "neuvedeno"}`,
+  `L1 = ${dmItem.currentLength || "neuvedeno"}`,
+  `L2 = ${dmItem.currentOverallLength || dmItem.overallLength || "neuvedeno"}`,
+  `DM: ${dmItem.dmCode || "neuvedeno"}`,
+].join("\n");
+
+const createDmMarkingText = (dmItem) => [
+  `DM kód pro laser: ${dmItem.dmCode || "neuvedeno"}`,
+  `QID pro štítek: ${dmItem.quickId || "není vygenerováno"}`,
+].join("\n");
+
 const findDmItemInWarehouse = (items, dmCode) => {
   const normalizedCode = normalizeSearch(dmCode);
   if (!normalizedCode) {
@@ -513,6 +663,20 @@ const findDmItemInWarehouse = (items, dmCode) => {
 
   return null;
 };
+
+const findDmItemInItemByCodeOrQuickId = (item, query) => {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  return (item.dmItems || []).find((dmItem) =>
+    normalizeSearch(dmItem.dmCode) === normalizedQuery || normalizeSearch(dmItem.quickId) === normalizedQuery
+  ) || null;
+};
+
+const isDmItemAvailableForIssue = (dmItem) =>
+  Boolean(dmItem) && DM_ISSUE_AVAILABLE_STATUSES.includes(dmItem.status) && !dmItem.blockedReason;
 
 const parsePositiveNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -534,7 +698,7 @@ const getPurchaseStatus = (available, min) => {
 };
 
 const createPurchaseProposalItem = (item) => {
-  const stock = normalizeStockSummary(item.stockSummary);
+  const stock = getItemStockSummary(item);
   const min = parsePositiveNumber(item.tenantSettings?.min);
   const max = parsePositiveNumber(item.tenantSettings?.max);
 
@@ -573,14 +737,20 @@ function DmDetailContent({
   dmServiceMessage,
   onUpdateServiceForm,
   onSaveService,
+  onGenerateQuickId,
+  onMarkDmItem,
   onClose,
   onPlaceholder,
 }) {
+  const [showLabelPreview, setShowLabelPreview] = useState(false);
   const maxSharpeningCount = dmItem.maxSharpeningCount ?? item.tenantSettings?.sharpen?.cycles;
   const hasSharpeningLimit = maxSharpeningCount !== "" && maxSharpeningCount !== null && maxSharpeningCount !== undefined;
   const reachedSharpeningLimit = hasSharpeningLimit && Number(dmItem.sharpeningCount || 0) >= Number(maxSharpeningCount);
   const displayDiameter = dmItem.currentDiameter || "neuvedeno";
   const displayLength = dmItem.currentLength || "neuvedeno";
+  const labelText = createDmLabelText(item, dmItem);
+  const markingStatus = dmItem.markingStatus || "unmarked";
+  const markingText = createDmMarkingText(dmItem);
 
   return (
     <div style={settingsPanel}>
@@ -595,6 +765,29 @@ function DmDetailContent({
           </div>
         </div>
         <div style={badge}>{labelFromMap(DM_STATUS_LABELS, dmItem.status)}</div>
+      </div>
+
+      <div style={quickIdBox}>
+        <div style={summaryLabel}>QID</div>
+        <div style={quickIdValue}>QID: {dmItem.quickId || "není vygenerováno"}</div>
+        {!dmItem.quickId ? (
+          <button type="button" onClick={onGenerateQuickId} style={btnSecondary}>Vygenerovat QID</button>
+        ) : null}
+      </div>
+
+      <div style={formBox}>
+        <div style={settingsTitle}>Fyzické označení DM kusu</div>
+        <div style={markingStatus === "marked" ? message : offerInfo}>
+          {markingStatus === "marked"
+            ? `DM fyzicky označen.${dmItem.markedAt ? ` Datum označení: ${dmItem.markedAt}` : ""}`
+            : "DM vytvořen v systému, fyzické označení zatím neprovedeno."}
+        </div>
+        <textarea readOnly value={markingText} style={textarea} />
+        {markingStatus !== "marked" ? (
+          <div style={actions}>
+            <button type="button" onClick={onMarkDmItem} style={btnImport}>Označit jako fyzicky označené</button>
+          </div>
+        ) : null}
       </div>
 
       {dmItem.status === "blocked" || dmItem.blockedReason ? (
@@ -630,11 +823,38 @@ function DmDetailContent({
         <span>Výkres: {dmItem.drawingUrl || "neuvedeno"}</span>
         <span>Rezervace: {dmItem.reservedForOrder || "ne"}</span>
         <span>Poslední servis: {dmItem.lastServiceAt || "neuvedeno"}</span>
+        <span>Aktuální stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)}</span>
+        <span>Aktuální lokace: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)}</span>
       </div>
+      {dmItem.lastIssueMetadata ? (
+        <div style={offerInfo}>
+          Poslední výdej: {dmItem.lastIssueMetadata.issuedAt || "datum neuvedeno"} · zakázka {dmItem.lastIssueMetadata.job || "neuvedeno"} · stroj {dmItem.lastIssueMetadata.machine || "neuvedeno"} · středisko {dmItem.lastIssueMetadata.costCenter || "neuvedeno"}
+        </div>
+      ) : null}
+      {dmItem.lastReturnMetadata ? (
+        <div style={offerInfo}>
+          Poslední návrat: {dmItem.lastReturnMetadata.returnedAt || "datum neuvedeno"} · {dmItem.lastReturnMetadata.decisionLabel || "rozhodnutí neuvedeno"} · provedl {dmItem.lastReturnMetadata.performedBy || "neuvedeno"} · poznámka {dmItem.lastReturnMetadata.note || "bez poznámky"}
+        </div>
+      ) : null}
       {dmItem.serviceNote ? <div style={offerInfo}>{dmItem.serviceNote}</div> : null}
 
       <div style={hintBox}>
         Zákazník po načtení DM okamžitě vidí aktuální hodnoty po ostření. GPC master data se nemění.
+      </div>
+
+      <div style={formBox}>
+        <div style={settingsTitle}>Soft štítek / QID výstup</div>
+        <div style={muted}>
+          Textový výstup pro ruční tisk, laser nebo dočasnou štítkovou šablonu. Skutečný tisk není součástí MVP.
+        </div>
+        <div style={actions}>
+          <button type="button" onClick={() => setShowLabelPreview((current) => !current)} style={btnSecondary}>
+            {showLabelPreview ? "Skrýt štítek" : "Připravit štítek"}
+          </button>
+        </div>
+        {showLabelPreview ? (
+          <textarea readOnly value={labelText} style={textarea} />
+        ) : null}
       </div>
 
       <form onSubmit={onSaveService} style={formBox}>
@@ -729,6 +949,7 @@ export default function AppGssPage() {
   const [selectedDmDetail, setSelectedDmDetail] = useState(null);
   const [dmServiceForm, setDmServiceForm] = useState(createDmServiceForm());
   const [dmServiceMessage, setDmServiceMessage] = useState("");
+  const [dmListFilter, setDmListFilter] = useState("");
   const [reservationItemKey, setReservationItemKey] = useState("");
   const [reservationForm, setReservationForm] = useState(createReservationForm());
   const [reservationMessage, setReservationMessage] = useState("");
@@ -811,13 +1032,21 @@ export default function AppGssPage() {
     : [];
   const selectedIssueItem = warehouseItems.find((item) => getItemKey(item) === issueItemKey);
   const selectedIssueStock = selectedIssueItem
-    ? releaseLegacyOverstockReservation(normalizeStockSummary(selectedIssueItem.stockSummary), selectedIssueItem.overstockReserved)
+    ? releaseLegacyOverstockReservation(getItemStockSummary(selectedIssueItem), selectedIssueItem.overstockReserved)
     : null;
+  const selectedIssueDmItem = selectedIssueItem?.tenantSettings?.dmEnabled
+    ? findDmItemInItemByCodeOrQuickId(selectedIssueItem, issueForm.dmQuery)
+    : null;
+  const selectedIssueDmAvailable = isDmItemAvailableForIssue(selectedIssueDmItem);
   const normalizedReturnQuery = normalizeSearch(returnQuery);
   const returnResults = normalizedReturnQuery
     ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
     : [];
   const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
+  const selectedReturnDmItem = selectedReturnItem?.tenantSettings?.dmEnabled
+    ? findDmItemInItemByCodeOrQuickId(selectedReturnItem, returnForm.dmQuery)
+    : null;
+  const selectedReturnDmValid = Boolean(selectedReturnDmItem && selectedReturnDmItem.status === "production");
   const movementHistory = collectMovementHistory(warehouseItems);
   const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
   const selectedDmContext = selectedDmDetail ? findDmItemInWarehouse(warehouseItems, selectedDmDetail.dmCode) : null;
@@ -1440,6 +1669,7 @@ export default function AppGssPage() {
     }
 
     const existingCodes = getAllDmCodes(warehouseItems);
+    const existingQuickIds = getAllQuickIds(warehouseItems);
     const dmPrefix = getDmPrefix(organization);
     const dmGid = getDmGid(selectedItem);
     let nextDmSequence = getNextDmSequence(warehouseItems, dmPrefix, dmGid);
@@ -1458,6 +1688,7 @@ export default function AppGssPage() {
       return {
         id: crypto.randomUUID(),
         dmCode,
+        quickId: generateQuickId(existingQuickIds),
         itemId: getItemKey(selectedItem),
         gid: dmGid,
         sequence: Number(dmCode.slice(-3)),
@@ -1477,6 +1708,8 @@ export default function AppGssPage() {
         drawingUrl: selectedItem.tenantSettings?.drawingReference || "",
         blockedReason: "",
         reservedForOrder: "",
+        markingStatus: "unmarked",
+        markedAt: "",
         history: [
           createDmHistoryRecord({
             type: "dm_created",
@@ -1486,6 +1719,7 @@ export default function AppGssPage() {
               location: dmForm.location,
               currentDiameter: dmForm.currentDiameter.trim(),
               currentLength: dmForm.currentLength.trim(),
+              markingStatus: "unmarked",
             },
           }),
         ],
@@ -1499,11 +1733,11 @@ export default function AppGssPage() {
         return item;
       }
 
-      const nextItem = {
+      const nextItem = syncDmStockSummary({
         ...item,
         dmItems: [...(item.dmItems || []), ...newDmItems],
         updatedAt: now,
-      };
+      });
 
       return appendMovement(nextItem, createMovementRecord({
         organizationId,
@@ -1515,6 +1749,7 @@ export default function AppGssPage() {
         note: "Vytvořeny digitální DM kusy.",
         metadata: {
           dmCodes: newDmItems.map((dmItem) => dmItem.dmCode),
+          quickIds: newDmItems.map((dmItem) => dmItem.quickId),
           location: dmForm.location,
           currentDiameter: dmForm.currentDiameter.trim(),
           currentLength: dmForm.currentLength.trim(),
@@ -1530,6 +1765,95 @@ export default function AppGssPage() {
     setDmFormItemKey("");
     setDmForm(createDmForm());
     setDmMessage("");
+  };
+
+  const generateQuickIdForSelectedDm = () => {
+    if (!selectedDmDetail) {
+      setDmServiceMessage("Vyberte DM kus.");
+      return;
+    }
+
+    const existingQuickIds = getAllQuickIds(warehouseItems);
+    const nextQuickId = generateQuickId(existingQuickIds);
+    const now = new Date().toISOString();
+    const historyRecord = createDmHistoryRecord({
+      type: "quick_id_generated",
+      note: `QID ${nextQuickId} vygenerováno pro DM kus.`,
+      metadata: {
+        quickId: nextQuickId,
+      },
+    });
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== selectedDmDetail.itemId) {
+        return item;
+      }
+
+      return {
+        ...item,
+        dmItems: (item.dmItems || []).map((dmItem) => {
+          if (dmItem.dmCode !== selectedDmDetail.dmCode) {
+            return dmItem;
+          }
+
+          if (dmItem.quickId) {
+            return dmItem;
+          }
+
+          return {
+            ...dmItem,
+            quickId: nextQuickId,
+            history: [historyRecord, ...(dmItem.history || [])].slice(0, 100),
+            updatedAt: now,
+          };
+        }),
+        updatedAt: now,
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setDmServiceMessage(`QID ${nextQuickId} bylo vygenerováno.`);
+  };
+
+  const markDmItemAsPhysicallyMarked = (itemKey, dmCode) => {
+    const now = new Date().toISOString();
+    const historyRecord = createDmHistoryRecord({
+      type: "dm_marked",
+      note: "DM kus označen jako fyzicky značený.",
+      metadata: {
+        markingStatus: "marked",
+        markedAt: now,
+      },
+    });
+
+    const nextItems = warehouseItems.map((item) => {
+      if (getItemKey(item) !== itemKey) {
+        return item;
+      }
+
+      return {
+        ...item,
+        dmItems: (item.dmItems || []).map((dmItem) => {
+          if (dmItem.dmCode !== dmCode) {
+            return dmItem;
+          }
+
+          return {
+            ...dmItem,
+            markingStatus: "marked",
+            markedAt: now,
+            history: [historyRecord, ...(dmItem.history || [])].slice(0, 100),
+            updatedAt: now,
+          };
+        }),
+        updatedAt: now,
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    setDmServiceMessage("DM kus byl označen jako fyzicky označený.");
   };
 
   const searchDmCode = () => {
@@ -1602,11 +1926,11 @@ export default function AppGssPage() {
         };
       });
 
-      const nextItem = {
+      const nextItem = syncDmStockSummary({
         ...item,
         dmItems: nextDmItems,
         updatedAt: new Date().toISOString(),
-      };
+      });
 
       return appendMovement(nextItem, createMovementRecord({
         organizationId,
@@ -1652,6 +1976,8 @@ export default function AppGssPage() {
       return;
     }
 
+    const existingCodes = getAllDmCodes(warehouseItems);
+    const existingQuickIds = getAllQuickIds(warehouseItems);
     const nextItems = warehouseItems.map((item) => {
       if (getItemKey(item) !== stockItemKey) {
         return item;
@@ -1664,6 +1990,65 @@ export default function AppGssPage() {
       const purchaseCurrency = stockForm.purchaseCurrency.trim() || "CZK";
       const purchaseSupplier = stockForm.source.trim();
       const purchaseDate = stockForm.receivedAt || getTodayDate();
+      const dmPrefix = getDmPrefix(organization);
+      const dmGid = getDmGid(item);
+      let nextDmSequence = getNextDmSequence(warehouseItems, dmPrefix, dmGid);
+      const dmStatus = stockForm.condition || "new";
+      const dmLocation = dmStatus === "sharpening" ? "sharpening_collection" : "main_warehouse";
+      const newDmItems = item.tenantSettings?.dmEnabled
+        ? Array.from({ length: quantity }, () => {
+            const generated = generateDmCode({
+              existingCodes,
+              prefix: dmPrefix,
+              gid: dmGid,
+              sequence: nextDmSequence,
+            });
+            nextDmSequence = generated.nextSequence;
+            const dmCode = generated.code;
+
+            return {
+              id: crypto.randomUUID(),
+              dmCode,
+              quickId: generateQuickId(existingQuickIds),
+              itemId: getItemKey(item),
+              gid: dmGid,
+              sequence: Number(dmCode.slice(-3)),
+              gpc_id: item.gpc_id || "",
+              origin: item.origin || "LOCAL",
+              status: dmStatus,
+              location: dmLocation,
+              currentDiameter: "",
+              currentLength: "",
+              sharpeningCount: 0,
+              maxSharpeningCount: item.tenantSettings?.sharpen?.cycles ? Number(item.tenantSettings.sharpen.cycles) : null,
+              lastServiceAt: "",
+              lastMeasuredAt: "",
+              lastMeasurementProtocol: "",
+              serviceNote: "",
+              coating: item.tenantSettings?.coatingNote || "",
+              drawingUrl: item.tenantSettings?.drawingReference || "",
+              blockedReason: "",
+              reservedForOrder: "",
+              markingStatus: "unmarked",
+              markedAt: "",
+              history: [
+                createDmHistoryRecord({
+                  type: "dm_created_from_intake",
+                  note: "DM kus vytvořen automaticky při naskladnění.",
+                  metadata: {
+                    status: dmStatus,
+                    location: dmLocation,
+                    markingStatus: "unmarked",
+                    documentType: stockForm.documentType,
+                    documentNumber: stockForm.documentNumber.trim(),
+                  },
+                }),
+              ],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+          })
+        : [];
       const nextStock = {
         ...currentStock,
         total: currentStock.total + quantity,
@@ -1699,15 +2084,16 @@ export default function AppGssPage() {
         },
       };
 
-      const nextItem = {
+      const nextItem = syncDmStockSummary({
         ...item,
+        dmItems: item.tenantSettings?.dmEnabled ? [...(item.dmItems || []), ...newDmItems] : item.dmItems,
         lastPurchasePrice: purchasePricePerUnit,
         lastPurchaseCurrency: purchaseCurrency,
         lastPurchaseDate: purchaseDate,
         lastPurchaseSupplier: purchaseSupplier,
         stockSummary: nextStock,
         updatedAt: new Date().toISOString(),
-      };
+      });
 
       return appendMovement(nextItem, createMovementRecord({
         organizationId,
@@ -1728,6 +2114,8 @@ export default function AppGssPage() {
           purchasePricePerUnit,
           purchaseCurrency,
           purchaseTotalValue: purchasePricePerUnit !== null ? purchasePricePerUnit * quantity : null,
+          dmCodes: newDmItems.map((dmItem) => dmItem.dmCode),
+          quickIds: newDmItems.map((dmItem) => dmItem.quickId),
           grinder: isSharpening ? stockForm.grinder.trim() || DEFAULT_GRINDER : "",
           stockNote: stockForm.note.trim(),
         },
@@ -1763,14 +2151,34 @@ export default function AppGssPage() {
       return;
     }
 
-    const quantity = Number(issueForm.quantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    const isDmIssue = Boolean(selectedIssueItem.tenantSettings?.dmEnabled);
+    const selectedDmItem = isDmIssue ? findDmItemInItemByCodeOrQuickId(selectedIssueItem, issueForm.dmQuery) : null;
+
+    if (isDmIssue && !issueForm.dmQuery.trim()) {
+      setIssueMessage("Načtěte nebo zadejte DM/QID kus.");
+      return;
+    }
+
+    if (isDmIssue && !selectedDmItem) {
+      setIssueMessage("DM/QID kus nebyl nalezen.");
+      return;
+    }
+
+    if (isDmIssue && !isDmItemAvailableForIssue(selectedDmItem)) {
+      setIssueMessage("Kus není dostupný pro výdej.");
+      return;
+    }
+
+    const quantity = isDmIssue ? 1 : Number(issueForm.quantity);
+    const issueState = isDmIssue ? selectedDmItem.status : issueForm.preferredState;
+
+    if (!isDmIssue && (!Number.isFinite(quantity) || quantity <= 0)) {
       setIssueMessage("Zadejte kladný počet kusů pro výdej.");
       return;
     }
 
     const currentStock = releaseLegacyOverstockReservation(
-      normalizeStockSummary(selectedIssueItem.stockSummary),
+      getItemStockSummary(selectedIssueItem),
       selectedIssueItem.overstockReserved
     );
     if (quantity > currentStock.available) {
@@ -1778,7 +2186,7 @@ export default function AppGssPage() {
       return;
     }
 
-    if (quantity > currentStock.states[issueForm.preferredState]) {
+    if (quantity > currentStock.states[issueState]) {
       setIssueMessage("Ve vybraném stavu není dostatek kusů k výdeji.");
       return;
     }
@@ -1789,13 +2197,13 @@ export default function AppGssPage() {
       }
 
       const stock = releaseLegacyOverstockReservation(
-        normalizeStockSummary(item.stockSummary),
+        getItemStockSummary(item),
         item.overstockReserved
       );
       const currentOffer = item.overstockOffer;
       const offerQuantity = Number(currentOffer?.quantity) || 0;
-      const nextStateQuantity = stock.states[issueForm.preferredState] - quantity;
-      const offerIsAffected = currentOffer?.enabled && currentOffer.status === "active" && issueForm.preferredState === "new" && offerQuantity > nextStateQuantity;
+      const nextStateQuantity = stock.states[issueState] - quantity;
+      const offerIsAffected = currentOffer?.enabled && currentOffer.status === "active" && issueState === "new" && offerQuantity > nextStateQuantity;
       const nextOfferQuantity = offerIsAffected ? Math.max(nextStateQuantity, 0) : offerQuantity;
       const nextOverstockOffer = offerIsAffected
         ? {
@@ -1808,23 +2216,62 @@ export default function AppGssPage() {
       const overstockIssueNote = offerIsAffected
         ? " Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo."
         : "";
-      const nextItem = {
+      const issuedDmCodes = [];
+      const nextDmItems = item.tenantSettings?.dmEnabled
+        ? (item.dmItems || []).map((dmItem) => {
+            if (dmItem.dmCode !== selectedDmItem.dmCode) {
+              return dmItem;
+            }
+
+            issuedDmCodes.push(dmItem.dmCode);
+
+            return {
+              ...dmItem,
+              status: "production",
+              location: "production",
+              lastIssueMetadata: {
+                issuedAt: new Date().toISOString(),
+                performedBy: DEFAULT_INTAKE_OPERATOR,
+                costCenter: issueForm.costCenter.trim(),
+                machine: issueForm.machine.trim(),
+                job: issueForm.job.trim(),
+                note: issueForm.note.trim(),
+              },
+              history: [
+                createDmHistoryRecord({
+                  type: "dm_issue_to_production",
+                  note: issueForm.note.trim() || `DM kus vydán do výroby na zakázku ${issueForm.job.trim() || "neuvedeno"}.`,
+                  metadata: {
+                    previousStatus: issueState,
+                    job: issueForm.job.trim(),
+                    costCenter: issueForm.costCenter.trim(),
+                    machine: issueForm.machine.trim(),
+                  },
+                }),
+                ...(dmItem.history || []),
+              ].slice(0, 100),
+              updatedAt: new Date().toISOString(),
+            };
+          })
+        : item.dmItems;
+      const nextItem = syncDmStockSummary({
         ...item,
         overstockOffer: nextOverstockOffer,
         overstockReserved: 0,
+        dmItems: nextDmItems,
         stockSummary: {
           ...stock,
           available: stock.available - quantity,
           production: stock.production + quantity,
           states: {
             ...stock.states,
-            [issueForm.preferredState]: nextStateQuantity,
+            [issueState]: nextStateQuantity,
           },
           lastIssueMetadata: {
             type: "issue_to_production",
             quantity,
-            preferredState: issueForm.preferredState,
-            preferredStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
+            preferredState: issueState,
+            preferredStateLabel: ISSUE_STATE_LABELS[issueState],
             costCenter: issueForm.costCenter.trim(),
             machine: issueForm.machine.trim(),
             job: issueForm.job.trim(),
@@ -1837,25 +2284,28 @@ export default function AppGssPage() {
           },
         },
         updatedAt: new Date().toISOString(),
-      };
+      });
 
       return appendMovement(nextItem, createMovementRecord({
         organizationId,
         item,
         type: "issue_to_production",
         quantity,
-        state: issueForm.preferredState,
+        state: issueState,
         performedBy: DEFAULT_INTAKE_OPERATOR,
         note: `${issueForm.note.trim()}${overstockIssueNote}`.trim(),
         metadata: {
-          preferredState: issueForm.preferredState,
-          preferredStateLabel: ISSUE_STATE_LABELS[issueForm.preferredState],
+          preferredState: issueState,
+          preferredStateLabel: ISSUE_STATE_LABELS[issueState],
           costCenter: issueForm.costCenter.trim(),
           machine: issueForm.machine.trim(),
           job: issueForm.job.trim(),
+          issuedDmCode: selectedDmItem?.dmCode,
+          issuedQuickId: selectedDmItem?.quickId,
           overstockOfferAdjusted: offerIsAffected,
           overstockOfferPreviousQuantity: offerIsAffected ? offerQuantity : undefined,
           overstockOfferNextQuantity: offerIsAffected ? nextOfferQuantity : undefined,
+          issuedDmCodes,
           issuedAt: new Date().toISOString(),
         },
       }));
@@ -1865,9 +2315,10 @@ export default function AppGssPage() {
     writeWarehouse(organizationId, nextItems);
     const affectedItem = nextItems.find((item) => getItemKey(item) === issueItemKey);
     const overstockWasAdjusted = Boolean(affectedItem?.stockSummary?.lastIssueMetadata?.overstockOfferAdjusted);
+    const dmIssueSuffix = selectedDmItem ? ` QID ${selectedDmItem.quickId || "bez QID"} / DM ${selectedDmItem.dmCode} odešel do výroby.` : "";
     setIssueMessage(overstockWasAdjusted
-      ? "Položka byla vydána do výroby. Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo."
-      : "Položka byla vydána do výroby.");
+      ? `Položka byla vydána do výroby.${dmIssueSuffix} Výdej zasáhl do nadnormativní nabídky. Nabízené množství bylo automaticky poníženo.`
+      : `Položka byla vydána do výroby.${dmIssueSuffix}`);
   };
 
   const reportStockDifference = () => {
@@ -1876,7 +2327,7 @@ export default function AppGssPage() {
       return;
     }
 
-    const stock = normalizeStockSummary(selectedIssueItem.stockSummary);
+    const stock = getItemStockSummary(selectedIssueItem);
     const nextItems = warehouseItems.map((item) => {
       if (getItemKey(item) !== issueItemKey) {
         return item;
@@ -1931,13 +2382,31 @@ export default function AppGssPage() {
       return;
     }
 
-    const quantity = Number(returnForm.quantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    const isDmReturn = Boolean(selectedReturnItem.tenantSettings?.dmEnabled);
+    const selectedDmItem = isDmReturn ? findDmItemInItemByCodeOrQuickId(selectedReturnItem, returnForm.dmQuery) : null;
+
+    if (isDmReturn && !returnForm.dmQuery.trim()) {
+      setReturnMessage("Načtěte nebo zadejte DM/QID kus.");
+      return;
+    }
+
+    if (isDmReturn && !selectedDmItem) {
+      setReturnMessage("DM/QID kus nebyl nalezen.");
+      return;
+    }
+
+    if (isDmReturn && selectedDmItem.status !== "production") {
+      setReturnMessage("Kus není vedený ve výrobě.");
+      return;
+    }
+
+    const quantity = isDmReturn ? 1 : Number(returnForm.quantity);
+    if (!isDmReturn && (!Number.isFinite(quantity) || quantity <= 0)) {
       setReturnMessage("Zadejte kladný počet kusů pro návrat.");
       return;
     }
 
-    const currentStock = normalizeStockSummary(selectedReturnItem.stockSummary);
+    const currentStock = getItemStockSummary(selectedReturnItem);
     if (quantity > currentStock.production) {
       setReturnMessage("Nelze vrátit více kusů, než je aktuálně ve výrobě.");
       return;
@@ -1954,7 +2423,7 @@ export default function AppGssPage() {
         return item;
       }
 
-      const stock = normalizeStockSummary(item.stockSummary);
+      const stock = getItemStockSummary(item);
       const nextStock = {
         ...stock,
         production: stock.production - quantity,
@@ -1989,13 +2458,72 @@ export default function AppGssPage() {
         nextStock.sharpeningBreakdown.in_company += quantity;
       }
 
-      const nextItem = {
+      const nextDmStatus = returnForm.decision === "return_used"
+        ? "used"
+        : returnForm.decision === "send_sharpening"
+          ? "sharpening"
+          : returnForm.decision === "scrap_carbide"
+            ? "scrapped"
+            : "blocked";
+      const nextDmLocation = returnForm.decision === "return_used"
+        ? "main_warehouse"
+        : returnForm.decision === "send_sharpening"
+          ? "sharpening_collection"
+          : "black_box";
+      const returnedDmCodes = [];
+      const nextDmItems = item.tenantSettings?.dmEnabled
+        ? (item.dmItems || []).map((dmItem) => {
+            if (dmItem.dmCode !== selectedDmItem.dmCode) {
+              return dmItem;
+            }
+
+            returnedDmCodes.push(dmItem.dmCode);
+
+            const returnMetadata = {
+              returnedAt: returnForm.returnedAt || getTodayDate(),
+              decision: returnForm.decision,
+              decisionLabel: RETURN_DECISION_LABELS[returnForm.decision],
+              performedBy: returnForm.performedBy.trim() || DEFAULT_INTAKE_OPERATOR,
+              note: returnForm.note.trim(),
+              costCenter: returnForm.costCenter.trim(),
+              machine: returnForm.machine.trim(),
+              job: returnForm.job.trim(),
+            };
+
+            return {
+              ...dmItem,
+              status: nextDmStatus,
+              location: nextDmLocation,
+              blockedReason: nextDmStatus === "blocked" ? returnForm.blockReason.trim() || returnForm.redirectInstruction.trim() || "Čeká na kontrolu." : dmItem.blockedReason,
+              lastReturnMetadata: returnMetadata,
+              history: [
+                createDmHistoryRecord({
+                  type: "dm_return_from_production",
+                  note: returnForm.note.trim() || returnForm.serviceInstruction.trim() || returnForm.discardReason.trim() || returnForm.redirectInstruction.trim() || returnForm.blockReason.trim(),
+                  metadata: {
+                    ...returnMetadata,
+                    decision: returnForm.decision,
+                    previousStatus: "production",
+                    nextStatus: nextDmStatus,
+                    nextLocation: nextDmLocation,
+                    job: returnForm.job.trim(),
+                  },
+                }),
+                ...(dmItem.history || []),
+              ].slice(0, 100),
+              updatedAt: new Date().toISOString(),
+            };
+          })
+        : item.dmItems;
+
+      const nextItem = syncDmStockSummary({
         ...item,
+        dmItems: nextDmItems,
         stockSummary: nextStock,
         updatedAt: new Date().toISOString(),
-      };
+      });
       const movementType = returnForm.decision === "send_sharpening" ? "send_to_sharpening" : "return_from_production";
-      const movementState = returnForm.decision === "send_sharpening" ? "sharpening" : "used";
+      const movementState = item.tenantSettings?.dmEnabled ? nextDmStatus : returnForm.decision === "send_sharpening" ? "sharpening" : "used";
 
       return appendMovement(nextItem, createMovementRecord({
         organizationId,
@@ -2017,13 +2545,16 @@ export default function AppGssPage() {
           discardReason: returnForm.discardReason.trim(),
           redirectInstruction: returnForm.redirectInstruction.trim(),
           blockReason: returnForm.blockReason.trim(),
+          returnedDmCodes,
+          returnedQuickId: selectedDmItem?.quickId,
         },
       }));
     });
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
-    setReturnMessage("Položka byla vrácena z výroby.");
+    const dmReturnSuffix = selectedDmItem ? ` QID ${selectedDmItem.quickId || "bez QID"} / DM ${selectedDmItem.dmCode} byl vrácen z výroby.` : "";
+    setReturnMessage(`Položka byla vrácena z výroby.${dmReturnSuffix}`);
   };
 
   return (
@@ -2283,7 +2814,7 @@ export default function AppGssPage() {
               {issueResults.length > 0 ? (
                 <div style={resultList}>
                   {issueResults.map((item) => {
-                    const stock = releaseLegacyOverstockReservation(normalizeStockSummary(item.stockSummary), item.overstockReserved);
+                    const stock = releaseLegacyOverstockReservation(getItemStockSummary(item), item.overstockReserved);
                     const selected = getItemKey(item) === issueItemKey;
 
                     return (
@@ -2338,37 +2869,53 @@ export default function AppGssPage() {
                     <span>Použitý: {selectedIssueStock.states.used}</span>
                   </div>
                   <div style={hintBox}>
-                    Vybraný stav: {ISSUE_STATE_LABELS[issueForm.preferredState]} · dostupné v tomto stavu: {selectedIssueStock.states[issueForm.preferredState]} ks
+                    {selectedIssueItem.tenantSettings?.dmEnabled
+                      ? "U DM položky musí být před výdejem vybrán konkrétní DM/QID kus."
+                      : `Vybraný stav: ${ISSUE_STATE_LABELS[issueForm.preferredState]} · dostupné v tomto stavu: ${selectedIssueStock.states[issueForm.preferredState]} ks`}
                   </div>
                   {selectedIssueItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
-                      Načtěte DM kód vydávaného kusu. V MVP zatím není detailní DM výdej implementovaný.
+                      Zadejte nebo načtěte DM kód nebo QID. GSS vydá pouze konkrétně identifikovaný kus, nikdy automaticky první dostupný kus.
                     </div>
                   ) : null}
 
                   <div style={formGrid}>
-                    <label style={fieldLabel}>
-                      Preferovaný stav pro výdej
-                      <select
-                        value={issueForm.preferredState}
-                        onChange={(event) => updateIssueForm("preferredState", event.target.value)}
-                        style={input}
-                      >
-                        <option value="used">Použitý</option>
-                        <option value="resharpened_new">Nový přebroušený</option>
-                        <option value="new">Nový</option>
-                      </select>
-                    </label>
-                    <label style={fieldLabel}>
-                      Počet kusů do výroby
-                      <input
-                        type="number"
-                        min="1"
-                        value={issueForm.quantity}
-                        onChange={(event) => updateIssueForm("quantity", event.target.value)}
-                        style={input}
-                      />
-                    </label>
+                    {selectedIssueItem.tenantSettings?.dmEnabled ? (
+                      <label style={fieldLabel}>
+                        Načíst / zadat DM nebo QID
+                        <input
+                          value={issueForm.dmQuery}
+                          onChange={(event) => updateIssueForm("dmQuery", event.target.value)}
+                          placeholder="např. AH01-000045872-001 nebo KPL 14852"
+                          style={input}
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <label style={fieldLabel}>
+                          Preferovaný stav pro výdej
+                          <select
+                            value={issueForm.preferredState}
+                            onChange={(event) => updateIssueForm("preferredState", event.target.value)}
+                            style={input}
+                          >
+                            <option value="used">Použitý</option>
+                            <option value="resharpened_new">Nový přebroušený</option>
+                            <option value="new">Nový</option>
+                          </select>
+                        </label>
+                        <label style={fieldLabel}>
+                          Počet kusů do výroby
+                          <input
+                            type="number"
+                            min="1"
+                            value={issueForm.quantity}
+                            onChange={(event) => updateIssueForm("quantity", event.target.value)}
+                            style={input}
+                          />
+                        </label>
+                      </>
+                    )}
                     <label style={fieldLabel}>
                       Středisko
                       <input
@@ -2403,6 +2950,26 @@ export default function AppGssPage() {
                     </label>
                   </div>
 
+                  {selectedIssueItem.tenantSettings?.dmEnabled && issueForm.dmQuery.trim() && !selectedIssueDmItem ? (
+                    <div style={errorMessage}>DM/QID kus nebyl nalezen.</div>
+                  ) : null}
+                  {selectedIssueItem.tenantSettings?.dmEnabled && selectedIssueDmItem && !selectedIssueDmAvailable ? (
+                    <div style={errorMessage}>Kus není dostupný pro výdej.</div>
+                  ) : null}
+                  {selectedIssueItem.tenantSettings?.dmEnabled && selectedIssueDmItem && selectedIssueDmAvailable ? (
+                    <div style={hintBox}>
+                      <div style={settingsTitle}>Vybraný kus k výdeji</div>
+                      <div style={stateBreakdown}>
+                        <span>QID: {selectedIssueDmItem.quickId || "není vygenerováno"}</span>
+                        <span>DM: {selectedIssueDmItem.dmCode}</span>
+                        <span>D: {selectedIssueDmItem.currentDiameter || "neuvedeno"}</span>
+                        <span>L: {selectedIssueDmItem.currentLength || "neuvedeno"}</span>
+                        <span>Stav: {labelFromMap(DM_STATUS_LABELS, selectedIssueDmItem.status)}</span>
+                        <span>Lokace: {labelFromMap(DM_LOCATION_LABELS, selectedIssueDmItem.location)}</span>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div style={offerInfo}>
                     V MVP jsou dimenze textová pole. Později se budou vybírat z hodnot definovaných v administraci firmy.
                   </div>
@@ -2416,7 +2983,13 @@ export default function AppGssPage() {
                   {issueMessage ? <div style={issueMessage.includes("vydána") || issueMessage.includes("ohlášen") ? message : errorMessage}>{issueMessage}</div> : null}
 
                   <div style={actions}>
-                    <button type="submit" style={btnImport}>Vydat do výroby</button>
+                    <button
+                      type="submit"
+                      disabled={selectedIssueItem.tenantSettings?.dmEnabled && !selectedIssueDmAvailable}
+                      style={selectedIssueItem.tenantSettings?.dmEnabled && !selectedIssueDmAvailable ? btnDisabled : btnImport}
+                    >
+                      {selectedIssueItem.tenantSettings?.dmEnabled ? "Vydat tento kus" : "Vydat do výroby"}
+                    </button>
                     <button
                       type="button"
                       onClick={reportStockDifference}
@@ -2451,7 +3024,7 @@ export default function AppGssPage() {
                 Návrat z výroby je samostatný GSS pohyb. Po návratu musí být vždy rozhodnuto, co se s položkou stane dál.
               </div>
               <div style={muted}>
-                V MVP se pracuje s agregovaným množstvím. Pokud má položka DM tracking, budoucí návrat proběhne nad konkrétním DM kusem.
+                U položek bez DM trackingu se pracuje s agregovaným množstvím. U DM položek musí být návrat vždy navázaný na konkrétní DM/QID kus.
               </div>
 
               <input
@@ -2471,7 +3044,7 @@ export default function AppGssPage() {
               {returnResults.length > 0 ? (
                 <div style={resultList}>
                   {returnResults.map((item) => {
-                    const stock = normalizeStockSummary(item.stockSummary);
+                    const stock = getItemStockSummary(item);
                     const selected = getItemKey(item) === returnItemKey;
 
                     return (
@@ -2516,25 +3089,37 @@ export default function AppGssPage() {
                 <form onSubmit={returnFromProduction} style={settingsPanel}>
                   <div style={settingsTitle}>Vrátit z výroby</div>
                   <div style={meta}>
-                    {selectedReturnItem.name || selectedReturnItem.gpc_id} · ve výrobě {normalizeStockSummary(selectedReturnItem.stockSummary).production} ks
+                    {selectedReturnItem.name || selectedReturnItem.gpc_id} · ve výrobě {getItemStockSummary(selectedReturnItem).production} ks
                   </div>
                   {selectedReturnItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
-                      Načtěte DM kód vraceného kusu. V MVP zatím není detailní DM návrat implementovaný.
+                      Zadejte nebo načtěte DM kód nebo QID. GSS vrátí pouze konkrétně identifikovaný kus vedený ve výrobě.
                     </div>
                   ) : null}
 
                   <div style={formGrid}>
-                    <label style={fieldLabel}>
-                      Počet kusů
-                      <input
-                        type="number"
-                        min="1"
-                        value={returnForm.quantity}
-                        onChange={(event) => updateReturnForm("quantity", event.target.value)}
-                        style={input}
-                      />
-                    </label>
+                    {selectedReturnItem.tenantSettings?.dmEnabled ? (
+                      <label style={fieldLabel}>
+                        Načíst / zadat DM nebo QID
+                        <input
+                          value={returnForm.dmQuery}
+                          onChange={(event) => updateReturnForm("dmQuery", event.target.value)}
+                          placeholder="např. AH01-000045872-001 nebo KPL 14852"
+                          style={input}
+                        />
+                      </label>
+                    ) : (
+                      <label style={fieldLabel}>
+                        Počet kusů
+                        <input
+                          type="number"
+                          min="1"
+                          value={returnForm.quantity}
+                          onChange={(event) => updateReturnForm("quantity", event.target.value)}
+                          style={input}
+                        />
+                      </label>
+                    )}
                     <label style={fieldLabel}>
                       Datum návratu
                       <input
@@ -2570,6 +3155,26 @@ export default function AppGssPage() {
                     Poznámka k návratu
                     <textarea value={returnForm.note} onChange={(event) => updateReturnForm("note", event.target.value)} style={textarea} />
                   </label>
+
+                  {selectedReturnItem.tenantSettings?.dmEnabled && returnForm.dmQuery.trim() && !selectedReturnDmItem ? (
+                    <div style={errorMessage}>DM/QID kus nebyl nalezen.</div>
+                  ) : null}
+                  {selectedReturnItem.tenantSettings?.dmEnabled && selectedReturnDmItem && !selectedReturnDmValid ? (
+                    <div style={errorMessage}>Kus není vedený ve výrobě.</div>
+                  ) : null}
+                  {selectedReturnItem.tenantSettings?.dmEnabled && selectedReturnDmItem && selectedReturnDmValid ? (
+                    <div style={hintBox}>
+                      <div style={settingsTitle}>Vybraný kus k návratu</div>
+                      <div style={stateBreakdown}>
+                        <span>QID: {selectedReturnDmItem.quickId || "není vygenerováno"}</span>
+                        <span>DM: {selectedReturnDmItem.dmCode}</span>
+                        <span>D: {selectedReturnDmItem.currentDiameter || "neuvedeno"}</span>
+                        <span>L: {selectedReturnDmItem.currentLength || "neuvedeno"}</span>
+                        <span>Stav: {labelFromMap(DM_STATUS_LABELS, selectedReturnDmItem.status)}</span>
+                        <span>Poslední výdej: {selectedReturnDmItem.lastIssueMetadata?.job || selectedReturnDmItem.lastIssueMetadata?.machine || selectedReturnDmItem.lastIssueMetadata?.costCenter ? `zakázka ${selectedReturnDmItem.lastIssueMetadata?.job || "neuvedeno"} · stroj ${selectedReturnDmItem.lastIssueMetadata?.machine || "neuvedeno"} · středisko ${selectedReturnDmItem.lastIssueMetadata?.costCenter || "neuvedeno"}` : "neuvedeno"}</span>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div style={settingsTitle}>Rozhodnutí po návratu</div>
                   <div style={formGrid}>
@@ -2662,7 +3267,13 @@ export default function AppGssPage() {
                   {returnMessage ? <div style={returnMessage.includes("vrácena") ? message : errorMessage}>{returnMessage}</div> : null}
 
                   <div style={actions}>
-                    <button type="submit" style={btnImport}>Potvrdit návrat</button>
+                    <button
+                      type="submit"
+                      disabled={selectedReturnItem.tenantSettings?.dmEnabled && !selectedReturnDmValid}
+                      style={selectedReturnItem.tenantSettings?.dmEnabled && !selectedReturnDmValid ? btnDisabled : btnImport}
+                    >
+                      Potvrdit návrat
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -2784,6 +3395,8 @@ export default function AppGssPage() {
                 dmServiceMessage={dmServiceMessage}
                 onUpdateServiceForm={updateDmServiceForm}
                 onSaveService={saveDmService}
+                onGenerateQuickId={generateQuickIdForSelectedDm}
+                onMarkDmItem={() => markDmItemAsPhysicallyMarked(getItemKey(selectedDmContext.item), selectedDmContext.dmItem.dmCode)}
                 onClose={() => closeItemDetails(selectedDmContext.item)}
                 onPlaceholder={showPlaceholder}
               />
@@ -2814,7 +3427,7 @@ export default function AppGssPage() {
               <div style={resultList}>
                 {(selectedWarehouseItem ? [selectedWarehouseItem] : filteredWarehouseItems).map((item) => {
                   const itemKey = getItemKey(item);
-                  const stock = normalizeStockSummary(item.stockSummary);
+                  const stock = getItemStockSummary(item);
                   const activeReservations = getActiveReservations(item);
                   const overstockOffer = item.overstockOffer;
                   const overstockIsActive = Boolean(overstockOffer?.enabled && overstockOffer.status === "active");
@@ -2885,14 +3498,14 @@ export default function AppGssPage() {
                         <div style={meta}>Validation: unvalidated · tenantOnly: ano</div>
                       ) : null}
                       <div style={meta}>
-                        Zásoba: celkem {item.stockSummary?.total ?? 0} · dostupné {item.stockSummary?.available ?? 0} · rezervace {item.stockSummary?.reserved ?? 0} · výroba {item.stockSummary?.production ?? 0} · broušení {item.stockSummary?.sharpening ?? 0}
+                        {item.tenantSettings?.dmEnabled ? "Zásoba podle DM kusů" : "Zásoba"}: celkem {stock.total} · dostupné {stock.available} · rezervace {stock.reserved} · výroba {stock.production} · broušení {stock.sharpening}
                       </div>
                       <div style={stateBreakdown}>
-                        <span>Nový: {normalizeStockSummary(item.stockSummary).states.new}</span>
-                        <span>Nový přebroušený: {normalizeStockSummary(item.stockSummary).states.resharpened_new}</span>
-                        <span>Použitý: {normalizeStockSummary(item.stockSummary).states.used}</span>
-                        <span>Na broušení: {normalizeStockSummary(item.stockSummary).states.sharpening}</span>
-                        <span>Ve výrobě: {normalizeStockSummary(item.stockSummary).production}</span>
+                        <span>Nový: {stock.states.new}</span>
+                        <span>Nový přebroušený: {stock.states.resharpened_new}</span>
+                        <span>Použitý: {stock.states.used}</span>
+                        <span>Na broušení: {stock.states.sharpening}</span>
+                        <span>Ve výrobě: {stock.production}</span>
                       </div>
                       {activeReservations.length > 0 ? (
                         <div style={historyPanel}>
@@ -2995,26 +3608,83 @@ export default function AppGssPage() {
                       </div>
                       {item.tenantSettings?.dmEnabled ? (
                         <div style={historyPanel}>
-                          <div style={settingsTitle}>DM kusy</div>
+                          <div style={settingsTitle}>DM zásoba</div>
                           {(item.dmItems || []).length === 0 ? (
                             <div style={muted}>Zatím nejsou vytvořené žádné DM kusy.</div>
                           ) : (
-                            <div style={historyList}>
-                              {(item.dmItems || []).map((dmItem) => (
-                                <div key={dmItem.id || dmItem.dmCode} style={historyItem}>
-                                  <div style={historyTitle}>{dmItem.dmCode}</div>
-                                  <div style={meta}>
-                                    Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)} · Umístění: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)}
-                                  </div>
-                                  <div style={meta}>
-                                    D {dmItem.currentDiameter || "neuvedeno"} · L {dmItem.currentLength || "neuvedeno"} · přebroušení {dmItem.sharpeningCount ?? 0}/{dmItem.maxSharpeningCount ?? "nenastaveno"}
-                                  </div>
-                                  <div style={meta}>
-                                    Blokace: {dmItem.status === "blocked" || dmItem.blockedReason ? "ano" : "ne"} · Rezervace: {dmItem.reservedForOrder || "ne"} · poslední servis: {dmItem.lastServiceAt || "neuvedeno"}
-                                  </div>
-                                  <button type="button" onClick={() => openDmDetail(item, dmItem)} style={btnSecondary}>Otevřít DM detail</button>
-                                </div>
-                              ))}
+                            <div>
+                              {(() => {
+                                const dmCounts = getDmSummaryCounts(item);
+                                const dmFilterButtons = [
+                                  ["all", "Celkem", dmCounts.total],
+                                  ["available", "Dostupné", dmCounts.available],
+                                  ["new", "Nové", dmCounts.new],
+                                  ["resharpened_new", "Nové přebroušené", dmCounts.resharpened_new],
+                                  ["production", "Ve výrobě", dmCounts.production],
+                                  ["sharpening", "Na broušení", dmCounts.sharpening],
+                                  ["blocked", "Blokované", dmCounts.blocked],
+                                  ["unmarked", "Neoznačené", dmCounts.unmarked],
+                                ];
+                                const filteredDmItems = getFilteredDmItems(item, dmListFilter);
+
+                                return (
+                                  <>
+                                    <div style={warehouseRowNumbers}>
+                                      {dmFilterButtons.map(([filter, label, count]) => (
+                                        <button
+                                          key={filter}
+                                          type="button"
+                                          onClick={() => setDmListFilter(dmListFilter === filter ? "" : filter)}
+                                          style={dmListFilter === filter ? btnImport : btnSecondary}
+                                        >
+                                          {label}: {count}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <div style={muted}>
+                                      Základní sklad ukazuje agregované počty. Detailní DM kusy otevřete klikem na konkrétní stav.
+                                    </div>
+                                    {dmCounts.unmarked > 0 ? (
+                                      <div style={offerInfo}>
+                                        Neoznačené DM kusy: {dmCounts.unmarked}. DM/QID už existuje v systému, fyzické laserování nebo štítek je samostatný krok.
+                                      </div>
+                                    ) : null}
+                                    {dmListFilter ? (
+                                      <div style={historyList}>
+                                        {filteredDmItems.length === 0 ? (
+                                          <div style={muted}>V tomto stavu nejsou žádné DM kusy.</div>
+                                        ) : filteredDmItems.map((dmItem) => (
+                                          <div key={dmItem.id || dmItem.dmCode} style={historyItem}>
+                                            <div style={historyTitle}>QID: {dmItem.quickId || "není vygenerováno"}</div>
+                                            <div style={meta}>DM: {dmItem.dmCode}</div>
+                                            <div style={meta}>
+                                              Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)} · Označení: {labelFromMap(DM_MARKING_STATUS_LABELS, dmItem.markingStatus || "unmarked")}
+                                            </div>
+                                            <div style={meta}>
+                                              Sklad: Hlavní sklad · Lokace: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)}
+                                            </div>
+                                            <div style={meta}>
+                                              D {dmItem.currentDiameter || "neuvedeno"} · L {dmItem.currentLength || "neuvedeno"}
+                                            </div>
+                                            <div style={meta}>
+                                              Poslední výdej: {dmItem.lastIssueMetadata?.job || dmItem.lastIssueMetadata?.machine || dmItem.lastIssueMetadata?.costCenter ? `zakázka ${dmItem.lastIssueMetadata?.job || "neuvedeno"} · stroj ${dmItem.lastIssueMetadata?.machine || "neuvedeno"}` : "neuvedeno"}
+                                            </div>
+                                            <div style={meta}>
+                                              Poslední návrat: {dmItem.lastReturnMetadata?.decisionLabel || "neuvedeno"}
+                                            </div>
+                                            <div style={actions}>
+                                              <button type="button" onClick={() => openDmDetail(item, dmItem)} style={btnSecondary}>Detail</button>
+                                              {(dmItem.markingStatus || "unmarked") === "unmarked" ? (
+                                                <button type="button" onClick={() => markDmItemAsPhysicallyMarked(getItemKey(item), dmItem.dmCode)} style={btnSecondary}>Označit jako fyzicky označené</button>
+                                              ) : null}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </>
+                                );
+                              })()}
                             </div>
                           )}
                           <div style={actions}>
@@ -3426,7 +4096,7 @@ export default function AppGssPage() {
                                 />
                               </label>
                               <div style={offerInfo}>
-                                Volné nové kusy: {normalizeStockSummary(item.stockSummary).states.new + (Number(item.overstockReserved) || 0)} ks.
+                                Volné nové kusy: {getItemStockSummary(item).states.new + (Number(item.overstockReserved) || 0)} ks.
                               </div>
                               <div style={overstockForm.enabled && overstockForm.status === "active" ? badgeWarning : offerInfo}>
                                 {overstockForm.enabled && overstockForm.status === "active"
@@ -3643,13 +4313,13 @@ export default function AppGssPage() {
                       </div>
                     </div>
                     <div style={stockSummary}>
-                      <div>Celkem: {normalizeStockSummary(item.stockSummary).total}</div>
-                      <div>Dostupné: {normalizeStockSummary(item.stockSummary).available}</div>
-                      <div>Rezervace: {normalizeStockSummary(item.stockSummary).reserved}</div>
-                      <div>Výroba: {normalizeStockSummary(item.stockSummary).production}</div>
-                      <div>Broušení: {normalizeStockSummary(item.stockSummary).sharpening}</div>
-                      <div>Ještě ve firmě: {normalizeStockSummary(item.stockSummary).sharpeningBreakdown.in_company}</div>
-                      <div>V brusírně: {normalizeStockSummary(item.stockSummary).sharpeningBreakdown.at_grinder}</div>
+                      <div>{item.tenantSettings?.dmEnabled ? "Celkem podle DM kusů" : "Celkem"}: {stock.total}</div>
+                      <div>{item.tenantSettings?.dmEnabled ? "Dostupné podle DM kusů" : "Dostupné"}: {stock.available}</div>
+                      <div>Rezervované: {stock.reserved}</div>
+                      <div>Ve výrobě: {stock.production}</div>
+                      <div>Na broušení: {stock.sharpening}</div>
+                      <div>Ještě ve firmě: {stock.sharpeningBreakdown.in_company}</div>
+                      <div>V brusírně: {stock.sharpeningBreakdown.at_grinder}</div>
                     </div>
                   </div>
                   );
@@ -4097,6 +4767,28 @@ const dmHeader = {
   gap: 12,
   alignItems: "flex-start",
   marginBottom: 12,
+};
+
+const quickIdBox = {
+  border: "1px solid rgba(250,204,21,0.35)",
+  borderRadius: 8,
+  padding: 12,
+  background: "rgba(250,204,21,0.08)",
+  marginBottom: 12,
+};
+
+const quickIdValue = {
+  fontSize: 24,
+  fontWeight: 950,
+  letterSpacing: 0,
+  marginBottom: 10,
+};
+
+const quickIdInline = {
+  marginTop: 4,
+  fontSize: 13,
+  fontWeight: 900,
+  color: "#fde68a",
 };
 
 const historyPanel = {

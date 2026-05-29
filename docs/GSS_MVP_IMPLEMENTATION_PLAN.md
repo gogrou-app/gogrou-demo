@@ -1264,7 +1264,218 @@ Pravidla formátu:
 - znovupoužití pořadového čísla se v MVP neimplementuje
 - pokud položka nemá GID, použije se dočasný lokální GID / local item ID
 
-Fyzický tisk štítků není součástí MVP.
+### QID / Quick ID
+
+QID = Quick ID (Quick Identifier). QID je schválené architektonické rozhodnutí GSS pro rychlou lidskou identifikaci konkrétního DM kusu.
+
+QID slouží pro:
+
+- rychlou lidskou identifikaci konkrétního DM kusu
+- orientaci ve skladu
+- orientaci ve výdejních automatech
+- orientaci při servisu a ostření
+- orientaci na štítku
+
+QID není technický identifikátor a nenese žádnou logiku. QID nesmí obsahovat prefix firmy, GTIN, GID, typ nástroje, výrobce ani DM kód.
+
+Formát QID je:
+
+`ABC 12345`
+
+Pravidla:
+
+- 3 náhodná písmena
+- mezera
+- 5 náhodných číslic
+- QID musí být unikátní
+- systém vede databázi vydaných QID
+
+Příklady:
+
+- `KPL 14852`
+- `XTR 58241`
+- `MRV 90473`
+
+Vznik QID:
+
+`DM tracking = ANO -> vznik nového DM kusu -> automatické vytvoření DM -> automatické vytvoření QID`
+
+QID je trvalý po celý život DM kusu. Po ostření se nemění DM kód ani QID. Mění se pouze aktuální rozměry a servisní historie konkrétního DM kusu.
+
+Pokud dojde ke ztrátě štítku, uživatel načte DM kód, použije akci `Vytisknout štítek` a systém vytiskne nový štítek se stejným QID.
+
+Soft MVP implementace QID:
+
+- při vytvoření DM kusu se automaticky vygeneruje `quickId`
+- QID se kontroluje proti existujícím DM kusům v aktuálním tenant skladu
+- QID se ukládá ke konkrétnímu DM kusu
+- QID se výrazně zobrazuje v DM detailu
+- starší DM kus bez QID má v detailu akci `Vygenerovat QID`
+- QID se nemění při ostření, změně rozměrů, přesunu ani rezervaci
+- DM detail umí připravit textový výstup pro ruční tisk, laser nebo dočasný štítek
+
+MVP štítek DM kusu obsahuje pouze:
+
+1. QID jako nejsilnější a největší prvek štítku
+2. název položky z GPC
+3. aktuální rozměry, například `D = 11,83`, `L1 = 24,70`, `L2 = 78,00`
+4. DM kód
+
+Legenda parametrů na štítku bude vycházet z ToolsUnited. Na štítek se v MVP netiskne historie, výrobce, povlak, počet přebroušení ani další informace. Po načtení DM kódu jsou všechny detailní informace dostupné v GSS.
+
+Fyzický tisk štítků, tiskárny, PDF a finální štítkové šablony nejsou součástí soft MVP. Model QID, pravidla obsahu štítku a textový výstup pro ruční zpracování jsou architektonicky schválené.
+
+### DM Vytvořen vs. Fyzicky Označen
+
+Implementační pravidlo: vznik DM identity a fyzické označení nástroje jsou dva oddělené kroky.
+
+Při naskladnění nebo vytvoření DM kusu systém automaticky vytvoří:
+
+- `dmCode`
+- `quickId`
+- `markingStatus = unmarked`
+- výchozí stav `new`
+- výchozí lokaci `main_warehouse`
+
+`markingStatus`:
+
+- `unmarked`: DM vytvořen v systému, fyzicky neznačeno
+- `marked`: DM fyzicky označen
+
+DM kus s `markingStatus = unmarked` je platný kus v GSS a může být součástí zásoby. Fyzické označení laserem nebo štítkem může proběhnout později, typicky při prvním ostření, měření nebo servisu.
+
+UI v DM detailu:
+
+- zobrazuje `markingStatus`
+- zobrazuje text `DM vytvořen v systému, fyzické označení zatím neprovedeno.`
+- nebo `DM fyzicky označen.`
+- nabízí akci `Označit jako fyzicky označené`
+- po akci nastaví `markingStatus = marked`
+- uloží datum označení
+- zapíše záznam do historie DM kusu
+- nemění DM kód ani QID
+
+Textový výstup pro značení:
+
+- DM kód pro laser
+- QID pro štítek
+
+### DM Kusy jako Zdroj Skladové Zásoby
+
+Implementační pravidlo: pokud má položka zapnutý DM tracking, skladový souhrn se pro zobrazení a provozní kontrolu počítá z `dmItems[]`.
+
+Mapování stavů:
+
+- `new` -> celkem + dostupné + stav `Nový`
+- `resharpened_new` -> celkem + dostupné + stav `Nový přebroušený`
+- `used` -> celkem + dostupné + stav `Použitý`
+- `reserved` -> celkem + rezervované
+- `production` -> celkem + ve výrobě
+- `sharpening` -> celkem + na broušení + ještě ve firmě
+- `in_grinding_shop` -> celkem + na broušení + v brusírně
+- `blocked` -> celkem, ale ne dostupné
+- `scrapped` -> není dostupné a není běžně vydatelné
+
+Při vytvoření DM kusů:
+
+- výchozí stav je `new`
+- výchozí umístění je `main_warehouse`
+- vytvořené kusy se okamžitě promítnou do souhrnu položky
+- QID a DM kód se vytvoří současně
+
+U položek bez DM trackingu zůstává dosavadní množstevní logika přes `stockSummary`.
+
+Kompaktní zobrazení DM zásoby:
+
+- základní řádek položky a detail položky zobrazují pouze agregované počty
+- detailní seznam DM kusů není trvale rozbalený
+- uživatel otevře DM seznam klikem na konkrétní stav nebo tlačítko `Zobrazit DM kusy`
+- seznam lze filtrovat podle stavů: celkem, dostupné, nové, nové přebroušené, ve výrobě, na broušení, blokované, neoznačené
+
+Detailní DM seznam zobrazuje:
+
+- QID
+- DM kód
+- stav
+- `markingStatus`
+- sklad / lokaci
+- aktuální rozměry
+- poslední výdej / návrat
+- akci detail
+
+U položek bez DM tracking zůstává množství jako jednoduché číslo.
+
+Výdej u DM položek:
+
+- UI zobrazí pole `Načíst / zadat DM nebo QID`
+- vstup může být DM kód nebo QID
+- vyhledávání probíhá pouze nad `dmItems[]` vybrané položky
+- automatický výběr prvního dostupného DM kusu je zakázaný
+- dostupné pro výdej jsou pouze stavy `new`, `resharpened_new` a `used`
+- nedostupné jsou stavy `reserved`, `production`, `sharpening`, `in_grinding_shop`, `blocked`, `scrapped`
+- před výdejem UI ukáže QID, DM kód, aktuální rozměry, stav a lokaci konkrétního kusu
+- tlačítko pro výdej je u DM položky aktivní až po nalezení dostupného kusu
+- po výdeji se konkrétní DM kus nastaví na `status = production` a `location = production`
+- k DM kusu se uloží `lastIssueMetadata`
+- vznikne `movementHistory` záznam `issue_to_production`
+- skladový souhrn se znovu přepočítá z `dmItems[]`
+
+U položek bez DM trackingu zůstává množstevní výdej beze změny.
+
+Návrat z výroby u DM položek:
+
+- UI zobrazí pole `Načíst / zadat DM nebo QID`
+- vstup může být DM kód nebo QID
+- vyhledávání probíhá pouze nad `dmItems[]` vybrané položky
+- množstevní návrat bez identifikace kusu je u DM položek zakázaný
+- platný návrat je možný pouze pro DM kus ve stavu `production`
+- pokud kus neexistuje, UI zobrazí `DM/QID kus nebyl nalezen.`
+- pokud kus není ve výrobě, UI zobrazí `Kus není vedený ve výrobě.`
+- před potvrzením návratu UI ukáže QID, DM kód, aktuální rozměry, stav a poslední výdej
+- po potvrzení se mění stav přesně tohoto DM kusu podle rozhodnutí návratu
+- k DM kusu se uloží `lastReturnMetadata`
+- vznikne provozní `movementHistory`
+- skladový souhrn se znovu přepočítá z `dmItems[]`
+
+U položek bez DM trackingu zůstává množstevní návrat beze změny.
+
+### Skladové Lokace
+
+Lokace není vlastností DM kusu. Lokace je obecná vlastnost GSS skladů.
+
+Každý sklad může mít vlastní strukturu lokací:
+
+- hlavní sklad
+- dceřiný sklad
+- výdejní automat
+
+Příklady:
+
+- Hlavní sklad -> Regál A -> Police 03 -> Box 12
+- Dceřiný sklad CNC 5 -> Skříň B -> Šuplík 04
+- Automat 01 -> Pozice D-12
+
+Stejná položka může mít na každém skladu jinou lokaci.
+
+DM kus v provozním zobrazení navíc ukazuje:
+
+- QID
+- aktuální lokaci
+- aktuální rozměry
+- stav
+- rezervaci
+
+Příklad:
+
+```text
+QID: KPL 14852
+
+Lokace:
+Hlavní sklad
+Regál A
+Police 03
+Box 12
+```
 
 DM detail zobrazuje aktuální hodnoty konkrétního kusu. Důraz je na rychlou čitelnost po načtení kódu, například `MTTM MAXLIFE D=11,83 mm, L=24,73 mm`.
 
