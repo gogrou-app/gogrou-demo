@@ -641,9 +641,11 @@ Rezervace je tenant provozní funkce GSS. Nemění GPC master data a nesmí zapi
 MVP formulář rezervace:
 
 - zakázka
+- stroj
+- pro koho / role
 - počet kusů
 - stav rezervovaného nástroje: `new`, `resharpened_new`, `used`
-- důvod rezervace
+- důvod / poznámka rezervace
 - rezervoval, defaultně `MVP uživatel`
 - datum rezervace
 - platnost rezervace do, volitelné
@@ -660,17 +662,46 @@ Logika bez DM trackingu:
 
 Logika s DM trackingem:
 
-- v budoucnu se rezervuje konkrétní DM kus
-- DM kus ponese informaci o zakázce, autorovi rezervace, datu, důvodu a případně aktuálním rozměru po broušení
-- v aktuálním MVP je tato část pouze placeholder
+- rezervuje se konkrétní DM/QID kus, ne anonymní množství
+- UI zobrazí dostupné skupiny `new`, `resharpened_new` a `used`
+- klik na skupinu zobrazí konkrétní DM kusy v daném stavu
+- u každého kusu se zobrazí QID, DM kód, stav, aktuální lokace, aktuální rozměry, změněné parametry po broušení a poslední servis / výdej
+- pokud má kus `lastServiceMetadata`, zobrazí se samostatný výrazný řádek `Aktuální rozměry po broušení` s hodnotami `D`, `L1`, `L2`
+- stejné zvýraznění se používá v DM zásobě, výdeji, rezervaci, DM detailu a příjmu z broušení
+- skupina `new` může nabídnout zkratku `Rezervovat libovolný nový kus`, ale po výběru musí být jasně zobrazen konkrétní QID/DM kus
+- u stavů `resharpened_new` a `used` musí uživatel vybrat konkrétní kus, protože může mít jiné aktuální rozměry nebo historii použití
+- po potvrzení se konkrétní DM kus nastaví na `reserved`
+- k DM kusu se uloží `reservationMetadata`
+- při vytvoření rezervace se automaticky vygeneruje čtyřznakový `Release Code`
+- `Release Code` je uložený v `reservationMetadata` a zobrazuje se v detailu rezervace
+- zásoba se přepočítá z `dmItems[]`
+- vznikne `movementHistory` záznam `reservation_created`
+
+Terminálový standard pro rezervaci:
+
+`Položka -> Nový / Nový přebroušený / Použitý -> Konkrétní DM/QID kus -> Rezervace`
 
 Výdej rezervovaného nástroje:
 
-- rezervovaný nástroj nelze běžně vydat
-- uživatel má jít přes tok `Rezervované nástroje`
-- vybere nebo zadá zakázku
-- systém zobrazí rezervované položky pro danou zakázku
-- výdej je povolen pouze na tuto zakázku
+- rezervace neznamená výdej
+- rezervace není tvrdý zámek, chrání hlavně proti neúmyslnému výdeji
+- rezervovaný DM kus je blokovaný pro běžný výdej
+- ve výdeji DM položky se vedle skupin `new`, `resharpened_new` a `used` zobrazuje skupina `reserved`
+- klik na `reserved` zobrazí konkrétní rezervované DM kusy včetně QID, DM kódu, původního stavu, rozměrů, lokace a `reservationMetadata`
+- ruční zadání rezervovaného QID/DM ve výdeji zobrazí, že jde o rezervovaný kus
+- takový kus se nevydává běžným anonymním výdejem
+- uživatel musí potvrdit samostatnou akci `Vydat rezervovaný kus`
+- varianta A: `Vydat pomocí Release Code`, kdy uživatel zadá kód uložený u rezervace
+- varianta B: `Override výdej`, kdy uživatel zadá důvod obejití rezervace
+- po potvrzení se konkrétní DM kus nastaví na `production`
+- `reservationMetadata` se přesune do `lastReservationMetadata`
+- při override výdeji se uloží `overrideMetadata` s osobou, datem a důvodem
+- uloží se `lastIssueMetadata`
+- vznikne DM history a `movementHistory`
+- DM history rozlišuje, zda byla rezervace uvolněna kódem, nebo obejita override výdejem
+- výdej je navázaný na zakázku / stroj / poznámku z rezervace nebo z výdejového formuláře
+
+V budoucnu může GSS při override výdeji upozornit rezervující osobu. MVP zatím pouze zapisuje informaci do historie.
 
 Zrušení rezervace:
 
@@ -1209,7 +1240,7 @@ Implementační pravidla pro `/app/gss`:
 
 Sekce `Skladové položky` musí obsahovat základní klientské vyhledávání. V MVP filtruje řádkový seznam podle názvu položky, výrobce, typu, GPC ID, GTIN, GID, interního / lokálního kódu a základních lokálních parametrů. To je nutné, protože tenant sklad může obsahovat stovky až tisíce položek.
 
-MVP doplňuje jednoduché chytré hledání bez AI. Vyhledávací text se rozdělí na tokeny podle středníku, čárky nebo více mezer. Každý token se očistí a položka musí splnit všechny tokeny. Příklady: `Walter ; fréza ; 12 ; 25`, `Walter, freza, D12, 4z`, `VBD ; CNMG ; Walter ; WKP35G`. Zápisy `D12`, `d=12`, `Z4`, `4z`, `L25` a `l=25` se pro MVP převádí na číselné tokeny.
+MVP doplňuje jednoduché chytré hledání bez AI. Vyhledávací text se rozdělí na tokeny podle středníku, čárky nebo mezer. Každý token se očistí a položka musí splnit všechny tokeny. Příklady: `Walter ; fréza ; 12 ; 25`, `Walter, freza, D12, 4z`, `Walter freza`, `VBD CNMG Walter WKP35G`. Zápisy `D12`, `d=12`, `Z4`, `4z`, `L25` a `l=25` se pro MVP převádí na číselné tokeny. Stejný helper hledání musí používat skladový seznam i terminálové akce, zejména Výdej.
 
 Tato vrstva je rychlé provozní hledání ve skladu a zároveň příprava na budoucí parametrické / GINA hledání. Později se stejný princip rozšíří i do GPC a Toolshopu. V tomto kroku se neřeší backend, DB ani globální GPC hledání.
 
@@ -1372,6 +1403,7 @@ Mapování stavů:
 - `reserved` -> celkem + rezervované
 - `production` -> celkem + ve výrobě
 - `sharpening` -> celkem + na broušení + ještě ve firmě
+- `sharpening` se `sharpeningDispatchStatus = sent` -> celkem + na broušení + v brusírně / mimo firmu
 - `in_grinding_shop` -> celkem + na broušení + v brusírně
 - `blocked` -> celkem, ale ne dostupné
 - `scrapped` -> není dostupné a není běžně vydatelné
@@ -1391,6 +1423,10 @@ Kompaktní zobrazení DM zásoby:
 - detailní seznam DM kusů není trvale rozbalený
 - uživatel otevře DM seznam klikem na konkrétní stav nebo tlačítko `Zobrazit DM kusy`
 - seznam lze filtrovat podle stavů: celkem, dostupné, nové, nové přebroušené, ve výrobě, na broušení, blokované, neoznačené
+- konkrétní DM/QID kusy se nezobrazují automaticky při otevření detailu položky
+- DM zásoba používá lazy expand: `agregované stavy -> klik -> konkrétní DM/QID kusy`
+- klik na stejný stav rozpad zavře, klik na jiný stav přepne seznam na jiný stav
+- lazy expand je nutný kvůli výkonu a přehlednosti u stovek až tisíců DM kusů
 
 Detailní DM seznam zobrazuje:
 
@@ -1455,6 +1491,7 @@ Terminálové pravidlo DM operací:
 
 - Výdej: `Položka -> Nový / Nový přebroušený / Použitý -> Konkrétní kus -> Akce`
 - Návrat: `Položka -> Ve výrobě -> Konkrétní kus -> Rozhodnutí po návratu`
+- Rezervace: `Položka -> Nový / Nový přebroušený / Použitý -> Konkrétní DM/QID kus -> Rezervace`
 
 ### Skladové Lokace
 
@@ -1548,6 +1585,101 @@ Export aktuálních hodnot:
 - budoucí cíle jsou korekce do stroje, podklad pro programátora a servisní report
 
 Mimo MVP zůstává fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth a export do CNC / strojů.
+
+### Soft MVP Odeslání DM Kusů Na Broušení
+
+Implementační cíl: DM kus ve stavu `sharpening` musí jít označit jako fyzicky odeslaný servisnímu partnerovi, aniž by se ztratil jeho provozní stav `Na broušení`.
+
+Datové pole:
+
+`sharpeningDispatchStatus`
+
+- `waiting`: čeká na odeslání
+- `sent`: odesláno na broušení
+- `serviced`: servis zapsal nové parametry po broušení
+- `returned`: vráceno z broušení
+
+UI tok:
+
+1. Uživatel otevře detail položky.
+2. V DM zásobě klikne na skupinu `Na broušení`.
+3. U konkrétního QID/DM kusu klikne `Odeslat na broušení`.
+4. Formulář obsahuje servisního partnera, box / bedýnku / sběrné místo, poznámku, datum odeslání a kdo provedl.
+5. Po potvrzení se DM kus ponechá ve stavu `sharpening`.
+6. Nastaví se `sharpeningDispatchStatus = sent`.
+7. `location` se nastaví na `grinding_shop`.
+8. Uloží se `sharpeningDispatchMetadata`.
+9. Zapíše se DM history a `movementHistory`.
+
+MVP textový výstup:
+
+- textarea `Dodací podklad broušení`
+- obsahuje datum, brusírnu, položku, QID, DM, pokyny k broušení, výkres / přílohu, povlak a poznámku
+- PDF, číslování dodacích listů, e-mail a backend nejsou součást MVP
+
+### Soft MVP Servisní Terminál M-Technologies
+
+Servisní terminál je v MVP interní panel v `/app/gss`. Simuluje budoucí servisní portál M-technologies.
+
+Tok:
+
+1. Servis zadá / načte DM kód.
+2. GSS najde konkrétní DM kus.
+3. Pokud kus neexistuje, zobrazí `DM kus nebyl nalezen.`
+4. Pokud kus není `sharpening` nebo nemá `sharpeningDispatchStatus = sent`, zobrazí `Kus není vedený jako odeslaný na broušení.`
+5. Servis vidí QID, DM kód, položku, zákazníka, GPC ID / GTIN, aktuální rozměry před broušením, historii, poslední výdej / návrat, pokyny k broušení, výkres / přílohu, povlak a poznámky.
+6. Servis zadá nové parametry po broušení: `D`, `L1`, `L2`, další parametry, servisní poznámku, kdo provedl a datum servisu.
+7. Po uložení se nastaví `sharpeningDispatchStatus = serviced`.
+8. DM status zůstává `sharpening`, dokud zákazník nepotvrdí příjem zpět.
+9. Uloží se `lastServiceMetadata`, zvýší se počet přebroušení, zapíše se DM history a `movementHistory`.
+10. QID a DM kód se nemění.
+
+Terminál po uložení nabídne textový štítek:
+
+- výrazné QID
+- název položky
+- aktuální rozměry
+- DM kód
+
+### Soft MVP Příjem Z Broušení
+
+Příjem z broušení je samostatný tok pro konkrétní DM/QID kus. Běžný příjem znamená nové kusy; příjem z broušení znamená návrat už existujícího DM kusu po servisu.
+
+UI tok:
+
+1. Uživatel otevře `Příjem z broušení`.
+2. Zadá / načte DM nebo QID, nebo použije skupiny:
+   - `Odesláno na broušení`
+   - `Servis dokončen / čeká na příjem`
+3. Vybere konkrétní DM kus.
+4. Doplní datum příjmu, kdo provedl, poznámku a cílový sklad / lokaci.
+5. Pokud kus nemá `sharpeningDispatchStatus = serviced`, GSS zobrazí varování `U tohoto kusu nejsou uložené servisní rozměry z brusírny.`
+6. V MVP lze příjem povolit i s varováním po potvrzení výjimky.
+
+Po potvrzení:
+
+- `status = resharpened_new` jako MVP stav pro nový přebroušený kus
+- architektonický alias cílového stavu je `resharpened`
+- `sharpeningDispatchStatus = returned`
+- `location = main_warehouse` nebo zvolená lokace
+- uloží se `sharpeningReturnMetadata`
+- kus se počítá jako dostupný
+- zapíše se DM history a `movementHistory`
+- aktuální rozměry zůstávají ty, které zadala M-technologies
+
+Blokace běžného naskladnění:
+
+- pokud má položka DM tracking a uživatel v běžném `Naskladnit` zvolí `Nový přebroušený`, GSS zobrazí upozornění
+- běžné naskladnění `Nový přebroušený` u DM položky nesmí vytvářet anonymní nové DM kusy
+- pro DM položky se přebroušený kus vrací přes `Příjem z broušení`
+
+Budoucí servisní směr:
+
+- brusírna načte DM kód přes servisní přístup
+- uvidí pokyny k broušení, výkres, povlak a historii
+- doplní nové rozměry po broušení a měřicí protokol
+- po návratu se kus nastaví na `resharpened` / v MVP `resharpened_new`
+- QID a DM kód se nikdy nemění
 
 ## GSS Onboarding Engine / Hromadný Import a Konfigurační XLS
 
@@ -1851,3 +1983,92 @@ GINA může nad Hlídacím psem později doporučovat:
 - akce SS je výhodná proti vaší historii nákupů
 
 Mimo MVP zůstává backend, DB, AI matching, skutečné notifikace, marketplace a platby.
+
+## GSS Terminál A Skladové Položky
+
+Implementační směr hlavní obrazovky GSS:
+
+- horní část je pouze kompaktní kontext aktivní firmy a hlavního skladu
+- hlavní obrazovka je rozdělena na dvě pracovní sekce: `TERMINÁL` a `SKLADOVÉ POLOŽKY`
+- terminálové procesy se otevírají jednotlivě a po otevření schovají ostatní sekce
+- uživatel se vrací přes `Zpět na Terminál`
+- skladové položky zůstávají kompaktní řádkový seznam s detailem po kliknutí
+
+Terminál obsahuje dlaždice:
+
+- Příjem
+- Výdej
+- Návrat z výroby
+- Rezervace
+- Odeslat na broušení
+- Příjem z broušení
+- Servisní terminál M-technologies
+- Načíst DM/QID
+
+MVP může mít aktivní dlaždicové zobrazení. Přepínač `Dlaždice / Seznam` je připravený pro budoucí režim.
+
+Terminálové pravidlo:
+
+`Akce -> chytré hledání / načtení kódu -> položka -> konkrétní stav / kus -> provedení operace`
+
+Výdej DM kusů:
+
+- může proběhnout jako výdej jednoho načteného DM/QID kusu
+- může proběhnout jako hromadný výběr více konkrétních DM/QID kusů
+- hromadný výběr používá skupiny `new`, `resharpened_new`, `used`
+- vybraný kus je vizuálně odlišený a lze jej odebrat z výběru
+- UI zobrazuje počet vybraných kusů
+- potvrzení probíhá tlačítkem `Vydat vybrané kusy`
+- každý kus se zapíše do DM history a dostane stejné `lastIssueMetadata`
+- skladová zásoba se po výdeji přepočítá z `dmItems[]`
+- rezervované kusy nejsou součástí běžného hromadného výdeje a vydávají se pouze přes Release Code nebo override
+
+Skladové položky:
+
+- používají chytré tokenové hledání
+- podporují název, výrobce, GTIN, GID, DM, QID, interní kód a parametry
+- podporují volné kombinace typu `freza 12 4z`, `Walter D12 L25`, `VBD CNMG`
+- mohou být řazené podle nejčastějšího nebo posledního použití
+- později může být řazení personalizované podle uživatele, role nebo pracoviště
+
+Řádek položky:
+
+- vlevo: název, typ / kategorie / výrobce, GPC ID / GTIN
+- uprostřed: celkem, dostupné, nový, nový přebroušený, použitý, rezervované, ve výrobě, na broušení, blokované
+- min/max, warning, DM nastavení a nadnormativa patří do detailu nebo nastavení, ne jako hlavní informace řádku
+
+Globální UX symbol:
+
+`◢ = konkrétní kusy / DM/QID rozpad`
+
+Pokud je `◢` za číslem, údaj reprezentuje konkrétní DM/QID kusy a může se rozbalit na seznam konkrétních kusů. Bez `◢` jde o běžnou množstevní evidenci.
+
+Detail položky:
+
+- ukazuje identitu položky, skladové počty a DM rozpad
+- nastavení položky se otevírá tlačítkem
+- historie pohybů se otevírá tlačítkem
+- akce jako Výdej, Návrat, Rezervace, Příjem a Broušení mají používat stejnou terminálovou logiku, pouze s předvyplněnou položkou
+- akce `Zobrazit GPC detail` ukazuje technická data z GPC vazby, ne lokálně uloženou kopii technického katalogu
+
+Pokud je otevřená konkrétní akce nad položkou, UI schová dlouhé podpůrné sekce detailu a ponechá pouze stručnou identitu, skladové počty, informaci o DM/QID a aktivní formulář. Akční panel se má objevit hned pod identitou položky a po otevření se má stránka posunout na začátek detailu.
+
+GPC / GSS datové pravidlo:
+
+- GSS ukládá provozní data zákazníka: zásoby, min/max, DM/QID, broušení, lokace, historii, rezervace a servisní cyklus
+- GPC je zdroj technických dat: parametry, GPC ID, GTIN, výrobce, výkresy, katalogová data, ToolsUnited vazby a technické přílohy
+- GSS si technická data pouze zobrazuje nebo dotahuje podle `gpc_id` / GTIN
+- pokud GPC detail není dostupný, UI zobrazí placeholder `GPC detail bude načten z GPC / ToolsUnited v další fázi`
+
+Návratová tlačítka:
+
+- `Zpět na Terminál` vrací na hlavní terminálové dlaždice
+- `Zpět na skladové položky` vrací na seznam položek
+- `Zpět na detail položky` zavře konkrétní formulář a ponechá detail položky
+- ve skladovém režimu má být sticky nebo floating tlačítko `Zpět na hlavní GSS`
+
+Feature flags a placené moduly:
+
+- větší služby musí být připravené na zapnutí / vypnutí pro konkrétního zákazníka
+- příklady: DM tracking, Nadnormativy, Servisní terminál, GINA služby, XLS onboarding, Kooperace, Toolshop, Reporty, Automat / PLC napojení
+- MVP neřeší billing, ale implementace nesmí předpokládat, že všechny funkce budou vždy aktivní pro každého zákazníka
