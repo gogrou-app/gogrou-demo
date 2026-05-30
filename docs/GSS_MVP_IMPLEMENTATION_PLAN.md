@@ -1409,6 +1409,10 @@ Výdej u DM položek:
 
 - UI zobrazí pole `Načíst / zadat DM nebo QID`
 - vstup může být DM kód nebo QID
+- UI zároveň zobrazí klikací souhrn dostupných skupin: `Nový`, `Nový přebroušený`, `Použitý`
+- klik na skupinu rozbalí konkrétní dostupné DM kusy v této skupině
+- u každého kusu se zobrazí QID, DM kód, stav, aktuální rozměry, lokace, `markingStatus`, poslední servis / výdej a akce `Vybrat tento kus`
+- klik na `Vybrat tento kus` vyplní konkrétní DM/QID kus pro výdej
 - vyhledávání probíhá pouze nad `dmItems[]` vybrané položky
 - automatický výběr prvního dostupného DM kusu je zakázaný
 - dostupné pro výdej jsou pouze stavy `new`, `resharpened_new` a `used`
@@ -1422,10 +1426,18 @@ Výdej u DM položek:
 
 U položek bez DM trackingu zůstává množstevní výdej beze změny.
 
+Budoucí standard GSS terminálu pro DM operace:
+
+`položka -> souhrn podle stavů -> konkrétní DM kus -> akce`
+
 Návrat z výroby u DM položek:
 
 - UI zobrazí pole `Načíst / zadat DM nebo QID`
 - vstup může být DM kód nebo QID
+- UI zároveň zobrazí klikací skupinu `Ve výrobě`
+- klik na `Ve výrobě` rozbalí konkrétní DM kusy aktuálně vedené ve výrobě
+- u každého kusu se zobrazí QID, DM kód, aktuální lokace, stroj, zakázka, středisko, datum posledního výdeje, kdo výdej provedl a akce `Vybrat tento kus`
+- klik na `Vybrat tento kus` vyplní konkrétní DM/QID kus pro návrat
 - vyhledávání probíhá pouze nad `dmItems[]` vybrané položky
 - množstevní návrat bez identifikace kusu je u DM položek zakázaný
 - platný návrat je možný pouze pro DM kus ve stavu `production`
@@ -1438,6 +1450,11 @@ Návrat z výroby u DM položek:
 - skladový souhrn se znovu přepočítá z `dmItems[]`
 
 U položek bez DM trackingu zůstává množstevní návrat beze změny.
+
+Terminálové pravidlo DM operací:
+
+- Výdej: `Položka -> Nový / Nový přebroušený / Použitý -> Konkrétní kus -> Akce`
+- Návrat: `Položka -> Ve výrobě -> Konkrétní kus -> Rozhodnutí po návratu`
 
 ### Skladové Lokace
 
@@ -1531,6 +1548,176 @@ Export aktuálních hodnot:
 - budoucí cíle jsou korekce do stroje, podklad pro programátora a servisní report
 
 Mimo MVP zůstává fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth a export do CNC / strojů.
+
+## GSS Onboarding Engine / Hromadný Import a Konfigurační XLS
+
+GSS musí počítat s onboarding vrstvou pro pilotní zákazníky. Tato vrstva má umožnit rychle převzít existující skladová data zákazníka, spárovat je proti GPC a potom hromadně doplnit tenant provozní pravidla.
+
+### Vstupní Scénář A: Existující Data Zákazníka
+
+Zdroje:
+
+- ERP export
+- export z výdejního automatu
+- XLS / CSV seznam
+- interní skladový seznam
+
+Párování proti GPC:
+
+- GTIN
+- GID
+- objednací číslo
+- výrobce + objednací číslo
+- čárový kód
+- přesný název
+- podobnost názvu
+
+Výstup pro uživatele:
+
+`Z 1678 položek bylo v GPC nalezeno 1234. Chcete je převzít do GSS?`
+
+Nalezené GPC položky se převezmou do tenant GSS skladu jako skladové položky s referencí na GPC. Nenalezené položky se vytvoří jako lokální / nevalidované položky v daném tenant GSS.
+
+### Vstupní Scénář B: Zákazník Data Nemá
+
+Pokud zákazník nemá vstupní export, skladový seznam vzniká postupně:
+
+- ruční založení položky
+- načtení čtečkou
+- doplňování při běžném provozu
+
+GSS musí i v tomto režimu umožnit kdykoliv vygenerovat konfigurační XLS pro hromadné doplnění pravidel.
+
+### Konfigurační XLS
+
+Konfigurační XLS není běžný import položek. Je to hromadná konfigurace skladu a musí být vždy generovatelná z GSS.
+
+Sloupce / oblasti konfigurace:
+
+- min
+- max
+- warning limit
+- DM tracking ano/ne
+- brousit ano/ne
+- max počet přebroušení
+- povlak
+- nadnormativa ano/ne
+- lokace
+- preferovaný dodavatel
+- objednací násobek
+- poznámka
+- interní kód zákazníka
+- odpovědná osoba / role
+- zákaznická omezení
+- aktivní/neaktivní položka
+
+### Odpovědnost Dat
+
+GPC odpovídá za:
+
+- technickou identitu položky
+- výrobce
+- GTIN/GID
+- technické parametry
+- ToolsUnited strukturu
+- obrázky / datasheety / odkazy
+
+GSS XLS odpovídá za:
+
+- provozní pravidla zákazníka
+- skladovou logiku
+- nákupní logiku
+- servisní logiku
+- lokace
+- zákaznickou konfiguraci
+
+Import ani konfigurační XLS nesmí měnit GPC master data. Upravuje pouze tenant provozní vrstvu GSS.
+
+### Delegování Konfigurace
+
+Konfigurační XLS má zákazníkovi umožnit delegovat doplnění dat na:
+
+- technology
+- nákup
+- skladníky
+- seřizovače
+- výrobu
+
+Tento postup je nutný u zákazníků se stovkami až tisíci položek, kde by ruční editace přímo v GSS byla pomalá a organizačně nepraktická.
+
+### Budoucí Doporučení GSS / GINA
+
+Systém může později nad importovanými položkami doporučit:
+
+- zapnout DM tracking u drahých / brousitelných nástrojů
+- zapnout nadnormativy
+- upravit min/max podle spotřeby
+- označit položku jako servisovatelnou
+- doporučit sledování životnosti
+
+Příklad pravidla:
+
+`Monolitní fréza, vysoká cena, brousitelná položka -> doporučit DM tracking.`
+
+### GINA Onboarding Analytics
+
+Budoucí služba `GINA Onboarding Analytics` je AI návrh GSS skladu ze skutečné historické spotřeby zákazníka.
+
+Vstup:
+
+- spotřeba položek za 6-12 měsíců
+- ERP export
+- výdejní automat
+- XLS / CSV
+
+GINA navrhne:
+
+- spárování položek s GPC
+- aktivaci položek do GSS
+- doporučené min/max
+- doporučené warning limity
+- DM tracking ano/ne
+- brousitelnost
+- servisní logiku
+- nadnormativy
+- preferované položky
+- položky ke sloučení / duplicitní položky
+- položky k vyřazení
+
+Výstup:
+
+- návrh GSS konfiguračního XLS
+- přehled nalezených položek v GPC
+- přehled nenalezených položek
+- doporučení pro zákazníka
+
+Toto není MVP implementace. Jde o budoucí placenou AI službu nad onboardingem zákazníka.
+
+### Pilotní Zákazníci
+
+Onboarding Engine je důležitý pro pilotní zákazníky, kteří už dnes mají data z:
+
+- výdejních automatů
+- ERP
+- skladových systémů
+- Excelů
+
+Cílem je rychle dostat jejich reálný sklad do GSS bez ruční práce a bez míchání zákaznické provozní konfigurace do GPC master dat.
+
+### MVP Rozsah
+
+Pro MVP jde o návrhový směr a architektonický požadavek.
+
+Mimo MVP zůstává:
+
+- plný parser XLS/CSV
+- UI import
+- backend importní pipeline
+- validace XLS
+- ERP integrace
+- integrace výdejních automatů
+
+GSS architektura s touto onboarding vrstvou musí počítat od začátku.
 
 ## Komunikační Vrstva pro Nadnormativy
 

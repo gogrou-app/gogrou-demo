@@ -965,11 +965,13 @@ export default function AppGssPage() {
   const [issueItemKey, setIssueItemKey] = useState("");
   const [issueForm, setIssueForm] = useState(createIssueForm());
   const [issueMessage, setIssueMessage] = useState("");
+  const [issueDmGroup, setIssueDmGroup] = useState("");
   const [showReturnPanel, setShowReturnPanel] = useState(false);
   const [returnQuery, setReturnQuery] = useState("");
   const [returnItemKey, setReturnItemKey] = useState("");
   const [returnForm, setReturnForm] = useState(createReturnForm());
   const [returnMessage, setReturnMessage] = useState("");
+  const [returnDmGroupOpen, setReturnDmGroupOpen] = useState(false);
   const [warehouseHighlighted, setWarehouseHighlighted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -1038,6 +1040,9 @@ export default function AppGssPage() {
     ? findDmItemInItemByCodeOrQuickId(selectedIssueItem, issueForm.dmQuery)
     : null;
   const selectedIssueDmAvailable = isDmItemAvailableForIssue(selectedIssueDmItem);
+  const issueDmGroupItems = selectedIssueItem?.tenantSettings?.dmEnabled && issueDmGroup
+    ? getFilteredDmItems(selectedIssueItem, issueDmGroup).filter(isDmItemAvailableForIssue)
+    : [];
   const normalizedReturnQuery = normalizeSearch(returnQuery);
   const returnResults = normalizedReturnQuery
     ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
@@ -1047,6 +1052,9 @@ export default function AppGssPage() {
     ? findDmItemInItemByCodeOrQuickId(selectedReturnItem, returnForm.dmQuery)
     : null;
   const selectedReturnDmValid = Boolean(selectedReturnDmItem && selectedReturnDmItem.status === "production");
+  const returnProductionDmItems = selectedReturnItem?.tenantSettings?.dmEnabled
+    ? getFilteredDmItems(selectedReturnItem, "production")
+    : [];
   const movementHistory = collectMovementHistory(warehouseItems);
   const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
   const selectedDmContext = selectedDmDetail ? findDmItemInWarehouse(warehouseItems, selectedDmDetail.dmCode) : null;
@@ -2133,6 +2141,7 @@ export default function AppGssPage() {
     setIssueItemKey(getItemKey(item));
     setIssueForm(createIssueForm());
     setIssueMessage("");
+    setIssueDmGroup("");
   };
 
   const updateIssueForm = (field, value) => {
@@ -2363,6 +2372,7 @@ export default function AppGssPage() {
     setReturnItemKey(getItemKey(item));
     setReturnForm(createReturnForm());
     setReturnMessage("");
+    setReturnDmGroupOpen(false);
   };
 
   const updateReturnForm = (field, value) => {
@@ -2875,7 +2885,67 @@ export default function AppGssPage() {
                   </div>
                   {selectedIssueItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
-                      Zadejte nebo načtěte DM kód nebo QID. GSS vydá pouze konkrétně identifikovaný kus, nikdy automaticky první dostupný kus.
+                      Vyberte konkrétní kus přes skupinu níže, nebo zadejte / načtěte DM kód či QID čtečkou. GSS vydá pouze konkrétně identifikovaný kus, nikdy automaticky první dostupný kus.
+                    </div>
+                  ) : null}
+
+                  {selectedIssueItem.tenantSettings?.dmEnabled ? (
+                    <div style={formBox}>
+                      <div style={settingsTitle}>Dostupné DM skupiny</div>
+                      <div style={stateBreakdown}>
+                        <span>Celkem: {selectedIssueStock.available}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIssueDmGroup(issueDmGroup === "new" ? "" : "new")}
+                          style={issueDmGroup === "new" ? btnImport : btnSecondary}
+                        >
+                          Nový: {selectedIssueStock.states.new}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIssueDmGroup(issueDmGroup === "resharpened_new" ? "" : "resharpened_new")}
+                          style={issueDmGroup === "resharpened_new" ? btnImport : btnSecondary}
+                        >
+                          Nový přebroušený: {selectedIssueStock.states.resharpened_new}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIssueDmGroup(issueDmGroup === "used" ? "" : "used")}
+                          style={issueDmGroup === "used" ? btnImport : btnSecondary}
+                        >
+                          Použitý: {selectedIssueStock.states.used}
+                        </button>
+                      </div>
+                      {issueDmGroup ? (
+                        <div style={historyList}>
+                          {issueDmGroupItems.length === 0 ? (
+                            <div style={muted}>V této skupině nejsou dostupné DM kusy.</div>
+                          ) : issueDmGroupItems.map((dmItem) => (
+                            <div key={dmItem.id || dmItem.dmCode} style={historyItem}>
+                              <div style={historyTitle}>QID: {dmItem.quickId || "není vygenerováno"}</div>
+                              <div style={meta}>DM: {dmItem.dmCode}</div>
+                              <div style={meta}>
+                                Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)} · Označení: {labelFromMap(DM_MARKING_STATUS_LABELS, dmItem.markingStatus || "unmarked")}
+                              </div>
+                              <div style={meta}>
+                                D {dmItem.currentDiameter || "neuvedeno"} · L {dmItem.currentLength || "neuvedeno"} · Lokace: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)}
+                              </div>
+                              <div style={meta}>
+                                Poslední servis: {dmItem.lastServiceAt || "neuvedeno"} · Poslední výdej: {dmItem.lastIssueMetadata?.job || dmItem.lastIssueMetadata?.machine || dmItem.lastIssueMetadata?.costCenter ? `zakázka ${dmItem.lastIssueMetadata?.job || "neuvedeno"} · stroj ${dmItem.lastIssueMetadata?.machine || "neuvedeno"}` : "neuvedeno"}
+                              </div>
+                              <div style={actions}>
+                                <button
+                                  type="button"
+                                  onClick={() => updateIssueForm("dmQuery", dmItem.quickId || dmItem.dmCode)}
+                                  style={btnImport}
+                                >
+                                  Vybrat tento kus
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -3003,6 +3073,7 @@ export default function AppGssPage() {
                         setIssueItemKey("");
                         setIssueForm(createIssueForm());
                         setIssueMessage("");
+                        setIssueDmGroup("");
                       }}
                       style={btnSecondary}
                     >
@@ -3093,7 +3164,52 @@ export default function AppGssPage() {
                   </div>
                   {selectedReturnItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
-                      Zadejte nebo načtěte DM kód nebo QID. GSS vrátí pouze konkrétně identifikovaný kus vedený ve výrobě.
+                      Vyberte konkrétní kus ze seznamu `Ve výrobě`, nebo zadejte / načtěte DM kód či QID čtečkou. GSS vrátí pouze konkrétně identifikovaný kus vedený ve výrobě.
+                    </div>
+                  ) : null}
+
+                  {selectedReturnItem.tenantSettings?.dmEnabled ? (
+                    <div style={formBox}>
+                      <div style={settingsTitle}>Kusy ve výrobě</div>
+                      <div style={stateBreakdown}>
+                        <button
+                          type="button"
+                          onClick={() => setReturnDmGroupOpen((current) => !current)}
+                          style={returnDmGroupOpen ? btnImport : btnSecondary}
+                        >
+                          Ve výrobě: {returnProductionDmItems.length}
+                        </button>
+                      </div>
+                      {returnDmGroupOpen ? (
+                        <div style={historyList}>
+                          {returnProductionDmItems.length === 0 ? (
+                            <div style={muted}>Tato položka nemá žádné DM kusy vedené ve výrobě.</div>
+                          ) : returnProductionDmItems.map((dmItem) => (
+                            <div key={dmItem.id || dmItem.dmCode} style={historyItem}>
+                              <div style={historyTitle}>QID: {dmItem.quickId || "není vygenerováno"}</div>
+                              <div style={meta}>DM: {dmItem.dmCode}</div>
+                              <div style={meta}>
+                                Lokace: {labelFromMap(DM_LOCATION_LABELS, dmItem.location)} · Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)}
+                              </div>
+                              <div style={meta}>
+                                Stroj: {dmItem.lastIssueMetadata?.machine || "neuvedeno"} · Zakázka: {dmItem.lastIssueMetadata?.job || "neuvedeno"} · Středisko: {dmItem.lastIssueMetadata?.costCenter || "neuvedeno"}
+                              </div>
+                              <div style={meta}>
+                                Datum výdeje: {dmItem.lastIssueMetadata?.issuedAt || "neuvedeno"} · Provedl: {dmItem.lastIssueMetadata?.performedBy || "neuvedeno"}
+                              </div>
+                              <div style={actions}>
+                                <button
+                                  type="button"
+                                  onClick={() => updateReturnForm("dmQuery", dmItem.quickId || dmItem.dmCode)}
+                                  style={btnImport}
+                                >
+                                  Vybrat tento kus
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -3280,6 +3396,7 @@ export default function AppGssPage() {
                         setReturnItemKey("");
                         setReturnForm(createReturnForm());
                         setReturnMessage("");
+                        setReturnDmGroupOpen(false);
                       }}
                       style={btnSecondary}
                     >
@@ -4899,6 +5016,19 @@ const btnDisabled = {
   fontWeight: 900,
   cursor: "not-allowed",
   textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const badge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(59,130,246,0.45)",
+  background: "rgba(59,130,246,0.12)",
+  color: "#bfdbfe",
+  fontSize: 11,
+  fontWeight: 900,
   whiteSpace: "nowrap",
 };
 

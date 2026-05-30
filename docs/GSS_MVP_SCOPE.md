@@ -1923,11 +1923,16 @@ Detailní seznam DM kusů se otevírá až klikem na konkrétní stav nebo tlač
 Výdej DM položky:
 
 - u položky s DM trackingem se nesmí automaticky vybrat první dostupný kus
-- uživatel musí zadat nebo načíst konkrétní DM kód nebo QID
+- uživatel může zadat nebo načíst konkrétní DM kód nebo QID
+- uživatel může také vybrat položku, kliknout na dostupnou skupinu a vybrat konkrétní DM kus ze seznamu
+- dostupné skupiny pro výdej jsou `new`, `resharpened_new` a `used`
+- standard GSS terminálu je `položka -> souhrn podle stavů -> konkrétní DM kus -> akce`
 - systém hledá kus pouze v rámci vybrané skladové položky
 - pokud DM/QID kus neexistuje, výdej se neuloží
 - pokud kus není ve stavu `new`, `resharpened_new` nebo `used`, výdej se neuloží
 - pokud je kus blokovaný, rezervovaný, ve výrobě, na broušení, v brusírně nebo vyřazený, není dostupný pro běžný výdej
+- po kliknutí na skupinu se zobrazí konkrétní DM kusy včetně QID, DM kódu, aktuálního stavu, rozměrů, lokace, fyzického označení a posledního servisu / výdeje
+- po kliknutí na `Vybrat tento kus` se tento DM/QID kus nastaví jako vybraný pro výdej
 - před výdejem se zobrazí potvrzení QID, DM kódu, aktuálních rozměrů, stavu a lokace
 - po potvrzení se právě tento kus nastaví na `production` a lokaci `production`
 - k DM kusu se uloží poslední výdej včetně zakázky, stroje, střediska a poznámky, pokud jsou zadané
@@ -1937,10 +1942,15 @@ U položek bez DM trackingu zůstává množstevní výdej podle počtu kusů a 
 Návrat DM položky z výroby:
 
 - u položky s DM trackingem se návrat nesmí provádět množstevně bez identifikace kusu
-- uživatel musí zadat nebo načíst konkrétní DM kód nebo QID
+- uživatel může zadat nebo načíst konkrétní DM kód nebo QID
+- uživatel může také vybrat položku a kliknout na skupinu `Ve výrobě`
+- klik na `Ve výrobě` otevře konkrétní DM kusy aktuálně vedené ve výrobě
+- standard GSS terminálu pro návrat je `položka -> Ve výrobě -> konkrétní DM kus -> rozhodnutí po návratu`
 - systém hledá kus pouze v rámci vybrané skladové položky
 - pokud DM/QID kus neexistuje, návrat se neuloží
 - pokud kus není ve stavu `production`, návrat se neuloží
+- u kusů ve výrobě se zobrazí QID, DM kód, aktuální lokace, stroj, zakázka, středisko, datum posledního výdeje a kdo výdej provedl
+- po kliknutí na `Vybrat tento kus` se tento DM/QID kus nastaví jako vybraný pro návrat
 - před návratem se zobrazí potvrzení QID, DM kódu, aktuálních rozměrů, stavu a posledního výdeje
 - uživatel rozhodne, zda se konkrétní kus vrací jako `used`, jde na `sharpening`, má být `blocked`, nebo `scrapped`
 - po návratu se mění stav přesně tohoto DM kusu
@@ -1948,6 +1958,16 @@ Návrat DM položky z výroby:
 - skladový souhrn se znovu přepočítá z `dmItems[]`
 
 U položek bez DM trackingu zůstává množstevní návrat podle počtu kusů.
+
+Terminálové pravidlo DM operací:
+
+Výdej:
+
+`Položka -> Nový / Nový přebroušený / Použitý -> Konkrétní kus -> Akce`
+
+Návrat:
+
+`Položka -> Ve výrobě -> Konkrétní kus -> Rozhodnutí po návratu`
 
 ### Skladové Lokace
 
@@ -2033,6 +2053,176 @@ DM umožňuje:
 - připravit export hodnot do výroby
 
 V MVP se neřeší fyzický tisk DM kódů, integrace čteček, Helichek API, automatické měřicí protokoly, plný servisní portál, billing externích brusíren, detailní oprávnění, backend / DB / auth ani export do CNC / strojů.
+
+## GSS Onboarding Engine / Hromadný Import a Konfigurační XLS
+
+GSS musí být architektonicky připravené na rychlé pilotní nasazení u zákazníků, kteří už dnes mají reálná skladová data v ERP, výdejním automatu, Excelu nebo interním skladovém seznamu. Cílem není ručně zakládat stovky až tisíce položek, ale co nejrychleji dostat reálný zákaznický sklad do GSS a následně hromadně doplnit provozní pravidla.
+
+### Vstupní Scénář A: Zákazník Má Existující Data
+
+Zákazník může dodat:
+
+- ERP export
+- export z výdejního automatu
+- XLS / CSV seznam
+- interní skladový seznam
+
+GSS Onboarding Engine se pokusí položky spárovat s GPC podle:
+
+- GTIN
+- GID
+- objednací číslo
+- výrobce + objednací číslo
+- čárový kód
+- přesný název
+- podobnost názvu
+
+Výstup párování má být srozumitelný pro rozhodnutí zákazníka nebo Gogrou týmu, například:
+
+`Z 1678 položek bylo v GPC nalezeno 1234. Chcete je převzít do GSS?`
+
+Nalezené položky z GPC se převezmou do GSS zákazníka jako tenant skladové položky. Nenalezené položky se založí jako lokální / nevalidované položky v GSS.
+
+### Vstupní Scénář B: Zákazník Data Nemá
+
+Pokud zákazník nemá připravený export, GSS umožní postupný vznik skladového seznamu:
+
+- ruční založení položky
+- načtení čtečkou
+- postupné doplňování položek při běžném provozu
+
+I v tomto scénáři musí být možné kdykoliv vygenerovat GSS konfigurační XLS pro hromadné doplnění provozních pravidel.
+
+### GSS Konfigurační XLS
+
+GSS konfigurační XLS není jen importní soubor. Je to hromadná konfigurace zákaznického skladu.
+
+Musí být vždy generovatelný z GSS a slouží k doplnění:
+
+- min
+- max
+- warning limit
+- DM tracking ano/ne
+- brousit ano/ne
+- max počet přebroušení
+- povlak
+- nadnormativa ano/ne
+- lokace
+- preferovaný dodavatel
+- objednací násobek
+- poznámka
+- interní kód zákazníka
+- odpovědná osoba / role
+- zákaznická omezení
+- aktivní/neaktivní položka
+
+### Rozdělení Odpovědnosti GPC vs. GSS XLS
+
+GPC drží:
+
+- technickou identitu položky
+- výrobce
+- GTIN/GID
+- technické parametry
+- ToolsUnited strukturu
+- obrázky / datasheety / odkazy
+
+GSS konfigurační XLS drží:
+
+- provozní pravidla zákazníka
+- skladovou logiku
+- nákupní logiku
+- servisní logiku
+- lokace
+- zákaznickou konfiguraci
+
+GSS XLS nesmí měnit GPC master data. Slouží pouze k tenant provozní konfiguraci.
+
+### Delegování Práce
+
+Konfigurační XLS má umožnit zákazníkovi delegovat doplnění dat na:
+
+- technology
+- nákup
+- skladníky
+- seřizovače
+- výrobu
+
+Důvod je praktický: u zákazníka mohou být stovky až tisíce položek a ruční editace přímo v GSS by byla pomalá.
+
+### Budoucí Doporučení Systému
+
+GSS může později nad importovanými a provozními daty doporučit:
+
+- zapnout DM tracking u drahých / brousitelných nástrojů
+- zapnout nadnormativy
+- upravit min/max podle spotřeby
+- označit položku jako servisovatelnou
+- doporučit sledování životnosti
+
+Příklad:
+
+`Monolitní fréza, vysoká cena, brousitelná položka -> doporučit DM tracking.`
+
+### GINA Onboarding Analytics
+
+Budoucí služba `GINA Onboarding Analytics` je AI návrh GSS skladu ze skutečné historické spotřeby zákazníka.
+
+Vstupem může být:
+
+- spotřeba položek za 6-12 měsíců
+- ERP export
+- export z výdejního automatu
+- XLS / CSV
+
+GINA nad těmito daty navrhne:
+
+- spárování položek s GPC
+- aktivaci položek do GSS
+- doporučené min/max
+- doporučené warning limity
+- DM tracking ano/ne
+- brousitelnost
+- servisní logiku
+- nadnormativy
+- preferované položky
+- položky ke sloučení / duplicitní položky
+- položky k vyřazení
+
+Výstupem služby může být:
+
+- návrh GSS konfiguračního XLS
+- přehled nalezených položek v GPC
+- přehled nenalezených položek
+- doporučení pro zákazníka
+
+Toto není MVP implementace. Jde o budoucí placenou AI službu nad onboardingem zákazníka.
+
+### Pilotní Zákazníci
+
+Tato funkce je důležitá pro pilotní zákazníky, kteří už dnes mají data z:
+
+- výdejních automatů
+- ERP
+- skladových systémů
+- Excelů
+
+Cílem je rychle dostat jejich reálný sklad do GSS bez ruční práce a bez toho, aby se technická master data přesouvala mimo GPC.
+
+### MVP Rozsah
+
+Pro MVP se GSS Onboarding Engine zapisuje jako návrhový směr a architektonický požadavek.
+
+Mimo MVP zůstává:
+
+- plný parser XLS/CSV
+- UI import
+- backend importní pipeline
+- validace XLS
+- napojení ERP
+- napojení výdejních automatů
+
+Architektura GSS s touto vrstvou musí počítat, protože je zásadní pro pilotní nasazení.
 
 ## Komunikační Vrstva pro Nadnormativy
 
