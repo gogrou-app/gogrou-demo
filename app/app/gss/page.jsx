@@ -25,6 +25,34 @@ import { createEmptyStockSummary, getPrimaryStockState, normalizeStockSummary } 
 
 const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
 
+const getPurchaseProposalStorageKey = (organizationId) => `gss_purchase_proposal_${organizationId}_MAIN`;
+
+const readPurchaseProposal = (organizationId) => {
+  if (!organizationId) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getPurchaseProposalStorageKey(organizationId)) || "null");
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const writePurchaseProposal = (organizationId, proposal) => {
+  if (!organizationId) {
+    return;
+  }
+
+  if (!proposal) {
+    localStorage.removeItem(getPurchaseProposalStorageKey(organizationId));
+    return;
+  }
+
+  localStorage.setItem(getPurchaseProposalStorageKey(organizationId), JSON.stringify(proposal));
+};
+
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
 const formatModules = (modules) =>
@@ -308,6 +336,7 @@ const createSharpeningReturnForm = () => ({
 });
 
 const createStockForm = () => ({
+  receiptSourceType: "manual",
   quantity: "",
   condition: "new",
   grinder: DEFAULT_GRINDER,
@@ -316,6 +345,17 @@ const createStockForm = () => ({
   purchaseCurrency: "CZK",
   documentType: "supplier_delivery_note",
   documentNumber: "",
+  sourceDocumentNumber: "",
+  purchaseProposalId: "",
+  orderProposalId: "",
+  externalOrderNumber: "",
+  systemOrderNumber: "",
+  systemOrderSupplier: "",
+  systemOrderPurchaseChannel: "",
+  systemOrderManufacturer: "",
+  systemOrderOrderedQuantity: "",
+  systemOrderReceivedQuantity: "",
+  systemOrderRemainingQuantity: "",
   source: "",
   receivedAt: getTodayDate(),
   performedBy: DEFAULT_INTAKE_OPERATOR,
@@ -886,6 +926,11 @@ const parsePositiveNumber = (value, fallback = 0) => {
 
 const roundUpToPack = (quantity, packQuantity) => Math.ceil(quantity / packQuantity) * packQuantity;
 
+const parseOrderQuantity = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
 const getPurchaseStatus = (available, min) => {
   if (available === 0) {
     return "Kritický stav";
@@ -896,6 +941,149 @@ const getPurchaseStatus = (available, min) => {
   }
 
   return "OK";
+};
+
+const normalizePurchaseGroupValue = (value, fallback) => {
+  const normalized = String(value || "").trim();
+  return normalized || fallback;
+};
+
+const getPurchaseChannel = (item) => {
+  const supplierType = String(item.tenantSettings?.supplierType || "").toLowerCase();
+  const supplierName = String(item.tenantSettings?.supplierName || "").toLowerCase();
+
+  if (supplierName.includes("mazak") || supplierType.includes("toolshop")) {
+    return "MAZAK Toolshop";
+  }
+
+  if (supplierName.includes("m-technologies") || supplierName.includes("mtechnologies")) {
+    return "M-technologies";
+  }
+
+  if (supplierType.includes("standard")) {
+    return "vlastní dodavatel zákazníka";
+  }
+
+  if (supplierType.includes("internal")) {
+    return "jiný dodavatel";
+  }
+
+  return "Gogrou";
+};
+
+const RECEIPT_SOURCE_LABELS = {
+  manual: "Běžný příjem",
+  gss_system_order: "Příjem ze systémové objednávky GSS",
+  external_order_erp: "Příjem z externí objednávky / ERP",
+  sharpening_return: "Příjem z broušení",
+  inventory_correction: "Korekční příjem / inventura",
+};
+
+const OPEN_PURCHASE_PROPOSAL_STATUSES = new Set(["draft", "exported", "sent"]);
+
+const createSystemOrderNumber = (proposal) => {
+  const rawId = String(proposal?.systemOrderNumber || proposal?.orderNumber || proposal?.id || "").replace(/[^a-zA-Z0-9]/g, "");
+  const suffix = rawId.slice(0, 8).toUpperCase() || "MVP";
+
+  return `GSS-${suffix}`;
+};
+
+const getProposalSuggestedQuantity = (proposalItem) =>
+  parseOrderQuantity(proposalItem?.suggestedQuantity, parseOrderQuantity(proposalItem?.recommendedQuantity, 0));
+
+const getProposalOrderedQuantity = (proposalItem) => {
+  const suggestedQuantity = getProposalSuggestedQuantity(proposalItem);
+
+  if (proposalItem?.orderedQuantity !== undefined) {
+    return parseOrderQuantity(proposalItem.orderedQuantity, suggestedQuantity);
+  }
+
+  if (proposalItem?.editedQuantity !== undefined) {
+    return parseOrderQuantity(proposalItem.editedQuantity, suggestedQuantity);
+  }
+
+  return suggestedQuantity;
+};
+
+const normalizePurchaseProposalItem = (proposalItem) => {
+  const suggestedQuantity = getProposalSuggestedQuantity(proposalItem);
+  const orderedQuantity = getProposalOrderedQuantity(proposalItem);
+  const receivedQuantity = parseOrderQuantity(proposalItem.receivedQuantity, 0);
+  const remainingQuantity = Math.max(orderedQuantity - receivedQuantity, 0);
+
+  return {
+    ...proposalItem,
+    suggestedQuantity,
+    originalSuggestedQuantity: proposalItem.originalSuggestedQuantity ?? suggestedQuantity,
+    orderedQuantity,
+    editedQuantity: orderedQuantity,
+    receivedQuantity,
+    remainingQuantity,
+    quantityAdjustedByUser: orderedQuantity !== suggestedQuantity,
+    fulfillmentStatus: remainingQuantity <= 0 ? "fulfilled" : "open",
+  };
+};
+
+const getOpenSystemOrdersForItem = (proposal, itemId) => {
+  if (!proposal || !OPEN_PURCHASE_PROPOSAL_STATUSES.has(proposal.status) || !itemId) {
+    return [];
+  }
+
+  return (proposal.items || [])
+    .filter((proposalItem) => proposalItem.itemId === itemId && !proposalItem.excluded)
+    .map((proposalItem) => {
+      const suggestedQuantity = getProposalSuggestedQuantity(proposalItem);
+      const orderedQuantity = getProposalOrderedQuantity(proposalItem);
+      const receivedQuantity = parseOrderQuantity(proposalItem.receivedQuantity, 0);
+      const remainingQuantity = proposalItem.remainingQuantity !== undefined
+        ? parseOrderQuantity(proposalItem.remainingQuantity, Math.max(orderedQuantity - receivedQuantity, 0))
+        : Math.max(orderedQuantity - receivedQuantity, 0);
+
+      return {
+        id: `${proposal.id}:${proposalItem.itemId}`,
+        purchaseProposalId: proposal.id,
+        orderProposalId: proposal.id,
+        systemOrderNumber: createSystemOrderNumber(proposal),
+        createdAt: proposal.createdAt,
+        supplier: normalizePurchaseGroupValue(proposalItem.supplierName, "Gogrou"),
+        manufacturer: normalizePurchaseGroupValue(proposalItem.manufacturer, "Neurčený výrobce"),
+        suggestedQuantity,
+        orderedQuantity,
+        receivedQuantity,
+        remainingQuantity,
+        quantityAdjustedByUser: Boolean(proposalItem.quantityAdjustedByUser),
+        purchaseChannel: normalizePurchaseGroupValue(proposalItem.purchaseChannel, "Gogrou"),
+      };
+    })
+    .filter((order) => order.remainingQuantity > 0)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+};
+
+const createPurchaseGroupKey = ({ manufacturer, supplierName, purchaseChannel }) =>
+  [
+    normalizePurchaseGroupValue(manufacturer, "Neurčený výrobce"),
+    normalizePurchaseGroupValue(supplierName, "Gogrou"),
+    normalizePurchaseGroupValue(purchaseChannel, "Gogrou"),
+  ].join("::");
+
+const groupPurchaseProposalItems = (items) => {
+  const groups = new Map();
+
+  items.forEach((item) => {
+    const groupKey = item.purchaseGroupKey || createPurchaseGroupKey(item);
+    const existing = groups.get(groupKey) || {
+      groupKey,
+      manufacturer: normalizePurchaseGroupValue(item.manufacturer, "Neurčený výrobce"),
+      supplierName: normalizePurchaseGroupValue(item.supplierName, "Gogrou"),
+      purchaseChannel: normalizePurchaseGroupValue(item.purchaseChannel, "Gogrou"),
+      items: [],
+    };
+
+    existing.items.push(item);
+    groups.set(groupKey, existing);
+  });
+
+  return Array.from(groups.values());
 };
 
 const createPurchaseProposalItem = (item) => {
@@ -910,15 +1098,20 @@ const createPurchaseProposalItem = (item) => {
   const supplierPackQuantity = parsePositiveNumber(item.tenantSettings?.supplierPackQuantity, 1);
   const neededQuantity = Math.max(max - stock.available, 0);
   const recommendedQuantity = roundUpToPack(neededQuantity, supplierPackQuantity);
+  const manufacturer = normalizePurchaseGroupValue(item.manufacturer, "Neurčený výrobce");
+  const supplierName = normalizePurchaseGroupValue(item.tenantSettings?.supplierName, "Gogrou");
+  const purchaseChannel = getPurchaseChannel(item);
 
   return {
     itemId: getItemKey(item),
     itemName: item.name || item.gpc_id || "Položka",
     gpc_id: item.gpc_id || "",
     gtin: item.gtin || "",
-    manufacturer: item.manufacturer || "",
-    supplierName: item.tenantSettings?.supplierName || "Gogrou",
+    manufacturer,
+    supplierName,
     supplierType: item.tenantSettings?.supplierType || "Gogrou partner",
+    purchaseChannel,
+    purchaseGroupKey: createPurchaseGroupKey({ manufacturer, supplierName, purchaseChannel }),
     available: stock.available,
     min,
     max,
@@ -1183,6 +1376,7 @@ export default function AppGssPage() {
   const [overstockForm, setOverstockForm] = useState(createOverstockOfferForm());
   const [overstockMessage, setOverstockMessage] = useState("");
   const [purchaseProposal, setPurchaseProposal] = useState(null);
+  const [purchaseDraftEdits, setPurchaseDraftEdits] = useState({});
   const [purchaseProposalMessage, setPurchaseProposalMessage] = useState("");
   const [placeholderMessage, setPlaceholderMessage] = useState("");
   const [activeMainPanel, setActiveMainPanel] = useState("");
@@ -1212,6 +1406,7 @@ export default function AppGssPage() {
 
     setOrganization(activeOrganization);
     setWarehouseItems(organizationId ? readWarehouse(organizationId) : []);
+    setPurchaseProposal(organizationId ? readPurchaseProposal(organizationId) : null);
     setLoaded(true);
   }, []);
 
@@ -1301,6 +1496,19 @@ export default function AppGssPage() {
     : [];
   const movementHistory = collectMovementHistory(warehouseItems);
   const purchaseCandidates = warehouseItems.map(createPurchaseProposalItem).filter(Boolean);
+  const purchaseDraftItems = purchaseCandidates.map((item) => {
+    const draftEdit = purchaseDraftEdits[item.itemId] || {};
+
+    return normalizePurchaseProposalItem({
+      ...item,
+      ...draftEdit,
+      orderedQuantity: draftEdit.orderedQuantity ?? item.recommendedQuantity,
+      editedQuantity: draftEdit.orderedQuantity ?? item.recommendedQuantity,
+      excluded: draftEdit.excluded ?? item.excluded,
+      note: draftEdit.note ?? item.note,
+    });
+  });
+  const purchaseCandidateGroups = groupPurchaseProposalItems(purchaseDraftItems);
   const selectedDmContext = selectedDmDetail ? findDmItemInWarehouse(warehouseItems, selectedDmDetail.dmCode) : null;
   const serviceTerminalContext = serviceTerminalQuery
     ? findDmItemInWarehouseByCodeOrQuickId(warehouseItems, serviceTerminalQuery)
@@ -1591,6 +1799,43 @@ export default function AppGssPage() {
       [field]: value,
     }));
     setStockMessage("");
+  };
+
+  const selectSystemOrderForReceipt = (systemOrder) => {
+    const prefillQuantity = systemOrder.remainingQuantity > 0
+      ? systemOrder.remainingQuantity
+      : systemOrder.orderedQuantity;
+
+    setStockForm((current) => ({
+      ...current,
+      receiptSourceType: "gss_system_order",
+      quantity: String(prefillQuantity || ""),
+      sourceDocumentNumber: systemOrder.systemOrderNumber,
+      documentNumber: current.documentNumber || systemOrder.systemOrderNumber,
+      purchaseProposalId: systemOrder.purchaseProposalId,
+      orderProposalId: systemOrder.orderProposalId,
+      externalOrderNumber: "",
+      systemOrderNumber: systemOrder.systemOrderNumber,
+      systemOrderSupplier: systemOrder.supplier,
+      systemOrderPurchaseChannel: systemOrder.purchaseChannel,
+      systemOrderManufacturer: systemOrder.manufacturer,
+      systemOrderOrderedQuantity: String(systemOrder.orderedQuantity),
+      systemOrderReceivedQuantity: String(systemOrder.receivedQuantity),
+      systemOrderRemainingQuantity: String(systemOrder.remainingQuantity),
+      source: current.source || systemOrder.supplier,
+    }));
+    setStockMessage("");
+  };
+
+  const updatePurchaseDraftItem = (itemId, field, value) => {
+    setPurchaseDraftEdits((current) => ({
+      ...current,
+      [itemId]: {
+        ...(current[itemId] || {}),
+        [field]: value,
+      },
+    }));
+    setPurchaseProposalMessage("");
   };
 
   const openReservationForm = (item) => {
@@ -1948,6 +2193,7 @@ export default function AppGssPage() {
 
     if (purchaseCandidates.length === 0) {
       setPurchaseProposal(null);
+      writePurchaseProposal(organizationId, null);
       setPurchaseProposalMessage("Nejsou nalezené žádné položky pod minimem.");
       return;
     }
@@ -1961,9 +2207,17 @@ export default function AppGssPage() {
         name: organization.name,
         prefix: organization.prefix || "",
       },
-      supplier: "mixed",
+      supplier: "grouped_by_manufacturer_supplier_channel",
+      groupingRule: "manufacturer + supplierName + purchaseChannel",
       status: "draft",
-      items: purchaseCandidates,
+      items: purchaseDraftItems.map(normalizePurchaseProposalItem),
+      groups: groupPurchaseProposalItems(purchaseDraftItems).map((group) => ({
+        groupKey: group.groupKey,
+        manufacturer: group.manufacturer,
+        supplierName: group.supplierName,
+        purchaseChannel: group.purchaseChannel,
+        itemCount: group.items.length,
+      })),
     };
     const includedItemIds = new Set(proposal.items.map((item) => item.itemId));
     const nextItems = warehouseItems.map((item) => {
@@ -1980,7 +2234,7 @@ export default function AppGssPage() {
         organizationId,
         item,
         type: "purchase_proposal_created",
-        quantity: proposalItem.recommendedQuantity,
+        quantity: proposalItem.orderedQuantity,
         state: "new",
         performedBy: DEFAULT_INTAKE_OPERATOR,
         note: `Objednávkový návrh do max zásoby pro nový nástroj.`,
@@ -1989,9 +2243,17 @@ export default function AppGssPage() {
           available: proposalItem.available,
           min: proposalItem.min,
           max: proposalItem.max,
+          suggestedQuantity: proposalItem.suggestedQuantity,
+          originalSuggestedQuantity: proposalItem.originalSuggestedQuantity,
+          orderedQuantity: proposalItem.orderedQuantity,
+          quantityAdjustedByUser: proposalItem.quantityAdjustedByUser,
+          receivedQuantity: proposalItem.receivedQuantity,
+          remainingQuantity: proposalItem.remainingQuantity,
           supplierPackQuantity: proposalItem.supplierPackQuantity,
           supplierName: proposalItem.supplierName,
           supplierType: proposalItem.supplierType,
+          purchaseChannel: proposalItem.purchaseChannel,
+          purchaseGroupKey: proposalItem.purchaseGroupKey,
         },
       }));
     });
@@ -1999,7 +2261,8 @@ export default function AppGssPage() {
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
     setPurchaseProposal(proposal);
-    setPurchaseProposalMessage("Objednávkový návrh byl vytvořen.");
+    writePurchaseProposal(organizationId, proposal);
+    setPurchaseProposalMessage("Objednávkový návrh byl vytvořen a rozdělen podle výrobce, dodavatele a nákupního kanálu.");
   };
 
   const updatePurchaseProposalItem = (itemId, field, value) => {
@@ -2008,14 +2271,30 @@ export default function AppGssPage() {
         return current;
       }
 
-      return {
+      const nextProposal = {
         ...current,
-        items: current.items.map((item) => (
-          item.itemId === itemId
-            ? { ...item, [field]: field === "excluded" ? value : value }
-            : item
-        )),
+        items: current.items.map((item) => {
+          if (item.itemId !== itemId) {
+            return item;
+          }
+
+          if (field === "editedQuantity") {
+            return normalizePurchaseProposalItem({
+              ...item,
+              orderedQuantity: value,
+              editedQuantity: value,
+            });
+          }
+
+          return {
+            ...item,
+            [field]: value,
+          };
+        }),
       };
+
+      writePurchaseProposal(organizationId, nextProposal);
+      return nextProposal;
     });
     setPurchaseProposalMessage("");
   };
@@ -2821,6 +3100,52 @@ export default function AppGssPage() {
       return;
     }
 
+    const receiptSourceType = stockForm.receiptSourceType || "manual";
+    const selectedProposalLine = receiptSourceType === "gss_system_order" && purchaseProposal?.id === stockForm.purchaseProposalId.trim()
+      ? (purchaseProposal.items || []).find((proposalItem) => proposalItem.itemId === stockItemKey)
+      : null;
+    const suggestedQuantity = selectedProposalLine
+      ? getProposalSuggestedQuantity(selectedProposalLine)
+      : parseOrderQuantity(stockForm.systemOrderOrderedQuantity, 0);
+    const orderedQuantity = selectedProposalLine
+      ? getProposalOrderedQuantity(selectedProposalLine)
+      : parseOrderQuantity(stockForm.systemOrderOrderedQuantity, suggestedQuantity);
+    const receivedQuantityBefore = selectedProposalLine
+      ? parseOrderQuantity(selectedProposalLine.receivedQuantity, 0)
+      : parseOrderQuantity(stockForm.systemOrderReceivedQuantity, 0);
+    const remainingQuantityBefore = selectedProposalLine
+      ? parseOrderQuantity(selectedProposalLine.remainingQuantity, Math.max(orderedQuantity - receivedQuantityBefore, 0))
+      : parseOrderQuantity(stockForm.systemOrderRemainingQuantity, Math.max(orderedQuantity - receivedQuantityBefore, 0));
+    const receivedQuantityAfter = receiptSourceType === "gss_system_order"
+      ? receivedQuantityBefore + quantity
+      : receivedQuantityBefore;
+    const remainingQuantityAfter = receiptSourceType === "gss_system_order"
+      ? Math.max(orderedQuantity - receivedQuantityAfter, 0)
+      : remainingQuantityBefore;
+    const quantityAdjustedByUser = selectedProposalLine
+      ? Boolean(selectedProposalLine.quantityAdjustedByUser)
+      : orderedQuantity !== suggestedQuantity;
+    const receiptMetadata = {
+      receiptSourceType,
+      receiptSourceTypeLabel: RECEIPT_SOURCE_LABELS[receiptSourceType] || receiptSourceType,
+      sourceDocumentNumber: stockForm.sourceDocumentNumber.trim(),
+      purchaseProposalId: stockForm.purchaseProposalId.trim(),
+      orderProposalId: stockForm.orderProposalId.trim() || stockForm.purchaseProposalId.trim(),
+      externalOrderNumber: stockForm.externalOrderNumber.trim(),
+      systemOrderNumber: stockForm.systemOrderNumber.trim() || stockForm.sourceDocumentNumber.trim(),
+      supplier: stockForm.systemOrderSupplier.trim() || stockForm.source.trim(),
+      purchaseChannel: stockForm.systemOrderPurchaseChannel.trim(),
+      manufacturer: stockForm.systemOrderManufacturer.trim(),
+      suggestedQuantity,
+      originalSuggestedQuantity: selectedProposalLine?.originalSuggestedQuantity ?? suggestedQuantity,
+      orderedQuantity,
+      receivedQuantityBefore,
+      receivedQuantityAfter,
+      remainingQuantityBefore,
+      remainingQuantityAfter,
+      receivedFromThisMovement: receiptSourceType === "gss_system_order" ? quantity : 0,
+      quantityAdjustedByUser,
+    };
     const existingCodes = getAllDmCodes(warehouseItems);
     const existingQuickIds = getAllQuickIds(warehouseItems);
     const nextItems = warehouseItems.map((item) => {
@@ -2888,6 +3213,7 @@ export default function AppGssPage() {
                     markingStatus: "unmarked",
                     documentType: stockForm.documentType,
                     documentNumber: stockForm.documentNumber.trim(),
+                    ...receiptMetadata,
                   },
                 }),
               ],
@@ -2928,6 +3254,7 @@ export default function AppGssPage() {
           purchasePricePerUnit,
           purchaseCurrency,
           purchaseTotalValue: purchasePricePerUnit !== null ? purchasePricePerUnit * quantity : null,
+          ...receiptMetadata,
         },
       };
 
@@ -2961,6 +3288,7 @@ export default function AppGssPage() {
           purchasePricePerUnit,
           purchaseCurrency,
           purchaseTotalValue: purchasePricePerUnit !== null ? purchasePricePerUnit * quantity : null,
+          ...receiptMetadata,
           dmCodes: newDmItems.map((dmItem) => dmItem.dmCode),
           quickIds: newDmItems.map((dmItem) => dmItem.quickId),
           grinder: isSharpening ? stockForm.grinder.trim() || DEFAULT_GRINDER : "",
@@ -2971,6 +3299,48 @@ export default function AppGssPage() {
 
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
+    if (receiptSourceType === "gss_system_order" && stockForm.purchaseProposalId.trim()) {
+      setPurchaseProposal((current) => {
+        if (!current || current.id !== stockForm.purchaseProposalId.trim()) {
+          return current;
+        }
+
+        const nextProposalItems = (current.items || []).map((proposalItem) => {
+          if (proposalItem.itemId !== stockItemKey) {
+            return proposalItem;
+          }
+
+          const currentSuggestedQuantity = getProposalSuggestedQuantity(proposalItem);
+          const currentOrderedQuantity = getProposalOrderedQuantity(proposalItem);
+          const currentReceivedQuantity = parseOrderQuantity(proposalItem.receivedQuantity, 0);
+          const nextReceivedQuantity = currentReceivedQuantity + quantity;
+          const nextRemainingQuantity = Math.max(currentOrderedQuantity - nextReceivedQuantity, 0);
+
+          return normalizePurchaseProposalItem({
+            ...proposalItem,
+            suggestedQuantity: currentSuggestedQuantity,
+            orderedQuantity: currentOrderedQuantity,
+            editedQuantity: currentOrderedQuantity,
+            receivedQuantity: nextReceivedQuantity,
+            remainingQuantity: nextRemainingQuantity,
+            fulfillmentStatus: nextRemainingQuantity <= 0 ? "fulfilled" : "open",
+            fulfilledAt: nextRemainingQuantity <= 0 ? new Date().toISOString() : proposalItem.fulfilledAt,
+          });
+        });
+        const includedItems = nextProposalItems.filter((proposalItem) => !proposalItem.excluded);
+        const allIncludedFulfilled = includedItems.length > 0 && includedItems.every((proposalItem) => proposalItem.fulfillmentStatus === "fulfilled" || parseOrderQuantity(proposalItem.remainingQuantity, 0) <= 0);
+
+        const nextProposal = {
+          ...current,
+          status: allIncludedFulfilled ? "fulfilled" : current.status,
+          fulfilledAt: allIncludedFulfilled ? new Date().toISOString() : current.fulfilledAt,
+          items: nextProposalItems,
+        };
+
+        writePurchaseProposal(organizationId, nextProposal);
+        return nextProposal;
+      });
+    }
     setStockItemKey("");
     setStockForm(createStockForm());
     setStockMessage("");
@@ -3882,28 +4252,60 @@ export default function AppGssPage() {
             <div style={muted}>
               Budoucí porovnání zohlední Gogrou partnera, uložené dodavatele zákazníka, nového dodavatele, nadnormativu v komunitě, cenové akce, SS nabídku a Promitea / RFQ výsledek.
             </div>
+            <div style={hintBox}>
+              Objednávkový návrh se v GSS nesmí míchat do jednoho společného seznamu. Soft MVP ho seskupuje podle kombinace výrobce / značka z GPC + dodavatel nastavený v GSS + nákupní kanál.
+            </div>
 
             {purchaseCandidates.length > 0 ? (
               <div style={resultList}>
-                {purchaseCandidates.map((item) => (
-                  <div key={item.itemId} style={resultItem}>
-                    <div>
-                      <div style={resultTitle}>{item.itemName}</div>
-                      <div style={meta}>
-                        {item.manufacturer || "Výrobce neuveden"} · Dodavatel: {item.supplierName} · {item.supplierType}
-                      </div>
-                      <div style={meta}>
-                        {item.gpc_id ? `GPC ID: ${item.gpc_id}` : "Bez GPC vazby"} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
-                      </div>
-                      <div style={stateBreakdown}>
-                        <span>Available: {item.available}</span>
-                        <span>Min: {item.min}</span>
-                        <span>Max: {item.max}</span>
-                        <span>Dodací násobek: {item.supplierPackQuantity}</span>
-                        <span>Doporučeno objednat: {item.recommendedQuantity}</span>
-                        <span>{item.status}</span>
-                      </div>
+                {purchaseCandidateGroups.map((group) => (
+                  <div key={group.groupKey} style={settingsPanel}>
+                    <div style={settingsTitle}>
+                      Návrh: {group.manufacturer} + {group.supplierName}
                     </div>
+                    <div style={meta}>Nákupní kanál: {group.purchaseChannel} · položek: {group.items.length}</div>
+                    {group.items.map((item) => (
+                      <div key={item.itemId} style={resultItem}>
+                        <div>
+                          <div style={resultTitle}>{item.itemName}</div>
+                          <div style={meta}>
+                            {item.manufacturer} · Dodavatel: {item.supplierName} · {item.supplierType} · kanál: {item.purchaseChannel}
+                          </div>
+                          <div style={meta}>
+                            {item.gpc_id ? `GPC ID: ${item.gpc_id}` : "Bez GPC vazby"} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
+                          </div>
+                          <div style={stateBreakdown}>
+                            <span>Available: {item.available}</span>
+                            <span>Min: {item.min}</span>
+                            <span>Max: {item.max}</span>
+                            <span>Dodací násobek: {item.supplierPackQuantity}</span>
+                            <span>Systém navrhl: {getProposalSuggestedQuantity(item)}</span>
+                            <span>Objednat: {getProposalOrderedQuantity(item)}</span>
+                            <span>{item.status}</span>
+                          </div>
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Objednané množství
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.orderedQuantity}
+                                onChange={(event) => updatePurchaseDraftItem(item.itemId, "orderedQuantity", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Poznámka
+                              <input
+                                value={item.note}
+                                onChange={(event) => updatePurchaseDraftItem(item.itemId, "note", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -3917,41 +4319,54 @@ export default function AppGssPage() {
                 <div style={meta}>
                   ID: {purchaseProposal.id} · stav: {purchaseProposal.status} · vytvořil {purchaseProposal.createdBy}
                 </div>
+                <div style={meta}>
+                  Pravidlo: výrobce / značka + dodavatel položky + nákupní kanál. Každá skupina je samostatný návrh pro budoucí odeslání/export.
+                </div>
                 <div style={resultList}>
-                  {purchaseProposal.items.map((item) => (
-                    <div key={item.itemId} style={resultItem}>
-                      <div>
-                        <label style={checkLabel}>
-                          <input
-                            type="checkbox"
-                            checked={!item.excluded}
-                            onChange={(event) => updatePurchaseProposalItem(item.itemId, "excluded", !event.target.checked)}
-                          />
-                          Zahrnout do návrhu
-                        </label>
-                        <div style={resultTitle}>{item.itemName}</div>
-                        <div style={meta}>{item.supplierName} · {item.supplierType} · doporučeno {item.recommendedQuantity} ks</div>
-                        <div style={formGrid}>
-                          <label style={fieldLabel}>
-                            Upravené množství
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.editedQuantity}
-                              onChange={(event) => updatePurchaseProposalItem(item.itemId, "editedQuantity", event.target.value)}
-                              style={input}
-                            />
-                          </label>
-                          <label style={fieldLabel}>
-                            Poznámka
-                            <input
-                              value={item.note}
-                              onChange={(event) => updatePurchaseProposalItem(item.itemId, "note", event.target.value)}
-                              style={input}
-                            />
-                          </label>
-                        </div>
+                  {groupPurchaseProposalItems(purchaseProposal.items).map((group) => (
+                    <div key={group.groupKey} style={settingsPanel}>
+                      <div style={settingsTitle}>
+                        {group.manufacturer} + {group.supplierName}
                       </div>
+                      <div style={meta}>Nákupní kanál: {group.purchaseChannel} · tento návrh nemíchá jiné dodavatele</div>
+                      {group.items.map((item) => (
+                        <div key={item.itemId} style={resultItem}>
+                          <div>
+                            <label style={checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={!item.excluded}
+                                onChange={(event) => updatePurchaseProposalItem(item.itemId, "excluded", !event.target.checked)}
+                              />
+                              Zahrnout do návrhu
+                            </label>
+                            <div style={resultTitle}>{item.itemName}</div>
+                            <div style={meta}>
+                              {item.supplierName} · {item.supplierType} · kanál: {item.purchaseChannel} · systém navrhl {getProposalSuggestedQuantity(item)} ks · objednáno {getProposalOrderedQuantity(item)} ks · přijato {parseOrderQuantity(item.receivedQuantity, 0)} ks · zbývá {parseOrderQuantity(item.remainingQuantity, Math.max(getProposalOrderedQuantity(item) - parseOrderQuantity(item.receivedQuantity, 0), 0))} ks
+                            </div>
+                            <div style={formGrid}>
+                              <label style={fieldLabel}>
+                                Objednané množství
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={item.orderedQuantity ?? item.editedQuantity ?? item.recommendedQuantity}
+                                  onChange={(event) => updatePurchaseProposalItem(item.itemId, "editedQuantity", event.target.value)}
+                                  style={input}
+                                />
+                              </label>
+                              <label style={fieldLabel}>
+                                Poznámka
+                                <input
+                                  value={item.note}
+                                  onChange={(event) => updatePurchaseProposalItem(item.itemId, "note", event.target.value)}
+                                  style={input}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -5537,6 +5952,98 @@ export default function AppGssPage() {
                           </div>
 
                           <div style={settingsTitle}>Doklad / důvod příjmu</div>
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Zdroj příjmu
+                              <select
+                                value={stockForm.receiptSourceType}
+                                onChange={(event) => updateStockForm("receiptSourceType", event.target.value)}
+                                style={input}
+                              >
+                                {Object.entries(RECEIPT_SOURCE_LABELS).map(([sourceType, label]) => (
+                                  <option key={sourceType} value={sourceType}>{label}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={fieldLabel}>
+                              Číslo zdrojového dokladu / objednávky
+                              <input
+                                value={stockForm.sourceDocumentNumber}
+                                onChange={(event) => updateStockForm("sourceDocumentNumber", event.target.value)}
+                                placeholder="např. GSS-12345678, ERP objednávka, DL"
+                                style={input}
+                              />
+                            </label>
+                            {stockForm.receiptSourceType === "external_order_erp" ? (
+                              <label style={fieldLabel}>
+                                Externí objednávka / ERP
+                                <input
+                                  value={stockForm.externalOrderNumber}
+                                  onChange={(event) => updateStockForm("externalOrderNumber", event.target.value)}
+                                  placeholder="Money / Promitea / ERP číslo"
+                                  style={input}
+                                />
+                              </label>
+                            ) : null}
+                          </div>
+                          {stockForm.receiptSourceType === "gss_system_order" ? (
+                            <div style={settingsPanel}>
+                              <div style={settingsTitle}>Otevřené systémové objednávky pro tuto položku</div>
+                              <div style={muted}>
+                                GSS nabízí pouze otevřené objednávkové návrhy, které obsahují právě tuto skladovou položku. Nejstarší otevřená objednávka je nahoře.
+                              </div>
+                              {getOpenSystemOrdersForItem(purchaseProposal, getItemKey(item)).length > 0 ? (
+                                <div style={{ display: "grid", gap: 8 }}>
+                                  {getOpenSystemOrdersForItem(purchaseProposal, getItemKey(item)).map((systemOrder) => (
+                                    <div key={systemOrder.id} style={settingsPanel}>
+                                      <div style={settingsTitle}>{systemOrder.systemOrderNumber}</div>
+                                      <div style={meta}>
+                                        Vytvořeno: {formatMovementDate(systemOrder.createdAt)} · Dodavatel: {systemOrder.supplier} · Výrobce: {systemOrder.manufacturer}
+                                      </div>
+                                      <div style={meta}>
+                                        Objednáno: {systemOrder.orderedQuantity} ks · Přijato: {systemOrder.receivedQuantity} ks · Zbývá: {systemOrder.remainingQuantity} ks · Kanál: {systemOrder.purchaseChannel}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => selectSystemOrderForReceipt(systemOrder)}
+                                        style={stockForm.systemOrderNumber === systemOrder.systemOrderNumber ? btnImport : btnSecondary}
+                                      >
+                                        Vybrat tuto systémovou objednávku
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={offerInfo}>
+                                  K této položce není otevřená žádná systémová objednávka GSS. Pokračujte jako Běžný příjem nebo Příjem z externí objednávky / ERP.
+                                </div>
+                              )}
+                              {stockForm.systemOrderNumber ? (
+                                <>
+                                  <div style={message}>
+                                    Vybraná objednávka: {stockForm.systemOrderNumber} · {stockForm.systemOrderSupplier || "dodavatel není vyplněný"} · {stockForm.systemOrderPurchaseChannel || "kanál není vyplněný"}.
+                                  </div>
+                                  <div style={offerInfo}>
+                                    Objednáno: {stockForm.systemOrderOrderedQuantity || "0"} ks · Již přijato: {stockForm.systemOrderReceivedQuantity || "0"} ks · Zbývá přijmout: {stockForm.systemOrderRemainingQuantity || stockForm.systemOrderOrderedQuantity || "0"} ks.
+                                  </div>
+                                  {Number(stockForm.quantity) > Number(stockForm.systemOrderRemainingQuantity || stockForm.systemOrderOrderedQuantity || 0) ? (
+                                    <div style={errorMessage}>
+                                      Zadáváte větší množství, než zbývá přijmout ze systémové objednávky. V MVP je to povolené jako soft warning, ale v produkci půjde o kontrolovaný scénář.
+                                    </div>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {stockForm.receiptSourceType === "sharpening_return" ? (
+                            <div style={errorMessage}>
+                              Příjem z broušení je samostatný tok pro konkrétní DM/QID kus. Běžný příjem nepoužívejte pro anonymní příjem přebroušených DM kusů.
+                            </div>
+                          ) : stockForm.receiptSourceType === "inventory_correction" ? (
+                            <div style={offerInfo}>
+                              Korekční příjem / inventura je v MVP pouze připravený zdroj metadat. Plné inventurní workflow bude doplněno později.
+                            </div>
+                          ) : null}
                           <div style={formGrid}>
                             <label style={fieldLabel}>
                               Typ dokladu / důvod příjmu

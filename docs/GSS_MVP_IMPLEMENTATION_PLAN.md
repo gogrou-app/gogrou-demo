@@ -433,6 +433,38 @@ Tenant nastavení dodavatele:
 - `supplierName`
 - `supplierType`: `Gogrou partner`, `Standard supplier`, `Internal supplier`
 
+Objednávkový návrh se nesmí tvořit jako jeden společný seznam všech položek. Musí být rozdělený podle:
+
+- výrobce / značka položky
+- přiřazený dodavatel položky
+- nákupní kanál
+
+GPC je zdroj výrobce a značky. GSS je zdroj zákaznického dodavatele a nákupního kanálu. Kombinace těchto údajů určuje samostatný návrh.
+
+Nákupní kanály pro MVP logiku:
+
+- `Gogrou`
+- `vlastní dodavatel zákazníka`
+- `MAZAK Toolshop`
+- `M-technologies`
+- `jiný dodavatel`
+
+Fallback při chybějícím dodavateli:
+
+- `Gogrou`
+- případně `Neurčený dodavatel`
+
+Pravidlo: jeden návrh nesmí míchat různé dodavatele. Pokud má stejný výrobce více dodavatelů, vznikne více oddělených návrhů.
+
+Příklad:
+
+- Walter + Gogrou -> návrh 1
+- Walter + vlastní dodavatel -> návrh 2
+- Sandvik + MAZAK Toolshop -> návrh 3
+- MTTM + M-technologies -> návrh 4
+
+Soft MVP v UI může zatím pouze seskupit položky v objednávkovém návrhu. Plné odesílání objednávek, ERP export a Promitea export zůstávají placeholder.
+
 Primární filozofie Gogrou je napojit zákazníka pokud možno přímo na výrobce nebo partnera. Preferovaný typ je proto `Gogrou partner`.
 
 Při tvorbě objednávky bude možné vybrat:
@@ -473,6 +505,9 @@ Položka návrhu:
 - `gtin`
 - `manufacturer`
 - `supplierName`
+- `supplierType`
+- `purchaseChannel`
+- `purchaseGroupKey`
 - `recommendedQuantity`
 - `editedQuantity`
 - `supplierPackQuantity`
@@ -953,6 +988,55 @@ Podporované důvody / doklady:
 - návrat z výroby
 - ruční korekce / inventura
 
+Příjem musí ukládat také zdroj příjmu:
+
+- `manual`: běžný ruční příjem
+- `gss_system_order`: příjem ze systémové objednávky / objednávkového návrhu GSS
+- `external_order_erp`: příjem z externí objednávky / ERP / Promitea / Money
+- `sharpening_return`: příjem z broušení, který se v DM řeší samostatným tokem konkrétního kusu
+- `inventory_correction`: korekční příjem / inventura
+
+U příjmu ze systémové objednávky GSS se v UI nesmí zobrazovat všechny objednávky. Protože uživatel přijímá konkrétní položku, nabídka se filtruje pouze na otevřené objednávkové návrhy / systémové objednávky, které obsahují tuto položku. Řazení je od nejstarší otevřené objednávky, protože ta má největší pravděpodobnost fyzického doručení.
+
+U každé nabídnuté systémové objednávky se zobrazí:
+
+- systémové číslo objednávky Gogrou
+- datum vytvoření
+- dodavatel
+- výrobce / značka
+- objednané množství
+- už přijaté množství
+- zbývá přijmout
+- nákupní kanál
+
+Po výběru se předvyplní číslo objednávky a do `movementHistory.metadata` se uloží `receiptSourceType = gss_system_order`, `purchaseProposalId`, `orderProposalId`, `systemOrderNumber`, `supplier`, `purchaseChannel` a `manufacturer`. Soft MVP zatím automaticky nesnižuje zbývající množství v objednávce, ale datově je připravené pozdější párování příjemky na položku objednávky.
+
+Množství příjmu se po výběru systémové objednávky předvyplní hodnotou `zbývá přijmout`. Pokud záznam objednávky nemá evidenci přijatého množství, použije se `objednáno`. Pole množství zůstává editovatelné. MVP tím pokryje plné dodání, částečné dodání i nadlimitní dodání; nadlimitní dodání zobrazí warning a uloží metadata do movement history, ale objednávku zatím automaticky neuzavírá ani nepřepočítává její skutečný zůstatek.
+
+Objednávkový řádek musí ukládat systémový návrh odděleně od potvrzené objednávky:
+
+- `suggestedQuantity`: vypočtené množství do max zásoby
+- `originalSuggestedQuantity`: původní systémový návrh
+- `orderedQuantity`: množství potvrzené uživatelem
+- `receivedQuantity`: součet příjmů proti řádku
+- `remainingQuantity`: `orderedQuantity - receivedQuantity`
+- `quantityAdjustedByUser`: `true`, pokud uživatel změnil návrh
+
+UI musí umožnit upravit `orderedQuantity` už u kandidátů před vytvořením objednávkového návrhu. Funkce vytvoření návrhu nesmí brát původní vypočtenou hodnotu, ale aktuální draft hodnotu z inputu. V localStorage soft MVP se ukládá celý aktuální `purchaseProposal`, aby následný příjem pracoval se stejným potvrzeným množstvím.
+
+Příjem ze systémové objednávky aktualizuje řádek návrhu v localStorage soft MVP logice:
+
+1. najde `purchaseProposalId` / `orderProposalId`
+2. najde řádek konkrétní položky
+3. zvýší `receivedQuantity` o skutečně přijaté množství
+4. přepočítá `remainingQuantity`
+5. při `remainingQuantity <= 0` označí řádek jako `fulfilled`
+6. pokud jsou všechny řádky plně přijaté, označí celý návrh jako `fulfilled`
+
+Příjem se vždy řídí `orderedQuantity`, ne `suggestedQuantity`. Do movement metadata se uloží `suggestedQuantity`, `orderedQuantity`, `receivedQuantityBefore`, `receivedQuantityAfter`, `remainingQuantityBefore`, `remainingQuantityAfter`, `receivedFromThisMovement` a `quantityAdjustedByUser`.
+
+Pokud k položce není otevřená žádná systémová objednávka GSS, UI zobrazí informaci a umožní pokračovat jako běžný příjem nebo příjem z externí objednávky / ERP.
+
 Pole `provedl` je zatím textové a může mít hodnotu `MVP uživatel`. Později bude odvozené z přihlášené osoby, výdejního automatu, ERP nebo integračního zdroje.
 
 Budoucí směr:
@@ -1258,7 +1342,7 @@ Zdroj parametrů musí být GPC, které bude sladěné s ToolsUnited strukturou.
 
 GINA / AI hledání není náhrada čistých dat. Je to vrstva nad strukturovanými GPC/GSS parametry. Typický dialog: `Fréza` -> `Jaký průměr?` -> `Jaká délka břitu?` -> `Kolik zubů?`. MVP textové hledání zůstává základní vrstva.
 
-Příjem na sklad se rozlišuje na `Bez objednávky` a `Z objednávky`. V MVP se skutečné naskladnění pořád provádí v detailu položky. Varianta `Z objednávky` je zatím placeholder s číslem objednávky, dodavatelem a textem, že budoucí příjem podle vystavené objednávky GSS doplní seznam položek. Tento směr připravuje vazbu `objednávka -> dodací list -> faktura -> příjem`.
+Příjem na sklad se rozlišuje podle zdroje: běžný ruční příjem, příjem ze systémové objednávky GSS, příjem z externí objednávky / ERP, příjem z broušení a korekční příjem / inventura. V MVP se skutečné naskladnění pořád provádí v detailu konkrétní položky. Varianta systémové objednávky GSS nabízí pouze otevřené návrhy, které obsahují přijímanou položku, a ukládá vazbu na `purchaseProposalId` / `orderProposalId`. Tento směr připravuje vazbu `objednávka -> dodací list -> faktura -> příjem`.
 
 ## DM Foundation MVP
 
