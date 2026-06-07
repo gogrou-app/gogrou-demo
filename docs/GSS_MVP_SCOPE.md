@@ -2250,7 +2250,11 @@ Po uložení servisního zápisu:
 - vznikne DM history a `movementHistory`
 - QID a DM kód se nemění
 
-Servisní terminál připraví textový štítek s QID, názvem položky, aktuálními rozměry a DM kódem.
+Servisní terminál připraví print-friendly štítek s QID, názvem položky, výrobcem / značkou, typem, aktuálními rozměry `D`, `L1`, `L2`, stavem kusu, DM kódem, datem posledního servisu, servisním partnerem a poznámkou.
+
+Po každé změně parametrů v brusírně musí být možné okamžitě vytisknout nový štítek s aktuálními rozměry. Štítek slouží k rychlé fyzické identifikaci nástroje ve skladu, u stroje, ve výdejním automatu nebo při ruční manipulaci. V MVP tisk používá `window.print()` a print-friendly panel, který při tisku skryje zbytek aplikace. Klik na tisk zapíše do DM history záznam `label_printed` s QID, DM kódem, aktuálními rozměry, datem, kdo tisk provedl a zdrojem (`servisní terminál` nebo `detail kusu`).
+
+Stejný render štítku je dostupný i v detailu konkrétního DM/QID kusu, aby bylo možné znovu vytisknout štítek například při ztrátě fyzického označení.
 
 ### Soft MVP Příjem Z Broušení
 

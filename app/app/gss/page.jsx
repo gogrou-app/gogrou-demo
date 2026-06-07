@@ -316,15 +316,27 @@ const createSharpeningDispatchForm = (dmItem = {}) => ({
   performedBy: dmItem.sharpeningDispatchMetadata?.performedBy || DEFAULT_INTAKE_OPERATOR,
 });
 
-const createServiceTerminalForm = (dmItem = {}) => ({
-  currentDiameter: dmItem.currentDiameter || "",
-  currentLength: dmItem.currentLength || "",
-  currentOverallLength: dmItem.currentOverallLength || dmItem.overallLength || "",
-  additionalParameters: dmItem.lastServiceMetadata?.additionalParameters || "",
-  serviceNote: dmItem.serviceNote || "",
-  performedBy: DEFAULT_GRINDER,
-  serviceDate: getTodayDate(),
+const getDmCurrentDimensionsForLabel = (dmItem = {}) => ({
+  diameter: dmItem.currentDiameter || dmItem.lastServiceMetadata?.currentDiameter || "",
+  length: dmItem.currentLength || dmItem.lastServiceMetadata?.currentLength || "",
+  overallLength: dmItem.currentOverallLength || dmItem.lastServiceMetadata?.currentOverallLength || dmItem.overallLength || "",
 });
+
+const formatLabelDimension = (value) => value || "neuvedeno";
+
+const createServiceTerminalForm = (dmItem = {}) => {
+  const dimensions = getDmCurrentDimensionsForLabel(dmItem);
+
+  return {
+    currentDiameter: dimensions.diameter,
+    currentLength: dimensions.length,
+    currentOverallLength: dimensions.overallLength,
+    additionalParameters: dmItem.lastServiceMetadata?.additionalParameters || "",
+    serviceNote: dmItem.serviceNote || dmItem.lastServiceMetadata?.serviceNote || "",
+    performedBy: DEFAULT_GRINDER,
+    serviceDate: getTodayDate(),
+  };
+};
 
 const createSharpeningReturnForm = () => ({
   dmQuery: "",
@@ -714,25 +726,92 @@ const createDmHistoryRecord = ({ type, note, performedBy = DEFAULT_INTAKE_OPERAT
   metadata,
 });
 
-const createDmLabelText = (item, dmItem) => [
-  `QID: ${dmItem.quickId || "není vygenerováno"}`,
-  `Název: ${item.name || item.gpc_id || "Položka"}`,
-  "Rozměry:",
-  `D = ${dmItem.currentDiameter || "neuvedeno"}`,
-  `L1 = ${dmItem.currentLength || "neuvedeno"}`,
-  `L2 = ${dmItem.currentOverallLength || dmItem.overallLength || "neuvedeno"}`,
-  `DM: ${dmItem.dmCode || "neuvedeno"}`,
-].join("\n");
+const createToolLabelText = (item, dmItem) => {
+  const dimensions = getDmCurrentDimensionsForLabel(dmItem);
 
-const createServiceLabelText = (item, dmItem) => [
-  `QID: ${dmItem.quickId || "není vygenerováno"}`,
-  `Název: ${item.name || item.gpc_id || "Položka"}`,
-  "Aktuální rozměry:",
-  `D = ${dmItem.currentDiameter || "neuvedeno"}`,
-  `L1 = ${dmItem.currentLength || "neuvedeno"}`,
-  `L2 = ${dmItem.currentOverallLength || dmItem.overallLength || "neuvedeno"}`,
-  `DM: ${dmItem.dmCode || "neuvedeno"}`,
-].join("\n");
+  return [
+    `QID: ${dmItem.quickId || "není vygenerováno"}`,
+    `Název: ${item.name || item.gpc_id || "Položka"}`,
+    `Výrobce: ${item.manufacturer || "neuvedeno"}`,
+    `Typ: ${item.type || item.category || "neuvedeno"}`,
+    "",
+    `D: ${formatLabelDimension(dimensions.diameter)} mm`,
+    `L1: ${formatLabelDimension(dimensions.length)} mm`,
+    `L2: ${formatLabelDimension(dimensions.overallLength)} mm`,
+    "",
+    `DM: ${dmItem.dmCode || "neuvedeno"}`,
+    `Stav: ${labelFromMap(DM_STATUS_LABELS, dmItem.status)}`,
+    "",
+    `Servis: ${dmItem.lastServiceAt || "neuvedeno"}`,
+    `Partner: ${dmItem.lastServiceMetadata?.performedBy || DEFAULT_GRINDER}`,
+    dmItem.serviceNote ? `Poznámka: ${dmItem.serviceNote}` : "",
+  ].filter(Boolean).join("\n");
+};
+
+const createDmLabelText = (item, dmItem) => createToolLabelText(item, dmItem);
+
+const createServiceLabelText = (item, dmItem) => createToolLabelText(item, dmItem);
+
+function ToolLabelPreview({ item, dmItem, source }) {
+  const [copyMessage, setCopyMessage] = useState("");
+  const dimensions = getDmCurrentDimensionsForLabel(dmItem);
+  const labelText = createToolLabelText(item, dmItem);
+
+  const copyLabelText = async () => {
+    await navigator.clipboard.writeText(labelText);
+    setCopyMessage("✓ Štítek zkopírován");
+    window.setTimeout(() => setCopyMessage(""), 1800);
+  };
+
+  return (
+    <div style={labelPanel}>
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .gss-print-label, .gss-print-label * {
+            visibility: visible !important;
+          }
+          .gss-print-label {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 96mm !important;
+            min-height: 58mm !important;
+            margin: 0 !important;
+            padding: 6mm !important;
+            background: #fff !important;
+            color: #000 !important;
+            box-shadow: none !important;
+          }
+          .gss-no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+      <div className="gss-print-label" style={labelCard}>
+        <div style={labelQid}>{dmItem.quickId || "QID není"}</div>
+        <div style={labelItemName}>{item.name || item.gpc_id || "Položka"}</div>
+        <div style={labelMetaLine}>{item.manufacturer || "Výrobce neuveden"} · {item.type || "Typ neuveden"}</div>
+        <div style={labelDimensions}>
+          <div>D = {formatLabelDimension(dimensions.diameter)}</div>
+          <div>L1 = {formatLabelDimension(dimensions.length)}</div>
+          <div>L2 = {formatLabelDimension(dimensions.overallLength)}</div>
+        </div>
+        <div style={labelMetaLine}>Stav: {labelFromMap(DM_STATUS_LABELS, dmItem.status)}</div>
+        <div style={labelSmall}>DM: {dmItem.dmCode || "neuvedeno"}</div>
+        <div style={labelSmall}>Servis: {dmItem.lastServiceAt || "neuvedeno"} · {dmItem.lastServiceMetadata?.performedBy || DEFAULT_GRINDER}</div>
+        {dmItem.serviceNote ? <div style={labelSmall}>Poznámka: {dmItem.serviceNote}</div> : null}
+        {source ? <div style={labelSmall}>Zdroj: {source}</div> : null}
+      </div>
+      <div className="gss-no-print" style={actions}>
+        <button type="button" onClick={copyLabelText} style={btnSecondary}>Kopírovat štítek</button>
+        {copyMessage ? <span style={message}>{copyMessage}</span> : null}
+      </div>
+    </div>
+  );
+}
 
 const createDmMarkingText = (dmItem) => [
   `DM kód pro laser: ${dmItem.dmCode || "neuvedeno"}`,
@@ -856,6 +935,7 @@ function DmCurrentDimensions({ dmItem, compact = false }) {
 
   const hasServiceDimensions = Boolean(dmItem.lastServiceMetadata);
   const boxStyle = hasServiceDimensions ? serviceDimensionBox : compactDimensionBox;
+  const dimensions = getDmCurrentDimensionsForLabel(dmItem);
 
   return (
     <div style={boxStyle}>
@@ -863,9 +943,9 @@ function DmCurrentDimensions({ dmItem, compact = false }) {
         {hasServiceDimensions ? "Aktuální rozměry po broušení:" : "Aktuální rozměry:"}
       </div>
       <div style={compact ? dimensionInline : dimensionGrid}>
-        <strong>D = {dmItem.currentDiameter || "neuvedeno"}</strong>
-        <strong>L1 = {dmItem.currentLength || "neuvedeno"}</strong>
-        <strong>L2 = {dmItem.currentOverallLength || dmItem.overallLength || "neuvedeno"}</strong>
+        <strong>D = {formatLabelDimension(dimensions.diameter)}</strong>
+        <strong>L1 = {formatLabelDimension(dimensions.length)}</strong>
+        <strong>L2 = {formatLabelDimension(dimensions.overallLength)}</strong>
       </div>
     </div>
   );
@@ -1133,6 +1213,7 @@ function DmDetailContent({
   onSaveService,
   onGenerateQuickId,
   onMarkDmItem,
+  onPrintLabel,
   onClose,
   onPlaceholder,
 }) {
@@ -1140,8 +1221,9 @@ function DmDetailContent({
   const maxSharpeningCount = dmItem.maxSharpeningCount ?? item.tenantSettings?.sharpen?.cycles;
   const hasSharpeningLimit = maxSharpeningCount !== "" && maxSharpeningCount !== null && maxSharpeningCount !== undefined;
   const reachedSharpeningLimit = hasSharpeningLimit && Number(dmItem.sharpeningCount || 0) >= Number(maxSharpeningCount);
-  const displayDiameter = dmItem.currentDiameter || "neuvedeno";
-  const displayLength = dmItem.currentLength || "neuvedeno";
+  const detailDimensions = getDmCurrentDimensionsForLabel(dmItem);
+  const displayDiameter = formatLabelDimension(detailDimensions.diameter);
+  const displayLength = formatLabelDimension(detailDimensions.length);
   const labelText = createDmLabelText(item, dmItem);
   const markingStatus = dmItem.markingStatus || "unmarked";
   const markingText = createDmMarkingText(dmItem);
@@ -1249,17 +1331,21 @@ function DmDetailContent({
       </div>
 
       <div style={formBox}>
-        <div style={settingsTitle}>Soft štítek / QID výstup</div>
+        <div style={settingsTitle}>Štítek nástroje</div>
         <div style={muted}>
-          Textový výstup pro ruční tisk, laser nebo dočasnou štítkovou šablonu. Skutečný tisk není součástí MVP.
+          Print-friendly náhled pro ruční tisk, laser nebo dočasnou štítkovou šablonu. QID je největší prvek štítku.
         </div>
         <div style={actions}>
           <button type="button" onClick={() => setShowLabelPreview((current) => !current)} style={btnSecondary}>
-            {showLabelPreview ? "Skrýt štítek" : "Připravit štítek"}
+            {showLabelPreview ? "Skrýt štítek" : "Zobrazit štítek"}
           </button>
+          <button type="button" onClick={() => onPrintLabel("detail kusu")} style={btnImport}>Tisk štítku</button>
         </div>
         {showLabelPreview ? (
-          <textarea readOnly value={labelText} style={textarea} />
+          <>
+            <ToolLabelPreview item={item} dmItem={dmItem} source="detail kusu" />
+            <textarea readOnly value={labelText} style={textarea} />
+          </>
         ) : null}
       </div>
 
@@ -1365,6 +1451,7 @@ export default function AppGssPage() {
   const [serviceTerminalQuery, setServiceTerminalQuery] = useState("");
   const [serviceTerminalMessage, setServiceTerminalMessage] = useState("");
   const [serviceTerminalForm, setServiceTerminalForm] = useState(createServiceTerminalForm());
+  const [showServiceLabelPreview, setShowServiceLabelPreview] = useState(false);
   const [sharpeningReturnForm, setSharpeningReturnForm] = useState(createSharpeningReturnForm());
   const [sharpeningReturnMessage, setSharpeningReturnMessage] = useState("");
   const [sharpeningReturnGroup, setSharpeningReturnGroup] = useState("");
@@ -1621,6 +1708,7 @@ export default function AppGssPage() {
     setReturnMessage("");
     setSelectedIssueDmCodes([]);
     setServiceTerminalMessage("");
+    setShowServiceLabelPreview(false);
     setSharpeningReturnMessage("");
     setSelectedWarehouseItemKey("");
     setShowItemHistory(false);
@@ -2782,10 +2870,12 @@ export default function AppGssPage() {
     if (!found) {
       setServiceTerminalMessage("DM kus nebyl nalezen.");
       setServiceTerminalForm(createServiceTerminalForm());
+      setShowServiceLabelPreview(false);
       return;
     }
 
     setServiceTerminalForm(createServiceTerminalForm(found.dmItem));
+    setShowServiceLabelPreview(false);
     if (found.dmItem.status !== "sharpening" || found.dmItem.sharpeningDispatchStatus !== "sent") {
       setServiceTerminalMessage("Kus není vedený jako odeslaný na broušení.");
       return;
@@ -2892,7 +2982,56 @@ export default function AppGssPage() {
     if (updated) {
       setServiceTerminalForm(createServiceTerminalForm(updated.dmItem));
     }
+    setShowServiceLabelPreview(true);
     setServiceTerminalMessage("Servisní změny byly uloženy. Připravte štítek a zákazník může kus přijmout zpět.");
+  };
+
+  const printDmLabel = (item, dmItem, source = "detail kusu") => {
+    if (!item || !dmItem) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const performedBy = source === "servisní terminál" ? (serviceTerminalForm.performedBy.trim() || DEFAULT_GRINDER) : DEFAULT_INTAKE_OPERATOR;
+    const dimensions = getDmCurrentDimensionsForLabel(dmItem);
+    const historyRecord = createDmHistoryRecord({
+      type: "label_printed",
+      performedBy,
+      note: `Štítek pro QID ${dmItem.quickId || "bez QID"} byl připraven k tisku.`,
+      metadata: {
+        quickId: dmItem.quickId || "",
+        dmCode: dmItem.dmCode || "",
+        currentDiameter: dimensions.diameter,
+        currentLength: dimensions.length,
+        currentOverallLength: dimensions.overallLength,
+        printedAt: now,
+        performedBy,
+        source,
+      },
+    });
+    const nextItems = warehouseItems.map((warehouseItem) => {
+      if (getItemKey(warehouseItem) !== getItemKey(item)) {
+        return warehouseItem;
+      }
+
+      return {
+        ...warehouseItem,
+        dmItems: (warehouseItem.dmItems || []).map((candidate) => (
+          candidate.dmCode === dmItem.dmCode
+            ? {
+                ...candidate,
+                history: [historyRecord, ...(candidate.history || [])].slice(0, 100),
+                updatedAt: now,
+              }
+            : candidate
+        )),
+        updatedAt: now,
+      };
+    });
+
+    setWarehouseItems(nextItems);
+    writeWarehouse(organizationId, nextItems);
+    window.setTimeout(() => window.print(), 0);
   };
 
   const receiveFromSharpening = (event) => {
@@ -5319,12 +5458,30 @@ export default function AppGssPage() {
                   </div>
                 </form>
 
-                {serviceTerminalContext.dmItem.sharpeningDispatchStatus === "serviced" ? (
-                  <div style={formBox}>
-                    <div style={settingsTitle}>Připravit štítek</div>
-                    <textarea readOnly value={createServiceLabelText(serviceTerminalContext.item, serviceTerminalContext.dmItem)} style={textarea} />
+                <div style={formBox}>
+                  <div style={settingsTitle}>Štítek nástroje</div>
+                  <div style={muted}>
+                    Po změně parametrů po broušení vytiskněte nový štítek s aktuálními rozměry. QID je hlavní fyzická orientace kusu.
                   </div>
-                ) : null}
+                  <div style={actions}>
+                    <button type="button" onClick={() => setShowServiceLabelPreview((current) => !current)} style={btnSecondary}>
+                      {showServiceLabelPreview ? "Skrýt štítek" : "Zobrazit štítek"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => printDmLabel(serviceTerminalContext.item, serviceTerminalContext.dmItem, "servisní terminál")}
+                      style={btnImport}
+                    >
+                      Tisk štítku
+                    </button>
+                  </div>
+                  {showServiceLabelPreview ? (
+                    <>
+                      <ToolLabelPreview item={serviceTerminalContext.item} dmItem={serviceTerminalContext.dmItem} source="servisní terminál" />
+                      <textarea readOnly value={createServiceLabelText(serviceTerminalContext.item, serviceTerminalContext.dmItem)} style={textarea} />
+                    </>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
@@ -5432,6 +5589,7 @@ export default function AppGssPage() {
                 onSaveService={saveDmService}
                 onGenerateQuickId={generateQuickIdForSelectedDm}
                 onMarkDmItem={() => markDmItemAsPhysicallyMarked(getItemKey(selectedDmContext.item), selectedDmContext.dmItem.dmCode)}
+                onPrintLabel={(source) => printDmLabel(selectedDmContext.item, selectedDmContext.dmItem, source)}
                 onClose={() => closeItemDetails(selectedDmContext.item)}
                 onPlaceholder={showPlaceholder}
               />
@@ -7381,6 +7539,54 @@ const dimensionInline = {
   flexWrap: "wrap",
   gap: 8,
   fontSize: 12,
+};
+
+const labelPanel = {
+  marginTop: 12,
+};
+
+const labelCard = {
+  border: "2px solid rgba(255,255,255,0.9)",
+  borderRadius: 8,
+  padding: 16,
+  background: "#fff",
+  color: "#000",
+  maxWidth: 420,
+  display: "grid",
+  gap: 8,
+};
+
+const labelQid = {
+  fontSize: 42,
+  lineHeight: 1,
+  fontWeight: 950,
+  letterSpacing: 0,
+};
+
+const labelItemName = {
+  fontSize: 18,
+  lineHeight: 1.18,
+  fontWeight: 900,
+};
+
+const labelMetaLine = {
+  fontSize: 12,
+  lineHeight: 1.25,
+  fontWeight: 800,
+};
+
+const labelDimensions = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 8,
+  fontSize: 18,
+  fontWeight: 950,
+};
+
+const labelSmall = {
+  fontSize: 10,
+  lineHeight: 1.25,
+  fontWeight: 750,
 };
 
 const historyPanel = {

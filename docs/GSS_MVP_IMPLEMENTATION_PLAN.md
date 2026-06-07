@@ -1724,6 +1724,21 @@ Terminál po uložení nabídne textový štítek:
 - název položky
 - aktuální rozměry
 - DM kód
+- datum posledního servisu
+- servisního partnera
+
+Implementačně jde o sdílený print-friendly render pro servisní terminál i detail konkrétního DM/QID kusu. V MVP tlačítko `Tisk štítku` používá `window.print()` a CSS pro tisk pouze štítku, bez zbytku aplikace. Po kliknutí vznikne DM history záznam `label_printed` s metadaty:
+
+- QID
+- DM
+- `D`
+- `L1`
+- `L2`
+- datum tisku
+- provedl
+- zdroj: `servisní terminál` nebo `detail kusu`
+
+Po každé změně parametrů po broušení se panel `Štítek nástroje` automaticky zobrazí, aby M-technologies mohla ihned vytisknout aktuální štítek.
 
 ### Soft MVP Příjem Z Broušení
 
