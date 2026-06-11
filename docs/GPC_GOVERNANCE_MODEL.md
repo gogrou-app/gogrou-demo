@@ -8,6 +8,13 @@ GPC zůstává centrálně kontrolovaná validovaná databanka Gogrou. Externí 
 
 Dokument popisuje architekturu a workflow. Neřeší frontend, GSS ani implementaci auth systému.
 
+## Související globální principy
+
+Tento dokument vychází z globálních architektonických principů Gogrou:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+Lokální pravidla v tomto dokumentu principy pouze zpřesňují pro daný modul.
+
 ## Principy
 
 Základní pravidla:

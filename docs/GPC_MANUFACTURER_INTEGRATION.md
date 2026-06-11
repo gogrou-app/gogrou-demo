@@ -8,6 +8,13 @@ GPC zůstává centrálně kontrolovaná validovaná databanka Gogrou. Výrobce 
 
 Gogrou tým zůstává odpovědný za kontrolu, validaci, schválení a publikaci změn do produkční GPC.
 
+## Související globální principy
+
+Tento dokument vychází z globálních architektonických principů Gogrou:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+Lokální pravidla v tomto dokumentu principy pouze zpřesňují pro daný modul.
+
 ## Role Výrobce v Gogrou Ekosystému
 
 Výrobce nebo značka je důvěryhodný zdroj produktových dat, nikoli vlastník produkčního GPC zápisu.

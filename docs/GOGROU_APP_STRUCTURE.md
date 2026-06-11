@@ -6,6 +6,15 @@ Tento dokument odděluje obecnou registraci firmy do Gogrou od jednotlivých mod
 
 Základní rozhodnutí: GSS není vstupní brána do Gogrou. GSS je pouze jeden z aktivovatelných modulů zákaznického portálu.
 
+## Globální Architektonické Principy
+
+Tento dokument popisuje strukturu aplikace, route, moduly a základní tenant model.
+
+Globální architektonické principy Gogrou jsou definované v:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+APP_STRUCTURE tyto principy pouze používá, ale není jejich zdrojem pravdy.
+
 ## Cílová Struktura
 
 - `/register`: registrace nové firmy / organizace do Gogrou

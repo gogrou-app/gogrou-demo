@@ -12,6 +12,13 @@ Import do GPC provádí pouze interní tým Gogrou. Zákazník do GPC neimportuj
 
 GPC není zákaznické prostředí. Zákazník pracuje v GSS.
 
+## Související globální principy
+
+Tento dokument vychází z globálních architektonických principů Gogrou:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+Lokální pravidla v tomto dokumentu principy pouze zpřesňují pro daný modul.
+
 ## Architektonické Pravidlo: Validovaná Master Databanka
 
 GPC obsahuje pouze validované master položky. GPC není prostor pro zákaznické nevalidované položky.

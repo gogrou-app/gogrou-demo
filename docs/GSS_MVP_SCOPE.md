@@ -17,6 +17,13 @@ GSS je zákaznický provozní svět. GPC je validovaný zdroj master dat.
 
 Dokument neřeší UI a neprogramuje backend.
 
+## Související globální principy
+
+Tento dokument vychází z globálních architektonických principů Gogrou:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+Lokální pravidla v tomto dokumentu principy pouze zpřesňují pro daný modul.
+
 ## 1. Firma / Organizace / Tenant
 
 Gogrou MVP začíná obecnou entitou firma / organizace, tedy tenant. GSS je pouze jeden z modulů, který může být pro firmu aktivní.

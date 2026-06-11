@@ -10,6 +10,13 @@ Gogrou tenant model začíná entitou firma / organizace. GSS MVP používá ten
 
 Registrace firmy není součástí GSS. Cílově vzniká firma přes obecnou registraci Gogrou na `/register`, uživatel po přihlášení vstupuje do `/app` a GSS je dostupné pouze jako modul `/app/gss`, pokud má firma GSS aktivované.
 
+## Související globální principy
+
+Tento dokument vychází z globálních architektonických principů Gogrou:
+`docs/GOGROU_CORE_ARCHITECTURE_PRINCIPLES.md`.
+
+Lokální pravidla v tomto dokumentu principy pouze zpřesňují pro daný modul.
+
 ## Výchozí Princip
 
 Gogrou je multi-tenant prostředí. GSS je jeden z modulů, který může být pro firmu aktivní.
