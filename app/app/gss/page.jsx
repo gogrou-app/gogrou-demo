@@ -26,6 +26,7 @@ import { createEmptyStockSummary, getPrimaryStockState, normalizeStockSummary } 
 const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
 
 const getPurchaseProposalStorageKey = (organizationId) => `gss_purchase_proposal_${organizationId}_MAIN`;
+const getServiceShipmentsStorageKey = (organizationId) => `gss_service_shipments_${organizationId}`;
 
 const readPurchaseProposal = (organizationId) => {
   if (!organizationId) {
@@ -53,6 +54,20 @@ const writePurchaseProposal = (organizationId, proposal) => {
   localStorage.setItem(getPurchaseProposalStorageKey(organizationId), JSON.stringify(proposal));
 };
 
+const SERVICE_SHIPMENT_STATUS_LABELS = {
+  draft: "Koncept",
+  sent_to_service: "Odesláno do servisu",
+  received_by_service: "Přijato servisem",
+  in_service: "Ve zpracování",
+  partially_completed: "Částečně hotovo",
+  completed: "Dokončeno",
+  return_ready: "Připraveno k odeslání",
+  returned_to_customer: "Odesláno zákazníkovi",
+  received_by_customer: "Přijato zákazníkem",
+  closed: "Uzavřeno",
+  cancelled: "Zrušeno",
+};
+
 const labelFromMap = (labels, value) => labels[value] || value || "neuvedeno";
 
 const formatModules = (modules) =>
@@ -60,6 +75,172 @@ const formatModules = (modules) =>
 
 const countDmItems = (items) =>
   items.reduce((total, item) => total + (item.dmItems?.length || 0), 0);
+
+const createSafeId = (prefix = "id") =>
+  crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const findDemoShipmentDmItems = (items) =>
+  (Array.isArray(items) ? items : []).flatMap((item) => (item.dmItems || []).map((dmItem) => ({ item, dmItem }))).slice(0, 3);
+
+const createServiceShipment = ({
+  shipmentNumber,
+  customerOrganizationId,
+  customerName,
+  servicePartnerId = "m-technologies",
+  servicePartnerName = DEFAULT_GRINDER,
+  sourceDocumentNumber = "",
+  status = "draft",
+  sentAt = "",
+  items = [],
+  history = [],
+  note = "",
+} = {}) => {
+  const now = new Date().toISOString();
+  const shipmentId = createSafeId("shipment");
+
+  return {
+    shipmentId,
+    shipmentNumber: shipmentNumber || `DL-BR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`,
+    customerOrganizationId: customerOrganizationId || "",
+    customerName: customerName || "Neuvedený zákazník",
+    servicePartnerId,
+    servicePartnerName,
+    sourceDocumentNumber,
+    status,
+    createdAt: now,
+    sentAt,
+    items,
+    history,
+    note,
+  };
+};
+
+const getServiceShipmentId = (shipment) => shipment?.shipmentId || shipment?.id || "";
+
+const createDemoServiceShipments = (organization, items) => {
+  const now = new Date().toISOString();
+  const safeItems = Array.isArray(items) ? items : [];
+  const organizationId = getOrganizationId(organization);
+  const demoDmItems = findDemoShipmentDmItems(safeItems);
+  const fallbackItem = safeItems[0] || {};
+  const shipmentNumber = `DL-BR-${String(organization?.prefix || "DEMO").toUpperCase()}-0001`;
+
+  return [createServiceShipment({
+    shipmentNumber,
+    sourceDocumentNumber: "OBJ-BR-DEMO-001",
+    customerOrganizationId: organizationId,
+    customerName: organization?.name || "Demo zákazník",
+    servicePartnerId: "m-technologies",
+    servicePartnerName: DEFAULT_GRINDER,
+    status: "received_by_service",
+    sentAt: getTodayDate(),
+    note: "Demo servisní zásilka pro ověření zpracování DM i non-DM položek.",
+    items: [
+      {
+        id: createSafeId("shipment-item"),
+        type: "dm",
+        itemId: getItemKey(demoDmItems[0]?.item || fallbackItem) || "demo-dm-item",
+        itemName: demoDmItems[0]?.item?.name || fallbackItem.name || "Demo DM nástroj",
+        origin: demoDmItems[0]?.item?.origin || fallbackItem.origin || "GPC",
+        gpc_id: demoDmItems[0]?.item?.gpc_id || fallbackItem.gpc_id || "GPC-DEMO-DM",
+        gtin: demoDmItems[0]?.item?.gtin || fallbackItem.gtin || "",
+        dmTrackingEnabled: true,
+        quantitySent: Math.max(demoDmItems.length, 1),
+        quantityServiced: 0,
+        quantityNotServiced: 0,
+        quantityReadyToReturn: 0,
+        status: "in_service",
+        dmItems: demoDmItems.length > 0
+          ? demoDmItems.map(({ dmItem }) => ({
+              dmCode: dmItem.dmCode,
+              quickId: dmItem.quickId || "",
+              status: dmItem.status || "sharpening",
+              serviceStatus: dmItem.sharpeningDispatchStatus || "sent",
+            }))
+          : [{
+              dmCode: `${String(organization?.prefix || "DEMO").toUpperCase()}-000000001-001`,
+              quickId: "NHP 71023",
+              status: "sharpening",
+              serviceStatus: "sent",
+            }],
+        note: "DM položka se zpracovává po konkrétních QID/DM kusech.",
+      },
+      {
+        id: createSafeId("shipment-item"),
+        type: "quantity",
+        itemId: "demo-non-dm-item",
+        itemName: "Demo non-DM fréza / množstevní broušení",
+        origin: "LOCAL",
+        gpc_id: "",
+        gtin: "",
+        dmTrackingEnabled: false,
+        quantitySent: 5,
+        quantityServiced: 0,
+        quantityNotServiced: 0,
+        quantityReadyToReturn: 0,
+        status: "in_service",
+        note: "U non-DM položky se evidují pouze počty hotovo / neostřeno.",
+      },
+    ],
+    history: [{
+      id: createSafeId("shipment-history"),
+      createdAt: now,
+      type: "received_by_service",
+      note: "Demo zásilka přijata servisním terminálem.",
+    }],
+  })];
+};
+
+const readServiceShipments = (organizationId, organization, items) => {
+  try {
+    if (!organizationId) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(localStorage.getItem(getServiceShipmentsStorageKey(organizationId)) || "null");
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // fallback to demo below
+    }
+
+    try {
+      const demoShipments = createDemoServiceShipments(organization, items);
+      try {
+        localStorage.setItem(getServiceShipmentsStorageKey(organizationId), JSON.stringify(demoShipments));
+      } catch {
+        // localStorage write failure must not block GSS loading
+      }
+      return Array.isArray(demoShipments) ? demoShipments : [];
+    } catch {
+      return [];
+    }
+  } catch {
+    return [];
+  }
+};
+
+const writeServiceShipments = (organizationId, shipments) => {
+  if (!organizationId) {
+    return;
+  }
+
+  localStorage.setItem(getServiceShipmentsStorageKey(organizationId), JSON.stringify(shipments));
+};
+
+const getServiceShipmentSummary = (shipment) => (shipment.items || []).reduce((summary, item) => ({
+  sent: summary.sent + Number(item.quantitySent || 0),
+  serviced: summary.serviced + Number(item.quantityServiced || 0),
+  notServiced: summary.notServiced + Number(item.quantityNotServiced || 0),
+  ready: summary.ready + Number(item.quantityReadyToReturn || 0),
+}), {
+  sent: 0,
+  serviced: 0,
+  notServiced: 0,
+  ready: 0,
+});
 
 const normalizeSearch = (value) =>
   String(value || "")
@@ -1516,6 +1697,10 @@ export default function AppGssPage() {
   const [serviceTerminalMessage, setServiceTerminalMessage] = useState("");
   const [serviceTerminalForm, setServiceTerminalForm] = useState(createServiceTerminalForm());
   const [showServiceLabelPreview, setShowServiceLabelPreview] = useState(false);
+  const [serviceShipments, setServiceShipments] = useState([]);
+  const [serviceShipmentQuery, setServiceShipmentQuery] = useState("");
+  const [selectedServiceShipmentId, setSelectedServiceShipmentId] = useState("");
+  const [serviceShipmentMessage, setServiceShipmentMessage] = useState("");
   const [sharpeningReturnForm, setSharpeningReturnForm] = useState(createSharpeningReturnForm());
   const [sharpeningReturnMessage, setSharpeningReturnMessage] = useState("");
   const [sharpeningReturnGroup, setSharpeningReturnGroup] = useState("");
@@ -1548,17 +1733,30 @@ export default function AppGssPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const organizations = readOrganizations();
-    const activeOrganizationId = normalizeId(localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY));
-    const activeOrganization = activeOrganizationId
-      ? findOrganizationById(organizations, activeOrganizationId)
-      : null;
-    const organizationId = getOrganizationId(activeOrganization);
+    try {
+      const organizations = readOrganizations();
+      const activeOrganizationId = normalizeId(localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY));
+      const activeOrganization = activeOrganizationId
+        ? findOrganizationById(organizations, activeOrganizationId)
+        : null;
+      const organizationId = getOrganizationId(activeOrganization);
 
-    setOrganization(activeOrganization);
-    setWarehouseItems(organizationId ? readWarehouse(organizationId) : []);
-    setPurchaseProposal(organizationId ? readPurchaseProposal(organizationId) : null);
-    setLoaded(true);
+      setOrganization(activeOrganization);
+      const warehouse = organizationId ? readWarehouse(organizationId) : [];
+
+      setWarehouseItems(Array.isArray(warehouse) ? warehouse : []);
+      setPurchaseProposal(organizationId ? readPurchaseProposal(organizationId) : null);
+      const nextServiceShipments = organizationId ? readServiceShipments(organizationId, activeOrganization, warehouse) : [];
+      setServiceShipments(nextServiceShipments);
+    } catch (error) {
+      console.warn("Nepodařilo se inicializovat GSS.", error);
+      setOrganization(null);
+      setWarehouseItems([]);
+      setPurchaseProposal(null);
+      setServiceShipments([]);
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
   if (!loaded) {
@@ -1666,6 +1864,24 @@ export default function AppGssPage() {
   const serviceTerminalContext = serviceTerminalQuery
     ? findDmItemInWarehouseByCodeOrQuickId(warehouseItems, serviceTerminalQuery)
     : null;
+  const normalizedServiceShipmentQuery = normalizeSearch(serviceShipmentQuery);
+  const filteredServiceShipments = normalizedServiceShipmentQuery
+    ? serviceShipments.filter((shipment) => {
+        const haystack = [
+          shipment.shipmentNumber,
+          shipment.sourceDocumentNumber,
+          shipment.customerName,
+          shipment.servicePartnerName,
+          shipment.servicePartnerId,
+          shipment.status,
+          ...(shipment.items || []).map((item) => item.itemName),
+          ...(shipment.items || []).flatMap((item) => (item.dmItems || []).flatMap((dmItem) => [dmItem.quickId, dmItem.dmCode])),
+        ].map(normalizeSearch).join(" ");
+
+        return haystack.includes(normalizedServiceShipmentQuery);
+      })
+    : serviceShipments;
+  const selectedServiceShipment = serviceShipments.find((shipment) => getServiceShipmentId(shipment) === selectedServiceShipmentId) || null;
   const serviceTerminalDmReady = Boolean(
     serviceTerminalContext?.dmItem?.status === "sharpening" &&
     serviceTerminalContext?.dmItem?.sharpeningDispatchStatus === "sent"
@@ -3098,6 +3314,104 @@ export default function AppGssPage() {
     setWarehouseItems(nextItems);
     writeWarehouse(organizationId, nextItems);
     window.setTimeout(() => window.print(), 0);
+  };
+
+  const selectServiceShipment = (shipmentId) => {
+    setSelectedServiceShipmentId(shipmentId);
+    setServiceShipmentMessage("");
+  };
+
+  const updateServiceShipmentItem = (shipmentId, itemId, field, value) => {
+    setServiceShipments((currentShipments) => currentShipments.map((shipment) => {
+      if (getServiceShipmentId(shipment) !== shipmentId) {
+        return shipment;
+      }
+
+      return {
+        ...shipment,
+        items: (shipment.items || []).map((item) => {
+          if (item.id !== itemId) {
+            return item;
+          }
+
+          const nextValue = ["quantityServiced", "quantityNotServiced", "quantityReadyToReturn"].includes(field)
+            ? Math.max(0, Number(value || 0))
+            : value;
+
+          return {
+            ...item,
+            [field]: nextValue,
+            status: "partially_completed",
+          };
+        }),
+      };
+    }));
+  };
+
+  const saveServiceShipmentItemResult = (shipmentId, itemId) => {
+    const now = new Date().toISOString();
+    const nextShipments = serviceShipments.map((shipment) => {
+      if (getServiceShipmentId(shipment) !== shipmentId) {
+        return shipment;
+      }
+
+      return {
+        ...shipment,
+        status: "partially_completed",
+        updatedAt: now,
+        items: (shipment.items || []).map((item) => (
+          item.id === itemId
+            ? {
+                ...item,
+                quantityReadyToReturn: Number(item.quantityServiced || 0) + Number(item.quantityNotServiced || 0),
+                status: "partially_completed",
+                updatedAt: now,
+              }
+            : item
+        )),
+        history: [{
+          id: crypto.randomUUID(),
+          createdAt: now,
+          type: "non_dm_result_saved",
+          note: "Uloženy počty hotovo / neostřeno pro non-DM položku.",
+        }, ...(shipment.history || [])].slice(0, 50),
+      };
+    });
+
+    setServiceShipments(nextShipments);
+    writeServiceShipments(organizationId, nextShipments);
+    setServiceShipmentMessage("Výsledek non-DM položky byl uložen.");
+  };
+
+  const markServiceShipmentReturnReady = (shipmentId) => {
+    const now = new Date().toISOString();
+    const nextShipments = serviceShipments.map((shipment) => (
+      getServiceShipmentId(shipment) === shipmentId
+        ? {
+            ...shipment,
+            status: "return_ready",
+            completedAt: shipment.completedAt || now,
+            updatedAt: now,
+            history: [{
+              id: crypto.randomUUID(),
+              createdAt: now,
+              type: "return_ready",
+              note: "Zásilka byla označena jako připravená k odeslání zákazníkovi.",
+            }, ...(shipment.history || [])].slice(0, 50),
+          }
+        : shipment
+    ));
+
+    setServiceShipments(nextShipments);
+    writeServiceShipments(organizationId, nextShipments);
+    setServiceShipmentMessage("Zásilka je připravena k odeslání zákazníkovi.");
+  };
+
+  const openShipmentDmService = (dmItem) => {
+    const query = dmItem.quickId || dmItem.dmCode || "";
+    setServiceTerminalQuery(query);
+    setServiceTerminalMessage(query ? "DM/QID kus byl předvyplněn ze servisní zásilky." : "DM/QID kus nemá identifikátor.");
+    setShowServiceLabelPreview(false);
   };
 
   const receiveFromSharpening = (event) => {
@@ -5421,6 +5735,177 @@ export default function AppGssPage() {
             <div style={hintBox}>
               Soft MVP servisní pohled. M-technologies načte DM, zapíše nové rozměry po broušení a připraví štítek. GPC master data se nemění.
             </div>
+            <div style={settingsPanel}>
+              <div style={detailHeader}>
+                <div>
+                  <div style={settingsTitle}>Servisní zásilky</div>
+                  <div style={muted}>
+                    Skeleton pro práci s celým dodacím listem broušení. Zásilka může obsahovat DM/QID kusy i množstevní non-DM položky.
+                  </div>
+                </div>
+                <div style={badge}>Soft MVP</div>
+              </div>
+              <ClearableSearchInput
+                value={serviceShipmentQuery}
+                onChange={(value) => {
+                  setServiceShipmentQuery(value);
+                  setServiceShipmentMessage("");
+                }}
+                onClear={() => {
+                  setServiceShipmentQuery("");
+                  setServiceShipmentMessage("");
+                }}
+                placeholder="Hledat podle čísla zásilky, DL, objednávky nebo zákazníka"
+              />
+              {serviceShipmentMessage ? (
+                <div style={serviceShipmentMessage.includes("uložen") || serviceShipmentMessage.includes("připravena") ? message : offerInfo}>{serviceShipmentMessage}</div>
+              ) : null}
+              <div style={historyList}>
+                {filteredServiceShipments.length === 0 ? (
+                  <div style={muted}>Nebyla nalezena žádná servisní zásilka.</div>
+                ) : filteredServiceShipments.map((shipment) => {
+                  const summary = getServiceShipmentSummary(shipment);
+                  const shipmentId = getServiceShipmentId(shipment);
+                  const selected = shipmentId === selectedServiceShipmentId;
+
+                  return (
+                    <button
+                      key={shipmentId}
+                      type="button"
+                      onClick={() => selectServiceShipment(shipmentId)}
+                      style={selected ? resultItemActive : resultItemButton}
+                    >
+                      <div>
+                        <div style={historyTitle}>{shipment.shipmentNumber}</div>
+                        <div style={meta}>
+                          {shipment.customerName} · servis {shipment.servicePartnerName || shipment.servicePartner || DEFAULT_GRINDER} · {labelFromMap(SERVICE_SHIPMENT_STATUS_LABELS, shipment.status)}
+                        </div>
+                      </div>
+                      <div style={meta}>
+                        Položky {(shipment.items || []).length} · DL/objednávka {shipment.sourceDocumentNumber || "neuvedeno"} · odesláno {summary.sent}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedServiceShipment ? (
+                <div style={formBox}>
+                  {(() => {
+                    const summary = getServiceShipmentSummary(selectedServiceShipment);
+
+                    return (
+                      <>
+                        <div style={detailHeader}>
+                          <div>
+                            <div style={settingsTitle}>Detail zásilky {selectedServiceShipment.shipmentNumber}</div>
+                            <div style={meta}>
+                              Zákazník: {selectedServiceShipment.customerName} · Servis: {selectedServiceShipment.servicePartnerName || selectedServiceShipment.servicePartner || DEFAULT_GRINDER} · Partner ID: {selectedServiceShipment.servicePartnerId || "m-technologies"} · Stav: {labelFromMap(SERVICE_SHIPMENT_STATUS_LABELS, selectedServiceShipment.status)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => markServiceShipmentReturnReady(getServiceShipmentId(selectedServiceShipment))}
+                            style={selectedServiceShipment.status === "return_ready" ? btnDisabled : btnImport}
+                            disabled={selectedServiceShipment.status === "return_ready"}
+                          >
+                            Označit zásilku jako připravenou k odeslání
+                          </button>
+                        </div>
+                        <div style={summaryGrid}>
+                          <div style={summaryItem}>
+                            <div style={summaryLabel}>Odesláno</div>
+                            <div style={summaryValue}>{summary.sent}</div>
+                          </div>
+                          <div style={summaryItem}>
+                            <div style={summaryLabel}>Hotovo</div>
+                            <div style={summaryValue}>{summary.serviced}</div>
+                          </div>
+                          <div style={summaryItem}>
+                            <div style={summaryLabel}>Neostřeno</div>
+                            <div style={summaryValue}>{summary.notServiced}</div>
+                          </div>
+                          <div style={summaryItem}>
+                            <div style={summaryLabel}>Připraveno k odeslání</div>
+                            <div style={summaryValue}>{summary.ready}</div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  <div style={historyList}>
+                    {(selectedServiceShipment.items || []).map((shipmentItem) => (
+                      <div key={shipmentItem.id} style={historyItem}>
+                        <div style={detailHeader}>
+                          <div>
+                            <div style={historyTitle}>{shipmentItem.itemName}</div>
+                            <div style={meta}>
+                              {shipmentItem.dmTrackingEnabled ? "DM/QID položka" : "Množstevní non-DM položka"} · odesláno {shipmentItem.quantitySent || 0} ks
+                            </div>
+                          </div>
+                          <div style={badge}>{shipmentItem.dmTrackingEnabled ? "DM" : "non-DM"}</div>
+                        </div>
+
+                        {shipmentItem.dmTrackingEnabled ? (
+                          <div style={historyList}>
+                            <div style={meta}>Počet DM kusů: {(shipmentItem.dmItems || []).length}</div>
+                            {(shipmentItem.dmItems || []).map((dmItem) => (
+                              <div key={dmItem.dmCode || dmItem.quickId} style={resultItem}>
+                                <div>
+                                  <div style={historyTitle}>QID: {dmItem.quickId || "není vygenerováno"}</div>
+                                  <div style={meta}>DM: {dmItem.dmCode || "neuvedeno"} · stav {labelFromMap(DM_STATUS_LABELS, dmItem.status)} · servis {dmItem.serviceStatus || "sent"}</div>
+                                </div>
+                                <button type="button" onClick={() => openShipmentDmService(dmItem)} style={btnSecondary}>
+                                  Otevřít servis kusu
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={formGrid}>
+                            <label style={fieldLabel}>
+                              Hotovo ks
+                              <input
+                                type="number"
+                                min="0"
+                                value={shipmentItem.quantityServiced ?? 0}
+                                onChange={(event) => updateServiceShipmentItem(getServiceShipmentId(selectedServiceShipment), shipmentItem.id, "quantityServiced", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Neostřeno ks
+                              <input
+                                type="number"
+                                min="0"
+                                value={shipmentItem.quantityNotServiced ?? 0}
+                                onChange={(event) => updateServiceShipmentItem(getServiceShipmentId(selectedServiceShipment), shipmentItem.id, "quantityNotServiced", event.target.value)}
+                                style={input}
+                              />
+                            </label>
+                            <label style={fieldLabel}>
+                              Poznámka
+                              <textarea
+                                value={shipmentItem.note || ""}
+                                onChange={(event) => updateServiceShipmentItem(getServiceShipmentId(selectedServiceShipment), shipmentItem.id, "note", event.target.value)}
+                                style={textarea}
+                              />
+                            </label>
+                            <div style={{ display: "flex", alignItems: "end" }}>
+                              <button type="button" onClick={() => saveServiceShipmentItemResult(getServiceShipmentId(selectedServiceShipment), shipmentItem.id)} style={btnImport}>
+                                Uložit výsledek položky
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div style={formGrid}>
               <label style={fieldLabel}>
                 Načíst / zadat DM kód
@@ -7403,6 +7888,21 @@ const highlightedResultItem = {
   ...resultItem,
   border: "1px solid rgba(34,197,94,0.55)",
   background: "rgba(34,197,94,0.08)",
+};
+
+const resultItemButton = {
+  ...resultItem,
+  width: "100%",
+  background: "rgba(255,255,255,0.035)",
+  color: "#fff",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const resultItemActive = {
+  ...resultItemButton,
+  border: "1px solid rgba(34,197,94,0.55)",
+  background: "rgba(34,197,94,0.1)",
 };
 
 const warehouseRow = {
