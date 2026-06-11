@@ -2178,3 +2178,144 @@ Feature flags a placené moduly:
 - větší služby musí být připravené na zapnutí / vypnutí pro konkrétního zákazníka
 - příklady: DM tracking, Nadnormativy, Servisní terminál, GINA služby, XLS onboarding, Kooperace, Toolshop, Reporty, Automat / PLC napojení
 - MVP neřeší billing, ale implementace nesmí předpokládat, že všechny funkce budou vždy aktivní pro každého zákazníka
+
+## Servisní Zásilka / DL Broušení - MVP Skeleton
+
+První implementační krok nad servisním terminálem je zavedení soft MVP objektu `serviceShipment` v localStorage.
+
+### Datová Struktura
+
+`serviceShipment`:
+
+- `id`
+- `shipmentNumber`
+- `sourceDocumentNumber`
+- `customerOrganizationId`
+- `customerName`
+- `servicePartnerId`
+- `servicePartner`
+- `status`
+- `createdAt`
+- `sentAt`
+- `receivedByServiceAt`
+- `completedAt`
+- `items[]`
+- `history[]`
+- `note`
+
+Stavy v MVP:
+
+- `received_by_service`
+- `in_service`
+- `partially_completed`
+- `return_ready`
+
+`servicePartnerId` je klíčové pole. Servisní terminál smí zobrazit pouze zásilky přiřazené aktuálnímu servisnímu partnerovi. V MVP je výchozí servisní partner M-technologies, ale struktura musí být připravená na jiné brusírny / servisní partnery.
+
+Budoucí servisní partneři mohou být například:
+
+- M-technologies
+- Walter Service
+- Mapal Service
+- externí brusírna
+- lokální servisní partner zákazníka
+
+Zákazník musí mít možnost přesunout ostření / servis k jinému partnerovi bez změny základní logiky GSS. Implementace proto nesmí vázat servisní workflow natvrdo na M-technologies. Změní se pouze `servicePartnerId`; princip zásilky, návratové zásilky, DM historie, štítků a příjmu z broušení zůstává stejný.
+
+`serviceShipmentItem`:
+
+- `id`
+- `type`: `dm` / `quantity`
+- `itemId`
+- `itemName`
+- `origin`
+- `gpc_id`
+- `gtin`
+- `dmTrackingEnabled`
+- `quantitySent`
+- `quantityServiced`
+- `quantityNotServiced`
+- `quantityReadyToReturn`
+- `status`
+- `note`
+- `dmItems[]` pouze pro DM položky
+
+### Dva Samostatné Doklady Servisního Workflow
+
+Servisní workflow musí používat dva samostatné doklady.
+
+#### `ServiceShipment`
+
+Vzniká u zákazníka při akci `Odeslat na broušení`. Reprezentuje zásilku od zákazníka k servisnímu partnerovi.
+
+Obsahuje:
+
+- zákazníka
+- `servicePartnerId`
+- číslo dokladu / DL / objednávky
+- položky
+- DM kusy
+- non-DM množství
+- datum odeslání
+- stav
+- historii
+
+#### `ReturnShipment`
+
+Vzniká u servisního partnera při akci `Odeslat k zákazníkovi`. Reprezentuje návratovou zásilku ze servisu zpět zákazníkovi.
+
+Obsahuje:
+
+- vlastní číslo dokladu
+- zákazníka
+- odkaz na původní `ServiceShipment`
+- hotové kusy
+- neostřené kusy
+- DM/QID kusy
+- non-DM množství
+- datum odeslání zpět
+- stav
+- historii
+
+`ServiceShipment` a `ReturnShipment` se nesmí spojovat do jednoho dokladu. Jde o dvě různé fyzické i procesní události: zákazník odesílá nástroje do servisu a servisní partner vrací nástroje zpět. Každá událost musí mít vlastní auditní stopu.
+
+Důvody:
+
+- reklamace
+- dohledání
+- tisk DL
+- historie
+- budoucí doprava
+- více servisních partnerů
+
+Jeden `ServiceShipment` může mít jeden nebo více `ReturnShipment`, pokud se zásilka vrací částečně.
+
+Neostřené položky musí být v `ReturnShipment` jasně označené. Při příjmu `ReturnShipment` u zákazníka se nabídne rozhodnutí:
+
+- vyřadit / archivovat / zablokovat
+- vrátit do stavu `Použité`
+
+### UI Skeleton
+
+V panelu `Servisní terminál M-technologies` se zobrazí sekce `Servisní zásilky`:
+
+- režim `Dle zákazníka`: seznam zákazníků s otevřenou servisní zásilkou přiřazenou aktuálnímu servisnímu partnerovi
+- po výběru zákazníka seznam jeho otevřených GSS objednávek / DL / servisních zásilek
+- režim `Dle čísla objednávky / DL`: zadání nebo načtení čísla dokladu vytvořeného v GSS při akci `Odeslat na broušení`
+- nalezený doklad otevře konkrétní zásilku přímo
+- seznam demo zásilek
+- detail vybrané zásilky
+- souhrn: odesláno / hotovo / neostřeno / připraveno k odeslání
+- DM položka ukáže seznam QID/DM kusů a tlačítko `Otevřít servis kusu`
+- non-DM položka umožní zadat `hotovo ks`, `neostřeno ks` a poznámku
+- tlačítko `Označit zásilku jako připravenou k odeslání` nastaví stav `return_ready`
+
+Detail zásilky v MVP skeletonu musí zobrazit zákazníka, číslo objednávky / DL, datum odeslání, stav zásilky, položky s DM i bez DM, souhrnné počty a možnost zpracování jednotlivých položek.
+
+MVP skeleton neřeší:
+
+- tisk dodacího listu
+- návratovou zásilku jako samostatný skladový převod
+- příjem u zákazníka
+- vyřazení neostřených položek
+- PDF / e-mail / backend / DB
