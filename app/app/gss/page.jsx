@@ -495,6 +495,70 @@ const itemMatchesWarehouseQuery = (item, query) => {
   return tokens.every((token) => haystack.includes(token));
 };
 
+const DM_PRODUCTION_STATUSES = ["production", "in_production", "issued_to_production"];
+
+const isDmItemInProduction = (dmItem) =>
+  Boolean(dmItem) && DM_PRODUCTION_STATUSES.includes(dmItem.status);
+
+const getProductionDmItems = (item) =>
+  (item.dmItems || []).filter(isDmItemInProduction);
+
+const getReturnSearchHaystack = (item) => {
+  const productionDmItems = getProductionDmItems(item);
+
+  return [
+    item.name,
+    item.gogrouId,
+    item.gid,
+    item.gpcNumericId,
+    item.gpc_id,
+    item.gtin,
+    item.manufacturer,
+    item.type,
+    item.localFields?.internalCode,
+    item.localFields?.dimensionNote,
+    item.localFields?.diameter,
+    item.localFields?.length,
+    item.localFields?.material,
+    item.localFields?.insertShape,
+    item.category,
+    item.productCategory,
+    item.technicalParameters,
+    item.technical_parameters,
+    item.geometry,
+    item.tool_features,
+    item.parameters,
+    productionDmItems.map((dmItem) => [
+      dmItem.dmCode,
+      dmItem.quickId,
+      dmItem.status,
+      dmItem.location,
+      dmItem.currentDiameter,
+      dmItem.currentLength,
+      dmItem.currentOverallLength,
+      dmItem.lastIssueMetadata,
+    ]),
+  ].flatMap(flattenSearchValues).map(normalizeSearch).join(" ");
+};
+
+const itemHasProductionForReturn = (item) => {
+  if (item.tenantSettings?.dmEnabled) {
+    return getProductionDmItems(item).length > 0;
+  }
+
+  return getItemStockSummary(item).production > 0;
+};
+
+const itemMatchesReturnQuery = (item, query) => {
+  const tokens = Array.isArray(query) ? query : tokenizeWarehouseSearch(query);
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const haystack = getReturnSearchHaystack(item);
+  return tokens.every((token) => haystack.includes(token));
+};
+
 const getActiveReservations = (item) => (item.reservations || []).filter((reservation) => reservation.status !== "cancelled");
 
 const OVERSTOCK_STATUS_LABELS = {
@@ -1559,16 +1623,18 @@ export default function AppGssPage() {
       : getFilteredDmItems(selectedIssueItem, issueDmGroup).filter(isDmItemAvailableForIssue)
     : [];
   const normalizedReturnQuery = normalizeSearch(returnQuery);
+  const returnSearchTokens = tokenizeWarehouseSearch(returnQuery);
+  const returnProductionItems = warehouseItems.filter(itemHasProductionForReturn);
   const returnResults = normalizedReturnQuery
-    ? warehouseItems.filter((item) => itemMatchesWarehouseQuery(item, normalizedReturnQuery)).slice(0, 12)
+    ? returnProductionItems.filter((item) => itemMatchesReturnQuery(item, returnSearchTokens)).slice(0, 12)
     : [];
   const selectedReturnItem = warehouseItems.find((item) => getItemKey(item) === returnItemKey);
   const selectedReturnDmItem = selectedReturnItem?.tenantSettings?.dmEnabled
     ? findDmItemInItemByCodeOrQuickId(selectedReturnItem, returnForm.dmQuery)
     : null;
-  const selectedReturnDmValid = Boolean(selectedReturnDmItem && selectedReturnDmItem.status === "production");
+  const selectedReturnDmValid = Boolean(selectedReturnDmItem && isDmItemInProduction(selectedReturnDmItem));
   const returnProductionDmItems = selectedReturnItem?.tenantSettings?.dmEnabled
-    ? getFilteredDmItems(selectedReturnItem, "production")
+    ? getProductionDmItems(selectedReturnItem)
     : [];
   const selectedReservationItem = warehouseItems.find((item) => getItemKey(item) === reservationItemKey);
   const selectedReservationStock = selectedReservationItem
@@ -3956,7 +4022,7 @@ export default function AppGssPage() {
       return;
     }
 
-    if (isDmReturn && selectedDmItem.status !== "production") {
+    if (isDmReturn && !isDmItemInProduction(selectedDmItem)) {
       setReturnMessage("Kus není vedený ve výrobě.");
       return;
     }
@@ -4947,13 +5013,15 @@ export default function AppGssPage() {
               />
 
               {normalizedReturnQuery && returnResults.length === 0 ? (
-                <div style={muted}>Nebyla nalezena žádná tenant skladová položka.</div>
+                <div style={muted}>Nebyla nalezena žádná položka ani DM/QID kus aktuálně vedený ve výrobě.</div>
               ) : null}
 
               {returnResults.length > 0 ? (
                 <div style={resultList}>
                   {returnResults.map((item) => {
                     const stock = getItemStockSummary(item);
+                    const productionDmItems = item.tenantSettings?.dmEnabled ? getProductionDmItems(item) : [];
+                    const productionQuantity = item.tenantSettings?.dmEnabled ? productionDmItems.length : stock.production;
                     const selected = getItemKey(item) === returnItemKey;
 
                     return (
@@ -4965,7 +5033,7 @@ export default function AppGssPage() {
                             {item.origin === "LOCAL" ? `Lokální ID: ${item.localFields?.internalCode || getItemKey(item)}` : `GPC ID: ${item.gpc_id || "bez vazby"}`} {item.gtin ? `· GTIN: ${item.gtin}` : ""}
                           </div>
                           <div style={meta}>
-                            Ve výrobě: {stock.production} · Dostupné: {stock.available} · Na broušení: {stock.sharpening}
+                            Ve výrobě: {productionQuantity} · Dostupné: {stock.available} · Na broušení: {stock.sharpening}
                           </div>
                           <div style={stateBreakdown}>
                             <span>Nový: {stock.states.new}</span>
@@ -4983,10 +5051,10 @@ export default function AppGssPage() {
                         <button
                           type="button"
                           onClick={() => selectReturnItem(item)}
-                          disabled={stock.production <= 0}
-                          style={stock.production <= 0 ? btnDisabled : selected ? btnImport : btnSecondary}
+                          disabled={productionQuantity <= 0}
+                          style={productionQuantity <= 0 ? btnDisabled : selected ? btnImport : btnSecondary}
                         >
-                          {stock.production <= 0 ? "Není ve výrobě" : selected ? "Vybráno" : "Vybrat k návratu"}
+                          {productionQuantity <= 0 ? "Není ve výrobě" : selected ? "Vybráno" : "Vybrat k návratu"}
                         </button>
                       </div>
                     );
@@ -4998,7 +5066,7 @@ export default function AppGssPage() {
                 <form onSubmit={returnFromProduction} style={settingsPanel}>
                   <div style={settingsTitle}>Vrátit z výroby</div>
                   <div style={itemWorkTitle}>{selectedReturnItem.name || selectedReturnItem.gpc_id}</div>
-                  <div style={meta}>Ve výrobě {getItemStockSummary(selectedReturnItem).production} ks · {selectedReturnItem.manufacturer || "Výrobce neuveden"} · {selectedReturnItem.type || "Typ neuveden"}</div>
+                  <div style={meta}>Ve výrobě {selectedReturnItem.tenantSettings?.dmEnabled ? returnProductionDmItems.length : getItemStockSummary(selectedReturnItem).production} ks · {selectedReturnItem.manufacturer || "Výrobce neuveden"} · {selectedReturnItem.type || "Typ neuveden"}</div>
                   {selectedReturnItem.tenantSettings?.dmEnabled ? (
                     <div style={offerInfo}>
                       Vyberte konkrétní kus ze seznamu `Ve výrobě`, nebo zadejte / načtěte DM kód či QID čtečkou. GSS vrátí pouze konkrétně identifikovaný kus vedený ve výrobě.
