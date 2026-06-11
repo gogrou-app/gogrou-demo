@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 const STORAGE_KEY = "gogrou_organizations";
+const ACTIVE_ORGANIZATION_STORAGE_KEY = "activeOrganizationId";
 
 const MODULE_LABELS = {
   GSS: "GSS",
@@ -147,10 +148,22 @@ export default function OrganizationDetailPage() {
   const contactName = organization.contactName || organization.responsiblePerson || "nedoplněna";
   const contactEmail = organization.contactEmail || organization.responsibleEmail || "";
   const contactPhone = organization.contactPhone || organization.responsiblePhone || "";
+  const organizationId = getOrganizationId(organization);
+
+  const openOrganizationGss = () => {
+    if (!organizationId) return;
+    localStorage.setItem(ACTIVE_ORGANIZATION_STORAGE_KEY, organizationId);
+    window.location.href = "/app/gss";
+  };
 
   return (
     <div style={wrap}>
-      <a href="/admin/organizations" style={btnSecondary}>Zpět na seznam firem</a>
+      <div style={actionRow}>
+        <a href="/admin/organizations" style={btnSecondary}>Zpět na seznam firem</a>
+        <button type="button" onClick={openOrganizationGss} style={btnPrimary}>
+          Otevřít GSS firmy
+        </button>
+      </div>
 
       <div style={box}>
         <h1 style={title}>{organization.name || "Organizace bez názvu"}</h1>
@@ -276,6 +289,25 @@ const btnSecondary = {
   fontWeight: 800,
   fontSize: 12,
   textDecoration: "none",
+};
+
+const btnPrimary = {
+  display: "inline-flex",
+  padding: "11px 14px",
+  borderRadius: 8,
+  background: "#fff",
+  border: "1px solid #fff",
+  color: "#000",
+  fontWeight: 900,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const actionRow = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: 10,
 };
 
 const muted = {
