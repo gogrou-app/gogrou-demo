@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import TextInput from "../../../components/ui/TextInput";
 import tools from "../../data";
 
 const STATUS = [
@@ -64,27 +65,27 @@ export default function GpcEditPage({ params }) {
             </Field>
 
             <Field label="GTIN">
-              <input value={gtin} onChange={(e) => setGtin(e.target.value)} style={input} placeholder="např. 08419421" />
+              <TextInput value={gtin} onChange={(e) => setGtin(e.target.value)} style={input} placeholder="např. 08419421" />
             </Field>
 
             <Field label="Výrobce">
-              <input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} style={input} />
+              <TextInput value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} style={input} />
             </Field>
 
             <Field label="Typ">
-              <input value={type} onChange={(e) => setType(e.target.value)} style={input} />
+              <TextInput value={type} onChange={(e) => setType(e.target.value)} style={input} />
             </Field>
 
             <Field label="Název">
-              <input value={name} onChange={(e) => setName(e.target.value)} style={input} />
+              <TextInput value={name} onChange={(e) => setName(e.target.value)} style={input} />
             </Field>
 
             <Field label="Obrázek MAIN (path)">
-              <input value={imgMain} onChange={(e) => setImgMain(e.target.value)} style={input} placeholder="/images/gpc/{gpc_id}_main.png" />
+              <TextInput value={imgMain} onChange={(e) => setImgMain(e.target.value)} style={input} placeholder="/images/gpc/{gpc_id}_main.png" />
             </Field>
 
             <Field label="Obrázek DRAWING (path)">
-              <input value={imgDrawing} onChange={(e) => setImgDrawing(e.target.value)} style={input} placeholder="/images/gpc/{gpc_id}_drawing.png" />
+              <TextInput value={imgDrawing} onChange={(e) => setImgDrawing(e.target.value)} style={input} placeholder="/images/gpc/{gpc_id}_drawing.png" />
             </Field>
 
             <Field label="Poznámka" wide>
@@ -174,16 +175,7 @@ const grid2 = {
   gap: 14,
 };
 
-const input = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white",
-  outline: "none",
-  fontSize: 14,
-};
+const input = {};
 
 const textarea = {
   width: "100%",

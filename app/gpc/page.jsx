@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import TextInput from "../components/ui/TextInput";
 import tools from "./data";
 
 const STATUS = {
@@ -51,17 +52,19 @@ export default function GPCPage() {
       <h1>GPC – Produktový katalog</h1>
 
       <div style={filters}>
-        <input
+        <TextInput
           placeholder="Hledat (název, výrobce, Ø, čtečka...)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={input}
+          compact
         />
-        <input
+        <TextInput
           placeholder="Ø"
           value={diam}
           onChange={(e) => setDiam(e.target.value)}
           style={small}
+          compact
         />
         <select value={type} onChange={(e) => setType(e.target.value)} style={select}>
           <option value="all">Všechny typy</option>
@@ -112,8 +115,8 @@ export default function GPCPage() {
 }
 
 const filters = { display: "flex", gap: 10, marginBottom: 16 };
-const input = { flex: 1, padding: 10, borderRadius: 10 };
-const small = { width: 90, padding: 10, borderRadius: 10 };
+const input = { flex: 1 };
+const small = { width: 90 };
 const select = { padding: 10, borderRadius: 10 };
 
 const row = {

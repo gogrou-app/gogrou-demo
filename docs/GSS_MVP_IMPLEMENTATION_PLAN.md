@@ -2319,3 +2319,57 @@ MVP skeleton neřeší:
 - příjem u zákazníka
 - vyřazení neostřených položek
 - PDF / e-mail / backend / DB
+
+## Kontextové Vyhledávání V GSS - Implementační Pravidlo
+
+Každá terminálová nebo skladová akce v GSS musí nejdřív určit relevantní provozní množinu podle kontextu a až potom nad ní aplikovat hledání.
+
+Správný implementační tok:
+
+`proces / obrazovka -> relevantní stavová množina -> hledání: název, rozměr, DM, QID, GPC ID, GTIN, lokální ID -> výsledek`
+
+Zakázaný tok:
+
+`hledání v celém skladu -> až následné procesní rozhodnutí`
+
+### Kontextové Množiny
+
+- Výdej do výroby: pouze položky dostupné k výdeji ve vybraném stavu (`Nový`, `Nový přebroušený`, `Použitý`, po servisu). Pokud v daném stavu není dostupný kus, položka se nemá zobrazit.
+- Návrat z výroby: pouze položky / DM kusy aktuálně vydané do výroby.
+- Rezervace: pouze rezervovatelné kusy, případně aktivní rezervace podle rezervačního kódu.
+- Odeslání na broušení: pouze použité / rozhodnuté kusy určené k broušení.
+- Příjem z broušení: pouze kusy odeslané na broušení nebo servisně dokončené.
+- Servisní terminál: pouze kusy u servisního partnera, na broušení nebo v servisní zásilce.
+- Obecné načtení DM/QID: může hledat v celém tenant DM registru, ale detail musí jasně zobrazit aktuální provozní stav, aktuální lokaci a aktuální rozměry kusu.
+
+### DM Detail
+
+Detail načteného DM/QID kusu musí výrazně zobrazit:
+
+- aktuální `D`
+- aktuální `L1`
+- aktuální `L2`
+- počet přebroušení
+- stav kusu
+- aktuální lokaci
+
+Tyto hodnoty jsou provozní GSS/DM data konkrétního fyzického kusu po broušení. Nejsou to GPC master data.
+
+### Navržené Helpery
+
+Kontextové filtrování má být postupně vytaženo do helperů:
+
+- `getItemsForIssue`
+- `getDmItemsForIssue`
+- `getItemsForProductionReturn`
+- `findDmForProductionReturn`
+- `getItemsForReservation`
+- `findDmForReservation`
+- `getDmItemsForSharpeningDispatch`
+- `getDmItemsForSharpeningReturn`
+- `findDmForSharpeningReturn`
+- `getDmItemsForServiceTerminal`
+- `findDmForServiceTerminal`
+- `matchesGssSearch`
+- `buildItemSearchHaystack`
+- `buildDmSearchHaystack`

@@ -2878,3 +2878,61 @@ Budoucí návratový DL musí obsahovat:
 Příjem u zákazníka bude později probíhat hromadně podle čísla návratového DL. U neostřených položek systém nabídne vyřazení; nevyřazené položky se vrátí do stavu `Použité`.
 
 MVP skeleton zatím neřeší PDF, reálný převod zásob, příjem u zákazníka ani vyřazení neostřených položek.
+
+## Kontextové Vyhledávání V GSS
+
+Každá GSS akce musí nejdřív určit relevantní provozní množinu podle kontextu a až potom nad ní aplikovat hledání.
+
+Správné pořadí:
+
+`proces / obrazovka -> relevantní stavová množina -> hledání: název, rozměr, DM, QID, GPC ID, GTIN, lokální ID -> výsledek`
+
+Nikdy ne:
+
+`hledat v celém skladu -> až potom procesně rozhodovat`
+
+### Příklady Kontextů
+
+- Výdej do výroby: hledá pouze dostupné položky ve vybraném stavu, například `Nový`, `Nový přebroušený`, `Použitý` nebo po servisu.
+- Návrat z výroby: hledá pouze položky / DM kusy skutečně vedené ve výrobě.
+- Rezervace: hledá pouze rezervovatelné kusy, případně aktivní rezervace podle rezervačního kódu.
+- Odeslání na broušení: hledá pouze použité / rozhodnuté kusy určené k broušení.
+- Příjem z broušení: hledá pouze kusy odeslané na broušení nebo servisně dokončené.
+- Servisní terminál: hledá pouze kusy u servisního partnera / v servisní zásilce.
+- Obecné načtení DM/QID: může hledat v celém tenant DM registru, ale detail kusu musí jasně zobrazit aktuální provozní stav a aktuální provozní rozměry.
+
+Příklad: pokud uživatel ve výdeji hledá `D12` a má zapnutý filtr `Nový přebroušený`, zobrazí se pouze dostupné nové přebroušené D12. Ne všechny D12 evidované ve skladu.
+
+### DM Detail A Aktuální Provozní Hodnoty
+
+V každém detailu načteného DM/QID kusu musí být výrazně vidět:
+
+- aktuální `D`
+- aktuální `L1`
+- aktuální `L2`
+- počet přebroušení
+- stav kusu
+- aktuální lokace
+
+Tyto hodnoty jsou provozní GSS/DM hodnoty konkrétního fyzického kusu po broušení. Nejsou to GPC master data.
+
+GPC říká, co je produkt. GSS/DM říká, jaký je aktuální fyzický kus, kde je, v jakém je stavu a jaké má aktuální rozměry.
+
+### Budoucí Helpery Pro Kontextové Filtrování
+
+Budoucí implementace má kontextové množiny izolovat do helperů:
+
+- `getItemsForIssue`
+- `getDmItemsForIssue`
+- `getItemsForProductionReturn`
+- `findDmForProductionReturn`
+- `getItemsForReservation`
+- `findDmForReservation`
+- `getDmItemsForSharpeningDispatch`
+- `getDmItemsForSharpeningReturn`
+- `findDmForSharpeningReturn`
+- `getDmItemsForServiceTerminal`
+- `findDmForServiceTerminal`
+- `matchesGssSearch`
+- `buildItemSearchHaystack`
+- `buildDmSearchHaystack`
